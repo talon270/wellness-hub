@@ -1,0 +1,1893 @@
+/* ============================================================================
+   WELLNESS HUB · CORE
+   ----------------------------------------------------------------------------
+   Everything the rest of the app is built on:
+
+     · STORAGE      one namespaced localStorage object, `wellnessHub.v1`
+     · DATE HELPERS local-time YYYY-MM-DD keys (never UTC — a day boundary that
+                    disagrees with the user's clock would silently break streaks)
+     · ROUTER       Hub.registerView / Hub.show / Hub.refresh
+     · UI           toasts, modal, full-screen focus overlay, icons
+     · TIMERS       Hub.Timer — one countdown implementation for every exercise
+     · CUES         Hub.beep (WebAudio, no audio files) + vibration
+     · NOTIFICATIONS permission flow + reminder scheduler
+
+   Public namespace: window.Hub
+   ========================================================================== */
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "wellnessHub.v1";
+  var UI_KEY = "wellnessHub.ui";      // tiny non-schema prefs (last view)
+  var SCHEMA_VERSION = 3;
+
+  /* ======================================================================
+     1. DEFAULT STATE
+     ====================================================================== */
+  function defaultState() {
+    var now = new Date().toISOString();
+    return {
+      version: SCHEMA_VERSION,
+
+      meta: {
+        createdAt: now,
+        updatedAt: now,
+        firstRunSeen: false,   // has the user seen the welcome / reminders note?
+        lastFired: {},         // reminderKey -> "YYYY-MM-DD", stops same-day repeats
+        tipIndex: 0            // rotating dashboard tip
+      },
+
+      settings: {
+        name: "",
+        hydrationGoalCups: 8,
+        cupSizeMl: 250,
+        sound: true,                 // audio + vibration cues on timers
+        notificationsAsked: false,   // have we shown the pre-prompt explainer?
+
+        /* ---- WHO IS USING THIS -----------------------------------------
+           Collected by the first-run wizard (js/onboarding.js) and used to
+           decide what to suggest, not to gate anything: every module stays
+           reachable whatever is in here.
+
+           `gender` is the only such field, and it does one job: pick sensible
+           defaults for the handful of features that differ — which monthly
+           self-check to prompt for, which screenings have an age band, and
+           whether cycle tracking is worth putting in front of you. It may be
+           null ("prefer not to say"), and "other" is a first-class answer;
+           both simply mean the app offers everything and lets you choose.
+           Nothing is ever hidden from you on the strength of it. */
+        profile: {
+          gender: null,          // "female" | "male" | "other" | null
+          birthYear: null,       // year only — a birthday isn't needed for any of this
+          heightCm: null,
+          weightKg: null,
+          workStyle: null,       // "desk" | "mixed" | "active" | null
+          sittingHours: null,    // rough hours seated on a working day
+          activity: null,        // "low" | "moderate" | "high"
+          goals: [],             // ["energy","posture","sleep","strength",…]
+          wakeTime: "07:00",
+          bedTime: "23:00",
+          completedAt: null,     // ISO timestamp the wizard was finished
+          skipped: false         // dismissed rather than completed
+        },
+
+        /* Suggestions the wizard offered and the user turned down, so they
+           aren't nagged with the same card forever. id -> true */
+        dismissedSuggestions: {},
+
+        /* ---- DESK & MOVEMENT -------------------------------------------
+           `standGoal` is stand-up breaks per working day. Eight is one an hour
+           across a normal day, which is roughly where the sedentary-behaviour
+           literature stops arguing with itself. */
+        standGoal: 8,
+        sitAlertMin: 45,        // one sitting stretch longer than this is flagged
+
+        /* The desk-setup checklist: one-off adjustments, not daily habits, so
+           they live in settings rather than in a day record. key -> true */
+        ergoChecklist: {},
+
+        /* The hour your day rolls over. 0 = calendar midnight; a night owl who
+           logs at 01:00 wants 4, so that still counts as the previous day.
+           Every date key in the app derives from this — see `today()`. */
+        dayStartHour: 0,
+
+        /* "metric" | "imperial". Affects how weights, lengths and temperatures
+           are ENTERED and DISPLAYED only; everything is stored in metric so a
+           unit switch can never rewrite your history. */
+        units: "metric",
+
+        /* Missed days a streak may survive per calendar month. The day still
+           doesn't count as done — it just doesn't reset you to zero. */
+        graceDaysPerMonth: 1,
+
+        /* Per-category cadence: { type:"daily" } or { type:"weekly", perWeek:N }.
+           Only categories that differ from daily need an entry. */
+        cadence: {},
+
+        /* Sleep target in hours, used for the debt calculation. */
+        sleepTargetHours: 8,
+
+        /* Menstrual cycle tracking is off until switched on — it isn't
+           relevant to everybody and an empty tab is just clutter. */
+        cycleTracking: false,
+        cycleAvgLength: 28,
+
+        /* Whether the Reproductive health tab appears in the nav.
+           `null` means "decide from the profile" — shown once a gender is
+           recorded, hidden while it isn't. true/false is an explicit override
+           from Settings, which always wins. */
+        reproTab: null,
+
+        /* Contraception, if any is being tracked. `method` is free-form
+           enough to cover the common cases; only the pill needs a daily tick
+           and a reminder, so the rest just record what you're using. */
+        contraception: {
+          method: "none",       // none|pill-combined|pill-progestogen|patch|ring|injection|implant|iud|condom|other
+          note: "",
+          packDays: 21,         // active days in a pack (combined pill)
+          breakDays: 7,         // pill-free / placebo days
+          packStartISO: null    // first day of the current pack
+        },
+
+        /* No reminder fires inside this window, however it's scheduled. */
+        quietHours: { enabled: true, from: "22:00", to: "07:00" },
+
+        /* Minutes a snoozed reminder waits before coming back. */
+        snoozeMin: 15,
+
+        /* `days` is which weekdays a reminder may fire on, 0 = Sunday. */
+        reminders: {
+          /* interval-based (minutes from the moment they're switched on) */
+          eye:       { enabled: false, intervalMin: 20,  days: [0, 1, 2, 3, 4, 5, 6] },
+          hydration: { enabled: false, intervalMin: 60,  days: [0, 1, 2, 3, 4, 5, 6] },
+          posture:   { enabled: false, intervalMin: 60,  days: [0, 1, 2, 3, 4, 5, 6] },
+          spf:       { enabled: false, intervalMin: 120, days: [0, 1, 2, 3, 4, 5, 6] },
+          /* Stand breaks default to the working week: a Saturday nag to get
+             off a chair you aren't sitting in is how people switch reminders
+             off altogether. */
+          stand:     { enabled: false, intervalMin: 45,  days: [1, 2, 3, 4, 5] },
+          /* clock-based (fire once per day at a given local time) */
+          brushAM:   { enabled: false, time: "08:00", days: [0, 1, 2, 3, 4, 5, 6] },
+          brushPM:   { enabled: false, time: "21:30", days: [0, 1, 2, 3, 4, 5, 6] },
+          floss:     { enabled: false, time: "21:45", days: [0, 1, 2, 3, 4, 5, 6] },
+          skinAM:    { enabled: false, time: "07:30", days: [0, 1, 2, 3, 4, 5, 6] },
+          skinPM:    { enabled: false, time: "22:00", days: [0, 1, 2, 3, 4, 5, 6] },
+          medsAM:    { enabled: false, time: "08:30", days: [0, 1, 2, 3, 4, 5, 6] },
+          medsNoon:  { enabled: false, time: "13:00", days: [0, 1, 2, 3, 4, 5, 6] },
+          medsPM:    { enabled: false, time: "20:00", days: [0, 1, 2, 3, 4, 5, 6] },
+          mobility:  { enabled: false, time: "18:00", days: [0, 1, 2, 3, 4, 5, 6] },
+          mood:      { enabled: false, time: "21:00", days: [0, 1, 2, 3, 4, 5, 6] },
+          /* A contraceptive pill is the one daily item where being an hour
+             late actually matters, so it gets its own reminder rather than
+             sharing the general medication slots. */
+          contraceptive: { enabled: false, time: "21:00", days: [0, 1, 2, 3, 4, 5, 6] }
+        }
+      },
+
+      logs: {
+        /* One record per calendar day, keyed "YYYY-MM-DD". Records are only
+           created once something is actually logged, so storage stays small. */
+        days: {},
+        /* Sleep is a list rather than a day field: a night spans two dates and
+           you may want more than one entry (naps, corrections). */
+        sleep: [],
+        /* "Last done" dates for the things tracked on an interval rather than
+           daily. Null simply means never logged. */
+        toothbrushISO: null,    // current toothbrush went into service
+        skinCheckISO: null,     // monthly skin / mole self-exam
+        haircutISO: null,
+        nailsHandsISO: null,
+        nailsFeetISO: null,
+        callusISO: null,        // calluses filed back
+        shoesISO: null,         // current training shoes went into service
+        breastExamISO: null,    // monthly breast self-exam
+        testisExamISO: null,    // monthly testicular self-exam
+
+        /* The sitting stretch currently in progress, if any: { startedAt }.
+           Persisted rather than held in memory so a reload mid-afternoon
+           doesn't quietly forget that you've been sitting for two hours. */
+        deskSession: null,
+
+        /* Vitals readings: [{ id, date, time, sys, dia, hr, weightKg, waistCm,
+           tempC, spo2, note }] — only the fields you actually filled in. */
+        vitals: [],
+
+        /* Recurring health appointments, seeded with the standard set.
+           `lastISO: null` simply means "never logged". */
+        checkups: defaultCheckups(),
+
+        /* Medication / supplement definitions. The daily ticks live in the day
+           records so a change of dose doesn't rewrite your history. */
+        meds: [],
+
+        /* Niggles and injuries: [{ id, area, startISO, endISO, severity,
+           note, status, log: [{ date, severity, note }], photos: [photoId] }] */
+        injuries: [],
+
+        /* Breath-hold measurements: [{ id, date, kind, seconds }] */
+        breathTests: [],
+
+        /* Lab / blood-test results. One record per panel drawn, holding any
+           number of named values: [{ id, date, panel, note,
+           values: [{ key, label, value, unit, ref }] }] */
+        labs: [],
+
+        /* The static medical facts an app like this should be able to show a
+           paramedic or a locum in ten seconds. */
+        profile: {
+          dob: null, bloodType: "", heightCm: null,
+          allergies: [],       // [{ id, what, reaction, severity }]
+          conditions: [],      // [{ id, what, since, note }]
+          emergency: [],       // [{ id, name, relation, phone }]
+          vaccinations: [],    // [{ id, name, dateISO, note, boosterMonths }]
+          organDonor: null, notes: ""
+        },
+
+        /* Menstrual cycle: one record per period, plus daily symptom notes
+           living in the day records. [{ id, startISO, endISO, flow, note }] */
+        cycles: [],
+
+        /* User-defined habits: [{ id, name, icon, color, cadence, active,
+           createdISO }]. Ticks live in `day.custom[id]`. */
+        customHabits: [],
+
+        /* Photo metadata. The image bytes live in IndexedDB (see storage.js) —
+           localStorage would blow its quota after a handful. */
+        photos: []           // [{ id, date, kind, subject, note, w, h, bytes }]
+      },
+
+      /* Recomputed from `logs` on every write by gamify.js. Persisted so that
+         `best` survives, and so an exported backup is readable on its own. */
+      streaks: {},
+
+      /* badgeId -> ISO timestamp it was unlocked. */
+      badges: {}
+    };
+  }
+
+  /* ======================================================================
+     2. STORAGE
+     ====================================================================== */
+  var STATE = defaultState();
+
+  /* Deep-merge saved data onto a fresh default so keys added in later versions
+     are always present, even on an old save. Arrays are taken wholesale. */
+  function deepMerge(base, src) {
+    if (Array.isArray(base) || Array.isArray(src)) return src === undefined ? base : src;
+    if (isObj(base) && isObj(src)) {
+      var out = {};
+      Object.keys(base).forEach(function (k) { out[k] = base[k]; });
+      Object.keys(src).forEach(function (k) {
+        out[k] = (k in base) ? deepMerge(base[k], src[k]) : src[k];
+      });
+      return out;
+    }
+    return src === undefined ? base : src;
+  }
+  function isObj(v) { return v && typeof v === "object" && !Array.isArray(v); }
+
+  /* The routine appointments almost everyone should be keeping track of.
+     Intervals are common general-population guidance, not personal medical
+     advice — every one is editable, and the UI says as much. */
+  function defaultCheckups() {
+    return [
+      { id: "dental",    name: "Dental check-up & clean", intervalMonths: 6,  lastISO: null,
+        note: "Twice a year is the usual default; your dentist may space it differently." },
+      { id: "eye",       name: "Eye examination",         intervalMonths: 24, lastISO: null,
+        note: "Every 1–2 years for most adults; annually if you wear corrective lenses." },
+      { id: "physical",  name: "General health check",    intervalMonths: 12, lastISO: null,
+        note: "Blood pressure, weight, and a chance to raise anything that's changed." },
+      { id: "bloods",    name: "Blood work",              intervalMonths: 12, lastISO: null,
+        note: "Typically lipids, glucose, full blood count — whatever your doctor orders." },
+      { id: "skin",      name: "Skin / mole check",       intervalMonths: 12, lastISO: null,
+        note: "Yearly if you have many moles, fair skin, or a family history." },
+      { id: "hearing",   name: "Hearing test",            intervalMonths: 36, lastISO: null,
+        note: "Worth doing sooner if you use headphones heavily or work somewhere loud." },
+      { id: "flu",       name: "Flu vaccination",         intervalMonths: 12, lastISO: null,
+        note: "Seasonal — the timing that matters is autumn, not the exact interval." }
+    ];
+  }
+
+  function migrate(raw) {
+    if (!isObj(raw)) return defaultState();
+    var s = deepMerge(defaultState(), raw);
+
+    /* v1 → v2: reminders gained a weekday mask. A v1 save has none, and the
+       honest default is "every day", which is how it behaved before. */
+    if (!raw.version || raw.version < 2) {
+      Object.keys(s.settings.reminders || {}).forEach(function (k) {
+        var cfg = s.settings.reminders[k];
+        if (cfg && !Array.isArray(cfg.days)) cfg.days = [0, 1, 2, 3, 4, 5, 6];
+      });
+      /* v1 had no quiet hours. Switching them on retroactively would silently
+         stop reminders someone relies on, so an upgrade keeps them off. */
+      if (isObj(s.settings.quietHours) && !isObj(raw.settings && raw.settings.quietHours)) {
+        s.settings.quietHours.enabled = false;
+      }
+    }
+
+    /* v2 → v3: the profile, the desk module and the reproductive-health tab.
+       An existing user has already been using the app for weeks, so the wizard
+       is offered rather than forced — `completedAt` stays null and app.js shows
+       a dismissible card instead of a full-screen takeover.
+
+       Someone who already switched cycle tracking on has effectively answered
+       the only profile question the app acts on, so their Reproductive health
+       tab appears without their being asked again. */
+    if (!raw.version || raw.version < 3) {
+      if (raw.settings && raw.settings.cycleTracking && s.settings.reproTab == null) {
+        s.settings.reproTab = true;
+      }
+    }
+
+    s.version = SCHEMA_VERSION;
+    return heal(s);
+  }
+
+  /* Repair anything structurally wrong so one bad record can't blank a view. */
+  function heal(s) {
+    if (!isObj(s.logs)) s.logs = defaultState().logs;
+    if (!isObj(s.logs.days)) s.logs.days = {};
+    if (!Array.isArray(s.logs.sleep)) s.logs.sleep = [];
+    if (!isObj(s.badges)) s.badges = {};
+    if (!isObj(s.streaks)) s.streaks = {};
+    if (!isObj(s.settings)) s.settings = defaultState().settings;
+    if (!isObj(s.settings.reminders)) s.settings.reminders = defaultState().settings.reminders;
+    if (!isObj(s.meta)) s.meta = defaultState().meta;
+    if (!isObj(s.meta.lastFired)) s.meta.lastFired = {};
+
+    ["vitals", "checkups", "meds", "injuries", "breathTests",
+     "labs", "cycles", "customHabits", "photos"].forEach(function (k) {
+      if (!Array.isArray(s.logs[k])) s.logs[k] = [];
+    });
+    if (!isObj(s.logs.profile)) s.logs.profile = defaultState().logs.profile;
+    ["allergies", "conditions", "emergency", "vaccinations"].forEach(function (k) {
+      if (!Array.isArray(s.logs.profile[k])) s.logs.profile[k] = [];
+    });
+
+    /* --- the who-is-using-this profile --- */
+    if (!isObj(s.settings.profile)) s.settings.profile = defaultState().settings.profile;
+    if (!Array.isArray(s.settings.profile.goals)) s.settings.profile.goals = [];
+
+    /* An early v3 build asked for sex-at-birth plus a free-text gender and
+       pronouns. There is now one question, `gender`, doing the same job. Carry
+       the old answer across rather than making anyone fill it in again: a
+       free-text gender wins if it's recognisable, otherwise the recorded sex,
+       and anything else becomes "other" rather than being silently dropped. */
+    var pf = s.settings.profile;
+    if (typeof pf.gender === "string" && ["female", "male", "other"].indexOf(pf.gender) === -1) {
+      var free = pf.gender.trim().toLowerCase();
+      if (/^(f|female|woman|women|girl|she)/.test(free)) pf.gender = "female";
+      else if (/^(m|male|man|men|boy|he)/.test(free)) pf.gender = "male";
+      else if (free) pf.gender = "other";
+      else pf.gender = null;
+    }
+    if (pf.gender == null && ["female", "male"].indexOf(pf.sex) !== -1) pf.gender = pf.sex;
+    else if (pf.gender == null && pf.sex) pf.gender = "other";
+    delete pf.sex;
+    delete pf.pronouns;
+    if (["female", "male", "other"].indexOf(pf.gender) === -1) pf.gender = null;
+    var by = Number(s.settings.profile.birthYear);
+    var thisYear = new Date().getFullYear();
+    s.settings.profile.birthYear = (by >= 1900 && by <= thisYear) ? by : null;
+    if (!isObj(s.settings.dismissedSuggestions)) s.settings.dismissedSuggestions = {};
+    if (!isObj(s.settings.ergoChecklist)) s.settings.ergoChecklist = {};
+    if (!isObj(s.settings.contraception)) s.settings.contraception = defaultState().settings.contraception;
+    if (s.settings.reproTab !== true && s.settings.reproTab !== false) s.settings.reproTab = null;
+
+    var sg = Number(s.settings.standGoal);
+    if (!(sg >= 1 && sg <= 24)) s.settings.standGoal = 8;
+    var sa = Number(s.settings.sitAlertMin);
+    if (!(sa >= 15 && sa <= 180)) s.settings.sitAlertMin = 45;
+
+    /* An open sitting session from a previous day is meaningless — it would
+       otherwise report that you've been sitting for nineteen hours. */
+    if (isObj(s.logs.deskSession)) {
+      var startedMs = Date.parse(s.logs.deskSession.startedAt || "");
+      if (!startedMs || ymd(new Date(startedMs)) !== ymd(new Date())) s.logs.deskSession = null;
+    } else {
+      s.logs.deskSession = null;
+    }
+    if (!isObj(s.settings.cadence)) s.settings.cadence = {};
+    if (!isObj(s.settings.quietHours)) s.settings.quietHours = defaultState().settings.quietHours;
+    Object.keys(s.settings.reminders).forEach(function (k) {
+      var cfg = s.settings.reminders[k];
+      if (!isObj(cfg)) { delete s.settings.reminders[k]; return; }
+      if (!Array.isArray(cfg.days) || !cfg.days.length) cfg.days = [0, 1, 2, 3, 4, 5, 6];
+      cfg.days = cfg.days.map(Number).filter(function (n) { return n >= 0 && n <= 6; });
+      if (!cfg.days.length) cfg.days = [0, 1, 2, 3, 4, 5, 6];
+    });
+
+    /* Drop day records whose key isn't a real date, and normalise their fields. */
+    Object.keys(s.logs.days).forEach(function (k) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !isObj(s.logs.days[k])) { delete s.logs.days[k]; return; }
+      var d = s.logs.days[k];
+      ["water", "eye", "eye2020", "posture", "stretch", "mobility", "spfReapply",
+       "loudMinutes", "caffeineMg", "alcoholUnits",
+       "stand", "sitMin", "sitLongest", "moveMin"].forEach(function (n) {
+        if (typeof d[n] !== "number" || d[n] < 0 || !isFinite(d[n])) d[n] = 0;
+      });
+      if (!Array.isArray(d.mindful)) d.mindful = [];
+      ["nutrition", "soreness", "body", "meds", "custom", "cycle", "repro"].forEach(function (n) {
+        if (!isObj(d[n])) d[n] = {};
+      });
+      if (d.mood !== null && !isObj(d.mood)) d.mood = null;
+    });
+
+    s.logs.sleep = s.logs.sleep.filter(function (e) {
+      return isObj(e) && /^\d{4}-\d{2}-\d{2}$/.test(e.date || "");
+    });
+    /* Sleep entries gained an id and a kind (night vs nap) in v2. */
+    s.logs.sleep.forEach(function (e, i) {
+      if (!e.id) e.id = "s" + e.date + "-" + i;
+      if (e.kind !== "nap") e.kind = "night";
+      if (typeof e.hours !== "number" || !isFinite(e.hours)) e.hours = 0;
+    });
+    s.logs.labs = s.logs.labs.filter(function (l) {
+      return isObj(l) && /^\d{4}-\d{2}-\d{2}$/.test(l.date || "") && Array.isArray(l.values);
+    });
+    s.logs.cycles = s.logs.cycles.filter(function (c) {
+      return isObj(c) && /^\d{4}-\d{2}-\d{2}$/.test(c.startISO || "");
+    }).sort(function (a, b) { return a.startISO < b.startISO ? -1 : 1; });
+    s.logs.customHabits = s.logs.customHabits.filter(function (h) {
+      return isObj(h) && h.id && h.name;
+    });
+    s.logs.photos = s.logs.photos.filter(function (p) {
+      return isObj(p) && p.id && /^\d{4}-\d{2}-\d{2}$/.test(p.date || "");
+    });
+    s.logs.vitals = s.logs.vitals.filter(function (e) {
+      return isObj(e) && /^\d{4}-\d{2}-\d{2}$/.test(e.date || "");
+    });
+    s.logs.checkups = s.logs.checkups.filter(function (c) { return isObj(c) && c.id && c.name; });
+    s.logs.meds = s.logs.meds.filter(function (m) { return isObj(m) && m.id && m.name; });
+    s.logs.injuries = s.logs.injuries.filter(function (n) { return isObj(n) && n.id && n.area; });
+    s.logs.breathTests = s.logs.breathTests.filter(function (b) {
+      return isObj(b) && /^\d{4}-\d{2}-\d{2}$/.test(b.date || "") && Number(b.seconds) > 0;
+    });
+
+
+    var g = Number(s.settings.hydrationGoalCups);
+    if (!(g >= 1 && g <= 30)) s.settings.hydrationGoalCups = 8;
+
+    return s;
+  }
+
+  function load() {
+    var raw = null;
+    try { raw = localStorage.getItem(STORAGE_KEY); }
+    catch (e) { /* storage blocked (private mode, file:// lockdown) */ }
+    if (!raw) { STATE = defaultState(); return STATE; }
+    try { STATE = migrate(JSON.parse(raw)); }
+    catch (e) {
+      console.warn("Wellness Hub: saved data unreadable, starting fresh.", e);
+      STATE = defaultState();
+    }
+    return STATE;
+  }
+
+  var saveFailed = false;
+  function save() {
+    try {
+      STATE.meta.updatedAt = new Date().toISOString();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+      saveFailed = false;
+    } catch (e) {
+      /* Warn once, not on every keystroke. */
+      if (!saveFailed) {
+        saveFailed = true;
+        console.error("Wellness Hub: save failed.", e);
+        toast("Couldn't save — browser storage is full or blocked.", "danger", 6000);
+      }
+    }
+    return STATE;
+  }
+
+  /* Every mutation should go through this: it saves, recomputes streaks,
+     re-evaluates badges and re-renders the active view, in that order. */
+  function commit(opts) {
+    opts = opts || {};
+    if (Hub.gamify) Hub.gamify.recompute();
+    save();
+    /* Mirror to the linked on-disk backup, if there is one. Debounced inside,
+       so a burst of taps costs a single write. */
+    if (Hub.storage) Hub.storage.scheduleWrite();
+    if (opts.render !== false) refresh();
+    updateChrome();
+    return STATE;
+  }
+
+  /* ======================================================================
+     3. DATES — always local time, never UTC
+     ====================================================================== */
+  function ymd(d) {
+    d = d || new Date();
+    return d.getFullYear() + "-" +
+           String(d.getMonth() + 1).padStart(2, "0") + "-" +
+           String(d.getDate()).padStart(2, "0");
+  }
+
+  /* THE day key for "now", honouring the configured rollover hour.
+     ----------------------------------------------------------------------
+     With dayStartHour = 4, anything logged between midnight and 03:59 belongs
+     to the day that just ended — which is what someone who trains at 23:00 and
+     logs it at 00:20 actually means. Every other date helper is relative to
+     this, so the whole app agrees on where a day begins. */
+  function today() {
+    var d = new Date();
+    var start = Number(STATE.settings && STATE.settings.dayStartHour) || 0;
+    if (start > 0 && d.getHours() < start) d.setDate(d.getDate() - 1);
+    return ymd(d);
+  }
+
+  /* The real calendar date, for the few things that genuinely mean it:
+     reminder scheduling and anything comparing against wall-clock time. */
+  function calendarToday() { return ymd(new Date()); }
+
+  /* ---- THE LOGGING DATE ---------------------------------------------------
+     Views log to `viewDate`, not to `today()`. It normally IS today, but the
+     date navigator can point it at any past day, and every existing call to
+     `Hub.editDay()` then backfills that day instead — which is why forgetting
+     to log something on Tuesday is no longer permanent.
+
+     Deliberately NOT persisted across reloads: waking up tomorrow still
+     editing last Tuesday would be a quiet way to corrupt a month of data. */
+  var VIEW_DATE = null;
+
+  function viewDate() { return VIEW_DATE || today(); }
+  function isBackfilling() { return !!VIEW_DATE && VIEW_DATE !== today(); }
+
+  function setViewDate(key, opts) {
+    opts = opts || {};
+    if (!key || key === today()) VIEW_DATE = null;
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+      /* The future has nothing to log. */
+      VIEW_DATE = daysBetween(key, today()) < 0 ? null : key;
+    }
+    updateBackfillBar();
+    if (opts.render !== false) refresh();
+    return viewDate();
+  }
+
+  function parseYmd(key) {
+    var p = String(key).split("-");
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  }
+  /* n days before `key` (n may be negative to move forward). */
+  function shiftDay(key, n) {
+    var d = parseYmd(key);
+    d.setDate(d.getDate() + n);
+    return ymd(d);
+  }
+  function daysBetween(a, b) {
+    return Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
+  }
+  /* The year is added only when it isn't the current one. Now that the app can
+     browse a year of history, "Thu 14 Aug" on its own is genuinely ambiguous —
+     and a heatmap that runs 364 days back will produce exactly that collision. */
+  function prettyDate(key) {
+    var d = parseYmd(key);
+    var opts = { weekday: "short", month: "short", day: "numeric" };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+    return d.toLocaleDateString(undefined, opts);
+  }
+  /* "3d ago" / "today" / "yesterday" */
+  function relDay(key) {
+    var n = daysBetween(key, today());
+    if (n === 0) return "today";
+    if (n === 1) return "yesterday";
+    if (n < 0) return "in " + (-n) + "d";
+    return n + "d ago";
+  }
+  /* seconds -> "M:SS" (or "H:MM:SS" past an hour) */
+  function clock(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (h) return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    return m + ":" + String(s).padStart(2, "0");
+  }
+
+  /* ======================================================================
+     4. DAY RECORDS
+     ====================================================================== */
+  var EMPTY_DAY = {
+    custom: {},      // customHabitId -> true
+    caffeineMg: 0,   // estimated caffeine
+    alcoholUnits: 0, // standard units
+    screenOff: null, // "HH:MM" the screens actually went off
+    cycle: {},       // period/symptom flags for this day
+    repro: {},       // contraception ticks + reproductive-health notes
+    water: 0,        // cups logged
+    eye: 0,          // guided eye-exercise sessions completed
+    eye2020: 0,      // 20-20-20 breaks taken
+    brushAM: false,
+    brushPM: false,
+    floss: false,
+    tongue: false,
+    posture: 0,      // posture check-ins acknowledged
+    stretch: 0,      // desk stretches completed
+
+    /* --- desk & movement --- */
+    stand: 0,        // stand-up breaks taken
+    sitMin: 0,       // minutes clocked in sitting sessions
+    sitLongest: 0,   // longest single sitting stretch, minutes
+    moveMin: 0,      // minutes of logged movement snacks
+    mindful: [],     // [{ type, sec }]
+    nutrition: {},   // habitKey -> true
+
+    /* --- mobility & recovery --- */
+    mobility: 0,     // guided mobility/flexibility routines completed
+    restDay: false,  // deliberately taken as recovery
+    soreness: {},    // bodyPart -> 1..5
+
+    /* --- body care --- */
+    body: {},        // habitKey -> true (skinAM, skinPM, spf, scalp, nailsHands, …)
+    spfReapply: 0,   // sunscreen re-applications during the day
+
+    /* --- mind --- */
+    mood: null,      // { mood, energy, stress, note, gratitude: [] }
+
+    /* --- hearing --- */
+    loudMinutes: 0,  // minutes spent in a loud environment
+    tinnitus: null,  // 0..5 if rated today, else null
+
+    /* --- medication & supplements --- */
+    meds: {}         // "<medId>:<slot>" -> true
+  };
+
+  /* A fresh record. Object.assign would share the arrays/objects between every
+     day, so the mutable fields are rebuilt each time. */
+  function blankDay() {
+    return Object.assign({}, EMPTY_DAY, {
+      mindful: [], nutrition: {}, soreness: {}, body: {}, meds: {},
+      custom: {}, cycle: {}, repro: {}, mood: null, tinnitus: null, screenOff: null
+    });
+  }
+
+  /* Read-only view of a day. Never creates a record.
+     Defaults to the LOGGING date, not to today — so a view rendered while
+     backfilling shows the day being edited rather than the current one. */
+  function day(key) {
+    return STATE.logs.days[key || viewDate()] || blankDay();
+  }
+
+  /* Writable view of a day — creates and attaches the record on first use, and
+     backfills any container field added in a later version. */
+  function editDay(key) {
+    key = key || viewDate();
+    var rec = STATE.logs.days[key];
+    if (!rec) { rec = blankDay(); STATE.logs.days[key] = rec; }
+    if (!Array.isArray(rec.mindful)) rec.mindful = [];
+    ["nutrition", "soreness", "body", "meds", "custom", "cycle", "repro"].forEach(function (k) {
+      if (!isObj(rec[k])) rec[k] = {};
+    });
+    /* Numeric fields added in a later version: a day record written by v2 has
+       no `stand`, and `undefined++` is NaN, which then poisons every total it
+       touches. */
+    ["stand", "sitMin", "sitLongest", "moveMin"].forEach(function (k) {
+      if (typeof rec[k] !== "number" || !isFinite(rec[k])) rec[k] = 0;
+    });
+    return rec;
+  }
+  /* All day keys, oldest first. */
+  function dayKeys() { return Object.keys(STATE.logs.days).sort(); }
+
+  /* ======================================================================
+     4b. UNITS
+     ----------------------------------------------------------------------
+     Everything is STORED in metric, always. These convert only at the edges —
+     what a field displays and what a typed number means. A unit switch
+     therefore can't rewrite, round or corrupt a single stored reading, and a
+     backup exported on one setting reads correctly on the other.
+     ====================================================================== */
+  function imperial() { return (STATE.settings && STATE.settings.units) === "imperial"; }
+
+  var UNITS = {
+    isImperial: imperial,
+
+    /* mass: kg <-> lb */
+    massLabel: function () { return imperial() ? "lb" : "kg"; },
+    massOut: function (kg) {                       // stored -> shown
+      if (kg == null || !isFinite(kg)) return null;
+      return imperial() ? Math.round(kg * 2.2046226 * 10) / 10 : Math.round(kg * 10) / 10;
+    },
+    massIn: function (v) {                         // typed -> stored
+      if (v == null || !isFinite(v)) return null;
+      return imperial() ? v / 2.2046226 : v;
+    },
+
+    /* length: cm <-> in */
+    lenLabel: function () { return imperial() ? "in" : "cm"; },
+    lenOut: function (cm) {
+      if (cm == null || !isFinite(cm)) return null;
+      return imperial() ? Math.round(cm / 2.54 * 10) / 10 : Math.round(cm * 10) / 10;
+    },
+    lenIn: function (v) {
+      if (v == null || !isFinite(v)) return null;
+      return imperial() ? v * 2.54 : v;
+    },
+
+    /* temperature: °C <-> °F */
+    tempLabel: function () { return imperial() ? "°F" : "°C"; },
+    tempOut: function (c) {
+      if (c == null || !isFinite(c)) return null;
+      return imperial() ? Math.round((c * 9 / 5 + 32) * 10) / 10 : Math.round(c * 10) / 10;
+    },
+    tempIn: function (v) {
+      if (v == null || !isFinite(v)) return null;
+      return imperial() ? (v - 32) * 5 / 9 : v;
+    },
+
+    /* volume: ml <-> fl oz — used for cup size only */
+    volLabel: function () { return imperial() ? "fl oz" : "ml"; },
+    volOut: function (ml) {
+      if (ml == null || !isFinite(ml)) return null;
+      return imperial() ? Math.round(ml / 29.5735 * 10) / 10 : Math.round(ml);
+    },
+    volIn: function (v) {
+      if (v == null || !isFinite(v)) return null;
+      return imperial() ? v * 29.5735 : v;
+    },
+
+    /* Sensible min/max for an <input type=number> in the active system. */
+    range: function (kind, loMetric, hiMetric) {
+      var f = { mass: UNITS.massOut, len: UNITS.lenOut, temp: UNITS.tempOut, vol: UNITS.volOut }[kind];
+      return { min: Math.floor(f(loMetric)), max: Math.ceil(f(hiMetric)) };
+    }
+  };
+
+  /* ======================================================================
+     5. ICONS — inline stroke SVG, no icon font, no dependency
+     ====================================================================== */
+  var PATHS = {
+    dashboard:  '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+    fitness:    '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>',
+    eye:        '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/>',
+    dental:     '<path d="M12 3.2c-2 0-2.6 1-4.4 1C5.4 4.2 4 5.7 4 8.4c0 3.6 1.3 5.3 1.9 8.4.4 2.2.8 4 2.1 4 1.6 0 1.6-3.2 4-3.2s2.4 3.2 4 3.2c1.3 0 1.7-1.8 2.1-4 .6-3.1 1.9-4.8 1.9-8.4 0-2.7-1.4-4.2-3.6-4.2-1.8 0-2.4-1-4.4-1z"/>',
+    wellness:   '<path d="M12 20.5s-7-4.6-7-9.7A3.9 3.9 0 0 1 12 8.2a3.9 3.9 0 0 1 7 2.6c0 5.1-7 9.7-7 9.7z"/>',
+    trophy:     '<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 5.5H5.5A2.5 2.5 0 0 0 5.5 10H8M16 5.5h2.5a2.5 2.5 0 0 1 0 4.5H16"/><path d="M10 13.4V16h4v-2.6M8 20h8M12 16v4"/>',
+    settings:   '<path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="14" cy="18" r="2"/>',
+    water:      '<path d="M12 3.2s6 6.4 6 10.3a6 6 0 0 1-12 0C6 9.6 12 3.2 12 3.2z"/>',
+    check:      '<path d="M20 6 9 17l-5-5"/>',
+    plus:       '<path d="M12 5v14M5 12h14"/>',
+    minus:      '<path d="M5 12h14"/>',
+    clockIc:    '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+    bell:       '<path d="M18 8.6a6 6 0 1 0-12 0c0 6-2.4 7.4-2.4 7.4h16.8S18 14.6 18 8.6z"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/>',
+    bellOff:    '<path d="M13.7 20a2 2 0 0 1-3.4 0"/><path d="M18 8.6a6 6 0 0 0-8.9-5.2M6.1 6.1A6 6 0 0 0 6 8.6c0 6-2.4 7.4-2.4 7.4h13"/><path d="M3 3l18 18"/>',
+    refresh:    '<path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 4.5V10H15"/>',
+    trash:      '<path d="M3.5 6h17M9 6V4.2A1.2 1.2 0 0 1 10.2 3h3.6A1.2 1.2 0 0 1 15 4.2V6"/><path d="M18.5 6v13.3A1.7 1.7 0 0 1 16.8 21H7.2a1.7 1.7 0 0 1-1.7-1.7V6"/>',
+    download:   '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/>',
+    upload:     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 8l5-5 5 5M12 3v12"/>',
+    alert:      '<path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17.2h.01"/>',
+    info:       '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8h.01"/>',
+    x:          '<path d="M18 6 6 18M6 6l12 12"/>',
+    play:       '<path d="M6.5 4.6 19 12 6.5 19.4V4.6z"/>',
+    stop:       '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+    lightbulb:  '<path d="M9.2 17.5h5.6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5.9 1 .9 1.6h5.2c0-.6.3-1.1.9-1.6A6 6 0 0 0 12 3z"/>',
+    moon:       '<path d="M20.5 14.4A8.6 8.6 0 1 1 9.6 3.5a6.8 6.8 0 0 0 10.9 10.9z"/>',
+    wind:       '<path d="M3 8.5h11a3 3 0 1 0-3-3M3 15.5h15a3 3 0 1 1-3 3M3 12h7"/>',
+    stretchIc:  '<circle cx="12" cy="4.4" r="2"/><path d="M12 7v6M12 13l-3 8M12 13l3 8M6 9.2l6 1.3 6-1.3"/>',
+    flame:      '<path d="M12 3s4.2 4 4.2 8a4.2 4.2 0 0 1-8.4 0c0-1 .5-2 1-3 .5 2 2 2 2 2-1-3 1-5 1.2-7z"/><path d="M8.2 15a3.8 3.8 0 1 0 7.6 0"/>',
+    apple:      '<path d="M12 8.4c-1.5-2-3.4-2.3-4.7-1.6C5.5 7.8 4.6 10.4 5.4 13.6c.8 3.2 2.7 6.4 4.6 6.4 1 0 1.3-.6 2-.6s1 .6 2 .6c1.9 0 3.8-3.2 4.6-6.4.8-3.2-.1-5.8-1.9-6.8-1.3-.7-3.2-.4-4.7 1.6z"/><path d="M12 8.4c0-2 1-3.6 2.8-4.4"/>',
+    posture:    '<circle cx="9" cy="4.4" r="2"/><path d="M9 6.8v5.4l-2.4 3.2M9 12.2l2.6 2.6.6 5.6M6.6 15.4 6 20.6M11.6 8.6l4.4 1.2"/><path d="M19.5 4v16"/>',
+    tongue:     '<path d="M5 5.5h14M6.5 5.5c0 5 1.6 8.5 5.5 8.5s5.5-3.5 5.5-8.5"/><path d="M12 14v3a2.5 2.5 0 0 0 5 0"/>',
+
+    /* --- added for the body/mobility/health modules --- */
+    /* A sparkle rather than another human figure — the stretching person is
+       already the Mobility tab, and two person icons in one nav is unreadable. */
+    bodycare:   '<path d="M12 2.6 13.7 8 19 9.7 13.7 11.4 12 16.8 10.3 11.4 5 9.7 10.3 8 12 2.6z"/>' +
+                '<path d="M18.2 15.4l.8 2.3 2.3.8-2.3.8-.8 2.3-.8-2.3-2.3-.8 2.3-.8.8-2.3z"/>' +
+                '<path d="M5.6 14.8l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6.6-1.7z"/>',
+    pulse:      '<path d="M2.5 12.5h4l2-5.5 3.4 10 2.6-7 1.8 2.5h5.2"/>',
+    sun:        '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/>',
+    hair:       '<path d="M4.5 20c0-6 .5-16 7.5-16s7.5 10 7.5 16"/><path d="M8.2 20c0-5 .6-12 3.8-12s3.8 7 3.8 12"/>',
+    hand:       '<path d="M8.5 11V4.6a1.6 1.6 0 0 1 3.2 0V10m0-.6V3.6a1.6 1.6 0 0 1 3.2 0V10m0-.4V5.4a1.6 1.6 0 0 1 3.2 0V13a8 8 0 0 1-8 8h-.6a6.5 6.5 0 0 1-5.4-2.9L2.8 15a1.7 1.7 0 0 1 2.8-1.9l2.9 3.4"/>',
+    foot:       '<path d="M7 20.5c-1.6 0-2.6-1.2-2.6-3 0-2.4 1.4-3.4 1.4-6.2C5.8 7 6.6 3.5 10 3.5c2.8 0 4 2.2 4 5.4 0 3 .8 4.2 2.2 5.6 1.2 1.2 1.9 2.2 1.9 3.6 0 1.4-1 2.4-2.4 2.4z"/><circle cx="17.5" cy="6" r="1.3"/><circle cx="19" cy="9.5" r="1.1"/>',
+    pill:       '<rect x="2.6" y="8.6" width="18.8" height="6.8" rx="3.4" transform="rotate(-45 12 12)"/><path d="M8.5 8.5 15.5 15.5"/>',
+    calendar:   '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4M9.5 15.5l1.8 1.8 3.4-3.6"/>',
+    mood:       '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.2a4.4 4.4 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/>',
+    more:       '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
+    shield:     '<path d="M12 21.5s7.5-3.6 7.5-9.5V5.6L12 2.8 4.5 5.6v6.4c0 5.9 7.5 9.5 7.5 9.5z"/>',
+    snowflake:  '<path d="M12 2v20M3.4 7l17.2 10M20.6 7 3.4 17"/><path d="m9 4.4 3 2.2 3-2.2M9 19.6l3-2.2 3 2.2"/>',
+    chart:      '<path d="M3 3v16.5A1.5 1.5 0 0 0 4.5 21H21"/><path d="M7 15l3.6-4.2 3 2.6L19 7"/>',
+    ear:        '<path d="M7.5 9a4.5 4.5 0 1 1 9 0c0 2.2-1.6 3-2.6 4.1-.8.9-.9 1.6-1 2.4a2.4 2.4 0 0 1-4.7-.2"/><path d="M11 9.2a1.2 1.2 0 0 1 2.3.4"/><path d="M6.6 19.6A8.5 8.5 0 0 1 4 13.5"/>',
+    lungs:      '<path d="M12 3v9"/><path d="M9.5 7.5C9.5 6 8 5.6 7 6.6c-1.6 1.6-2.6 4.4-2.6 7.6 0 2 .3 3.4 1.2 4 .9.6 3.4.4 3.8-1 .3-1 .1-4.7.1-9.7z"/><path d="M14.5 7.5c0-1.5 1.5-1.9 2.5-.9 1.6 1.6 2.6 4.4 2.6 7.6 0 2-.3 3.4-1.2 4-.9.6-3.4.4-3.8-1-.3-1-.1-4.7-.1-9.7z"/>',
+    bandage:    '<rect x="2.6" y="8.4" width="18.8" height="7.2" rx="3.6" transform="rotate(-45 12 12)"/><path d="M9.2 9.2 14.8 14.8M10.6 13.4h.01M13.4 10.6h.01M13.4 13.4h.01M10.6 10.6h.01"/>',
+
+    /* --- added in v2 --- */
+    camera:     '<path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.2-2h8.2l1.2 2h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.4"/>',
+    flask:      '<path d="M9.5 3v6.2L4.7 17.6A2 2 0 0 0 6.4 20.6h11.2a2 2 0 0 0 1.7-3L14.5 9.2V3"/><path d="M8.4 3h7.2M7.6 14.4h8.8"/>',
+    idCard:     '<rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><circle cx="8.5" cy="11" r="2.2"/><path d="M4.8 16.6a3.9 3.9 0 0 1 7.4 0M14.5 9.5h4.2M14.5 13h4.2"/>',
+    drop:       '<path d="M12 3.4c3.4 4 5.2 6.7 5.2 9.1a5.2 5.2 0 0 1-10.4 0c0-2.4 1.8-5.1 5.2-9.1z"/>',
+    coffee:     '<path d="M4 8h13v6.5a4.5 4.5 0 0 1-4.5 4.5h-4A4.5 4.5 0 0 1 4 14.5z"/><path d="M17 9.5h1.6a2.4 2.4 0 0 1 0 4.8H17"/><path d="M7 2.6c-.7 1-.7 1.9 0 2.9M11 2.6c-.7 1-.7 1.9 0 2.9"/>',
+    star:       '<path d="m12 3.6 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.8l5.9-.9z"/>',
+    edit:       '<path d="M4 20h4.2L19 9.2a2.2 2.2 0 0 0-3.1-3.1L5 16.9V20z"/><path d="M14.6 7.4l3.1 3.1"/>',
+    printer:    '<path d="M7 9V3.5h10V9"/><rect x="3" y="9" width="18" height="7.5" rx="2"/><path d="M7 14h10v6.5H7z"/>',
+    grid:       '<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>',
+    left:       '<path d="M15 5 8 12l7 7"/>',
+    right:      '<path d="M9 5l7 7-7 7"/>',
+
+    /* --- added in v3: desk, movement and reproductive health --- */
+    /* A standing figure with an up-arrow beside it — deliberately not another
+       seated person, since `posture` is already one. */
+    stand:      '<circle cx="8.5" cy="4" r="2"/><path d="M8.5 6.6v6.2M8.5 12.8 6 20.6M8.5 12.8 11 20.6M5.4 8.6h6.2"/>' +
+                '<path d="M18 20.5V8.4M15.4 11 18 8.4l2.6 2.6"/>',
+    chair:      '<path d="M6.5 3.5v8h11v-8"/><path d="M4.5 11.5h15"/><path d="M8 11.5v9M16 11.5v9M8 16.5h8"/>',
+    walk:       '<circle cx="13.6" cy="4" r="2"/><path d="M11.4 21l1.8-6.4-3-2.8 1-4.8 3.2 3 2.6 1.4"/>' +
+                '<path d="M10.2 12.4 8 16.6"/>',
+    /* Cycle: a not-quite-closed ring (the recurring part) around a drop. */
+    cycleIc:    '<path d="M4.6 12a7.4 7.4 0 1 1 2.2 5.2"/><path d="M4.6 8.3V12h3.7"/>' +
+                '<path d="M12 8.6c1.9 2.2 2.8 3.7 2.8 4.9a2.8 2.8 0 0 1-5.6 0c0-1.2.9-2.7 2.8-4.9z"/>',
+    ribbon:     '<path d="M12 3a4.2 4.2 0 0 1 3 7.2L12 13.4 9 10.2A4.2 4.2 0 0 1 12 3z"/>' +
+                '<path d="M9.8 12.6 6.5 21l3.4-1.6L12 21l2.1-1.6 3.4 1.6-3.3-8.4"/>',
+    magnify:    '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4 21 21"/>'
+  };
+
+  /* Every icon carries `.wh-i`, which hub.css uses to override the global
+     `svg { display:block; max-width:100% }` rule inherited from the
+     calisthenics stylesheet — without it, an icon in a paragraph breaks the
+     line and, lacking an intrinsic size, inflates to fill its container.
+     The width/height attributes are a floor; any CSS sizing rule still wins. */
+  function icon(name, cls) {
+    var p = PATHS[name];
+    if (!p) return "";
+    return '<svg class="wh-i' + (cls ? " " + cls : "") + '" width="16" height="16" viewBox="0 0 24 24" ' +
+           'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+           'stroke-linejoin="round" aria-hidden="true">' + p + "</svg>";
+  }
+
+  /* ======================================================================
+     6. NAVIGATION + ROUTER
+     ====================================================================== */
+  /* `short` is used by the mobile bottom nav, where full labels won't fit.
+     `primary` marks the tabs that stay on the bar itself — the rest move into
+     the "More" sheet, because ten items across a phone is a scroll-hunt.
+
+     `shown()` is optional and controls whether a tab appears in the nav at
+     all. A hidden tab is still routable — a deep link, a Settings link or a
+     restored last-view lands on it and it renders its own "turn this on"
+     panel, exactly like the Cycle section did before it had a tab. */
+  var NAV = [
+    { id: "dashboard",    label: "Dashboard",     short: "Home",   icon: "dashboard", color: "var(--wh-c-dashboard)", primary: true },
+    { id: "fitness",      label: "Fitness",       short: "Train",  icon: "fitness",   color: "var(--wh-c-fitness)",   primary: true },
+    { id: "desk",         label: "Desk & Movement", short: "Desk", icon: "stand",     color: "var(--wh-c-desk)" },
+    { id: "mobility",     label: "Mobility",      short: "Mobil",  icon: "stretchIc", color: "var(--wh-c-mobility)" },
+    { id: "eyecare",      label: "Eye Care",      short: "Eyes",   icon: "eye",       color: "var(--wh-c-eyecare)",   primary: true },
+    { id: "dental",       label: "Dental",        short: "Teeth",  icon: "dental",    color: "var(--wh-c-dental)",    primary: true },
+    { id: "bodycare",     label: "Body Care",     short: "Body",   icon: "bodycare",  color: "var(--wh-c-bodycare)" },
+    { id: "wellness",     label: "Wellness",      short: "Daily",  icon: "wellness",  color: "var(--wh-c-wellness)",  primary: true },
+    { id: "repro",        label: "Reproductive Health", short: "Repro", icon: "cycleIc", color: "var(--wh-c-repro)",
+      shown: function () { return reproTabVisible(); } },
+    { id: "health",       label: "Health Records", short: "Vitals", icon: "pulse",    color: "var(--wh-c-health)" },
+    { id: "insights",     label: "Insights",      short: "Data",   icon: "chart",     color: "var(--wh-c-insights)" },
+    { id: "achievements", label: "Achievements",  short: "Badges", icon: "trophy",    color: "var(--wh-c-achievements)" },
+    { id: "settings",     label: "Settings",      short: "Setup",  icon: "settings",  color: "var(--wh-c-settings)" }
+  ];
+
+  /* Explicit setting wins; otherwise the tab follows the profile. Nobody has
+     to state a gender to use the app, so "not answered" means "not shown" —
+     and Settings has a switch for anyone that guess gets wrong. */
+  function reproTabVisible() {
+    var s = STATE.settings || {};
+    if (s.reproTab === true) return true;
+    if (s.reproTab === false) return false;
+    if (s.cycleTracking) return true;
+    return !!(s.profile && s.profile.gender);
+  }
+
+  function visibleNav() {
+    return NAV.filter(function (n) { return !n.shown || n.shown(); });
+  }
+
+  var VIEWS = {};
+  var active = "dashboard";
+
+  function registerView(name, fn) {
+    VIEWS[name] = fn;
+    if (name === active) renderView(name);
+  }
+
+  function renderView(name) {
+    var el = document.getElementById("wh-view-" + name);
+    if (!el) return;
+    /* Fitness renders itself (BASALT owns that subtree) — nothing to call. */
+    var fn = VIEWS[name];
+    if (typeof fn !== "function") return;
+    try {
+      fn(el, STATE);
+    } catch (e) {
+      console.error("Wellness Hub: view '" + name + "' failed to render.", e);
+      el.innerHTML =
+        '<div class="wh-head"><div class="wh-head__eyebrow">Error</div><h1>This tab hit a problem</h1></div>' +
+        '<div class="wh-card"><p class="wh-sm wh-muted">Something in your saved data stopped this view from ' +
+        'rendering. Your other data is safe — export a backup from Settings, then try reloading.</p>' +
+        '<p class="mono wh-xs wh-faint wh-mt4" style="word-break:break-word">' + esc(e && e.message || e) + '</p></div>';
+    }
+  }
+
+  function show(name, opts) {
+    opts = opts || {};
+    if (!NAV.some(function (n) { return n.id === name; })) name = "dashboard";
+    active = name;
+    uiSet("view", name);
+
+    NAV.forEach(function (n) {
+      var el = document.getElementById("wh-view-" + n.id);
+      if (el) el.classList.toggle("wh-hide", n.id !== name);
+    });
+
+    /* Re-trigger the entrance animation on the newly shown view. */
+    var el = document.getElementById("wh-view-" + name);
+    if (el) { el.classList.remove("wh-view"); void el.offsetWidth; el.classList.add("wh-view"); }
+
+    /* Per-view accent colour, so descendants just read var(--wh-accent). */
+    var meta = NAV.find(function (n) { return n.id === name; });
+    document.documentElement.style.setProperty("--wh-accent", meta.color);
+
+    document.querySelectorAll(".wh-navbtn[data-view]").forEach(function (b) {
+      var on = b.dataset.view === name;
+      b.classList.toggle("is-active", on);
+      if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+
+    /* Light up "More" when the active tab lives inside the overflow sheet, so
+       the mobile bar never looks like nothing is selected. */
+    var moreBtn = document.getElementById("wh-nav-more");
+    if (moreBtn) {
+      var inOverflow = !meta.primary;
+      moreBtn.classList.toggle("is-active", inOverflow);
+      moreBtn.style.setProperty("--wh-navcolor", meta.color);
+      moreBtn.querySelector("span").textContent = inOverflow ? meta.short : "More";
+    }
+
+    var title = document.getElementById("wh-topbar-title");
+    if (title) title.textContent = meta.label;
+
+    renderView(name);
+    if (opts.keepScroll !== true) window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function refresh() { renderView(active); }
+  function activeView() { return active; }
+
+  function navBtn(n, useShort) {
+    return '<button type="button" class="wh-navbtn" data-view="' + n.id + '" ' +
+           'style="--wh-navcolor:' + n.color + '"' +
+           /* The full name stays available to screen readers where the visible
+              label is abbreviated to fit. */
+           (useShort ? ' aria-label="' + n.label + '"' : "") + ">" +
+           icon(n.icon) + "<span>" + (useShort ? n.short : n.label) + "</span>" +
+           '<span class="wh-navbtn__dot wh-hide" data-dot="' + n.id + '"></span>' +
+           "</button>";
+  }
+
+  function buildNav() {
+    /* --- desktop sidebar: every visible tab, full labels --- */
+    var side = document.getElementById("wh-nav-desktop");
+    if (side) {
+      side.innerHTML = visibleNav().map(function (n) { return navBtn(n, false); }).join("");
+    }
+
+    /* --- mobile bar: the primary tabs plus a "More" button ---
+       Ten items across a phone becomes a scroll-hunt, so the rest live in a
+       sheet. The More button doubles as the indicator for whichever overflow
+       tab is currently active. */
+    var bar = document.getElementById("wh-nav-mobile");
+    if (bar) {
+      bar.innerHTML =
+        visibleNav().filter(function (n) { return n.primary; }).map(function (n) { return navBtn(n, true); }).join("") +
+        '<button type="button" class="wh-navbtn wh-navbtn--more" id="wh-nav-more" ' +
+          'aria-haspopup="dialog" aria-expanded="false" aria-label="More sections">' +
+          icon("more") + "<span>More</span></button>";
+      bar.querySelector("#wh-nav-more").addEventListener("click", openMoreSheet);
+    }
+
+    document.querySelectorAll(".wh-navbtn[data-view]").forEach(function (b) {
+      b.addEventListener("click", function () { show(b.dataset.view); });
+    });
+  }
+
+  /* Bottom sheet listing the tabs that don't fit on the mobile bar. */
+  function openMoreSheet() {
+    var overflow = visibleNav().filter(function (n) { return !n.primary; });
+    modal({
+      title: "All sections",
+      body: '<div class="wh-sheet">' + overflow.map(function (n) {
+        return '<button type="button" class="wh-sheet__item" data-sheet="' + n.id + '" ' +
+          'style="--wh-navcolor:' + n.color + '">' + icon(n.icon) +
+          "<span>" + n.label + "</span></button>";
+      }).join("") + "</div>",
+      actions: [],
+      onOpen: function (body) {
+        body.querySelectorAll("[data-sheet]").forEach(function (b) {
+          b.addEventListener("click", function () {
+            closeModal();
+            show(b.dataset.sheet);
+          });
+        });
+      }
+    });
+  }
+
+  /* ----------------------------------------------------------------------
+     BACKFILL BAR
+     A persistent, impossible-to-miss band across the top whenever the logging
+     date isn't today. Without it, "why did my water reset?" is a support
+     question you'd ask yourself a week later with no way to answer it.
+     -------------------------------------------------------------------- */
+  function updateBackfillBar() {
+    var bar = document.getElementById("wh-backfill");
+    if (!bar) return;
+    if (!isBackfilling()) {
+      bar.hidden = true;
+      bar.innerHTML = "";
+      document.body.classList.remove("wh-is-backfilling");
+      return;
+    }
+    var key = viewDate();
+    bar.hidden = false;
+    document.body.classList.add("wh-is-backfilling");
+    bar.innerHTML =
+      '<span class="wh-backfill__ic">' + icon("edit") + "</span>" +
+      "<span>Logging for <strong>" + esc(prettyDate(key)) + "</strong> · " + esc(relDay(key)) + "</span>" +
+      '<button type="button" class="wh-btn wh-btn--sm wh-btn--primary" id="wh-backfill-today">Back to today</button>';
+    var btn = bar.querySelector("#wh-backfill-today");
+    if (btn) btn.addEventListener("click", function () { setViewDate(null); });
+  }
+
+  /* Reusable date-stepper markup. `data-datenav` values are handled by
+     `wireDateNav`, so any view gets the same behaviour for one line of HTML. */
+  function dateNav(opts) {
+    opts = opts || {};
+    var key = viewDate();
+    var atToday = !isBackfilling();
+    var oldest = opts.minDate || shiftDay(today(), -365);
+    var canBack = daysBetween(oldest, key) > 0;
+    return '<div class="wh-datenav' + (atToday ? "" : " is-past") + '">' +
+      '<button type="button" class="wh-datenav__btn" data-datenav="prev"' + (canBack ? "" : " disabled") +
+        ' aria-label="Previous day">' + icon("left") + "</button>" +
+      '<div class="wh-datenav__mid">' +
+        '<input class="wh-datenav__date" type="date" data-datenav="pick" value="' + key +
+          '" max="' + today() + '" aria-label="Logging date" />' +
+        '<span class="wh-datenav__rel">' + esc(relDay(key)) + "</span>" +
+      "</div>" +
+      '<button type="button" class="wh-datenav__btn" data-datenav="next"' + (atToday ? " disabled" : "") +
+        ' aria-label="Next day">' + icon("right") + "</button>" +
+      (atToday ? "" : '<button type="button" class="wh-btn wh-btn--sm" data-datenav="today">Today</button>') +
+    "</div>";
+  }
+
+  function wireDateNav(root) {
+    delegate(root, "[data-datenav]", function (el) {
+      var what = el.dataset.datenav;
+      if (what === "prev") setViewDate(shiftDay(viewDate(), -1));
+      else if (what === "next") setViewDate(shiftDay(viewDate(), 1));
+      else if (what === "today") setViewDate(null);
+    });
+    root.querySelectorAll('[data-datenav="pick"]').forEach(function (inp) {
+      inp.addEventListener("change", function () { setViewDate(inp.value); });
+    });
+  }
+
+  /* Refresh the bits of chrome that sit outside any single view: the
+     "done today" dots, the sidebar date, and the next-reminder line. */
+  function updateChrome() {
+    if (!Hub.gamify) return;
+    var st = STATE.streaks || {};
+    var doneMap = {
+      fitness:  st.fitness && st.fitness.doneToday,
+      desk:     st.desk && st.desk.doneToday,
+      mobility: st.mobility && st.mobility.doneToday,
+      eyecare:  st.eye && st.eye.doneToday,
+      dental:   st.dental && st.dental.doneToday,
+      bodycare: st.bodycare && st.bodycare.doneToday,
+      wellness: st.hydration && st.hydration.doneToday && st.mindful && st.mindful.doneToday
+    };
+    document.querySelectorAll("[data-dot]").forEach(function (d) {
+      d.classList.toggle("wh-hide", !doneMap[d.dataset.dot]);
+    });
+
+    var dateEl = document.getElementById("wh-sidebar-date");
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+
+    var perfect = (st.perfect && st.perfect.current) || 0;
+    var strk = document.getElementById("wh-topbar-streak");
+    if (strk) strk.textContent = perfect > 0 ? "🔥 " + perfect : "";
+
+    var next = document.getElementById("wh-sidebar-next");
+    if (next) {
+      var n = reminders.next();
+      next.textContent = n ? n.label + " in " + clock(n.inSec) : "No reminders on";
+    }
+  }
+
+  /* Named actions a view can expose, so deep links (?action=brush) and app
+     shortcuts can trigger them without reaching into the view's internals. */
+  var actions = {};
+  function registerAction(name, fn) { actions[name] = fn; }
+
+  /* tiny UI prefs, deliberately outside the versioned schema */
+  function uiGet(k, fallback) {
+    try { var o = JSON.parse(localStorage.getItem(UI_KEY) || "{}"); return (k in o) ? o[k] : fallback; }
+    catch (e) { return fallback; }
+  }
+  function uiSet(k, v) {
+    try { var o = JSON.parse(localStorage.getItem(UI_KEY) || "{}"); o[k] = v; localStorage.setItem(UI_KEY, JSON.stringify(o)); }
+    catch (e) {}
+  }
+
+  /* ======================================================================
+     7. TOASTS
+     ====================================================================== */
+  var TOAST_ICON = { success: "check", warn: "alert", danger: "alert", info: "info" };
+
+  function toast(msg, type, ms) {
+    type = type || "info";
+    var host = document.getElementById("wh-toast-host");
+    if (!host) return;
+    var el = document.createElement("div");
+    el.className = "wh-toast wh-toast--" + type;
+    el.setAttribute("role", type === "danger" ? "alert" : "status");
+    el.innerHTML = icon(TOAST_ICON[type] || "info") + "<span>" + esc(msg) + "</span>";
+    host.appendChild(el);
+
+    var t = setTimeout(remove, ms || 3200);
+    el.addEventListener("click", remove);
+    function remove() {
+      clearTimeout(t);
+      el.classList.add("is-out");
+      setTimeout(function () { el.remove(); }, 240);
+    }
+  }
+
+  /* ======================================================================
+     8. MODAL
+     ====================================================================== */
+  var modalEl, lastFocused = null;
+
+  function modal(opts) {
+    modalEl = modalEl || document.getElementById("wh-modal");
+    if (!modalEl) return;
+    lastFocused = document.activeElement;
+
+    document.getElementById("wh-modal-title").textContent = opts.title || "";
+    document.getElementById("wh-modal-body").innerHTML = opts.body || "";
+
+    var foot = document.getElementById("wh-modal-foot");
+    foot.innerHTML = "";
+    (opts.actions || []).forEach(function (a) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "wh-btn " + (a.variant ? "wh-btn--" + a.variant : "");
+      b.textContent = a.label;
+      b.addEventListener("click", function () {
+        if (a.close !== false) closeModal();
+        if (typeof a.onClick === "function") a.onClick();
+      });
+      foot.appendChild(b);
+    });
+
+    modalEl.hidden = false;
+    document.body.style.overflow = "hidden";
+    /* Focus the first field if there is one — a dialog that exists to collect
+       a name should not make you Tab to the name box. Otherwise the primary
+       action, otherwise the close button. */
+    var target = modalEl.querySelector(".wh-modal__body input:not([type=hidden]), .wh-modal__body select, .wh-modal__body textarea") ||
+                 foot.querySelector(".wh-btn--primary, .wh-btn--danger, .wh-btn") ||
+                 modalEl.querySelector(".wh-modal__close");
+    if (target) target.focus();
+    if (typeof opts.onOpen === "function") opts.onOpen(document.getElementById("wh-modal-body"));
+  }
+
+  /* Keep Tab inside whichever overlay is on top.
+     ----------------------------------------------------------------------
+     Without this, Tab walks straight out of an "are you sure?" dialog into the
+     page behind it — where Enter can hit a button the dialog was covering. */
+  var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+                  "select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+  function trapTab(e) {
+    if (e.key !== "Tab") return;
+    var layer = null;
+    if (focusEl && !focusEl.hidden) layer = focusEl;
+    else if (modalEl && !modalEl.hidden) layer = modalEl;
+    if (!layer) return;
+
+    var items = Array.prototype.filter.call(layer.querySelectorAll(FOCUSABLE), function (el) {
+      return el.offsetParent !== null || el === document.activeElement;
+    });
+    if (!items.length) { e.preventDefault(); return; }
+
+    var first = items[0], last = items[items.length - 1];
+    /* Focus escaping the layer entirely (e.g. after a re-render) comes back. */
+    if (!layer.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
+  function closeModal() {
+    if (!modalEl || modalEl.hidden) return;
+    modalEl.hidden = true;
+    if (!document.getElementById("wh-focus") || document.getElementById("wh-focus").hidden) {
+      document.body.style.overflow = "";
+    }
+    if (lastFocused && lastFocused.focus) lastFocused.focus();
+    lastFocused = null;
+  }
+
+  /* Convenience wrapper for destructive confirmations. */
+  function confirmDialog(o) {
+    modal({
+      title: o.title,
+      body: "<p>" + o.body + "</p>",
+      actions: [
+        { label: o.cancelLabel || "Cancel", variant: "ghost" },
+        { label: o.confirmLabel || "Confirm", variant: o.variant || "danger", onClick: o.onConfirm }
+      ]
+    });
+  }
+
+  /* ======================================================================
+     9. FOCUS OVERLAY — the full-screen stage guided timers run in
+     ====================================================================== */
+  var focusEl, focusOnClose = null;
+
+  var focusLayer = {
+    open: function (html, onClose) {
+      focusEl = focusEl || document.getElementById("wh-focus");
+      focusEl.innerHTML = '<div class="wh-focus__inner">' + html + "</div>";
+      focusEl.hidden = false;
+      document.body.style.overflow = "hidden";
+      focusOnClose = onClose || null;
+      var btn = focusEl.querySelector("[data-focus-primary]") || focusEl.querySelector("button");
+      if (btn) btn.focus();
+      return focusEl.querySelector(".wh-focus__inner");
+    },
+    close: function () {
+      if (!focusEl || focusEl.hidden) return;
+      var cb = focusOnClose;
+      focusOnClose = null;
+      focusEl.hidden = true;
+      focusEl.innerHTML = "";
+      if (!modalEl || modalEl.hidden) document.body.style.overflow = "";
+      if (typeof cb === "function") cb();
+    },
+    isOpen: function () { return focusEl && !focusEl.hidden; },
+    el: function () { return focusEl; }
+  };
+
+  /* ======================================================================
+     10. TIMER — one countdown used by every guided exercise
+     ----------------------------------------------------------------------
+     Driven by wall-clock deltas rather than by counting interval ticks, so a
+     backgrounded tab (where timers get throttled) still finishes on schedule
+     instead of drifting minutes behind.
+     ====================================================================== */
+  function Timer(opts) {
+    this.duration = opts.duration;          // seconds
+    this.onTick = opts.onTick || function () {};
+    this.onDone = opts.onDone || function () {};
+    this.interval = opts.interval || 100;   // ms between UI updates
+    this._id = null;
+    this._endAt = 0;
+    this.running = false;
+  }
+  Timer.prototype.start = function () {
+    var self = this;
+    if (this.running) return this;
+    this.running = true;
+    this._endAt = Date.now() + this.duration * 1000;
+    this.onTick(this.remaining(), this.elapsed());
+    this._id = setInterval(function () {
+      var left = self.remaining();
+      self.onTick(left, self.elapsed());
+      if (left <= 0) { self.stop(); self.onDone(); }
+    }, this.interval);
+    return this;
+  };
+  Timer.prototype.stop = function () {
+    if (this._id) clearInterval(this._id);
+    this._id = null;
+    this.running = false;
+    return this;
+  };
+  Timer.prototype.remaining = function () {
+    if (!this.running) return this.duration;
+    return Math.max(0, (this._endAt - Date.now()) / 1000);
+  };
+  Timer.prototype.elapsed = function () { return this.duration - this.remaining(); };
+
+  /* ======================================================================
+     11. CUES — WebAudio beep + vibration, no audio files to load
+     ====================================================================== */
+  var audioCtx = null;
+
+  /* Browsers refuse to start an AudioContext until the page has seen a real
+     user gesture, and creating one earlier just logs a warning. So we wait for
+     the first interaction before making any sound at all. */
+  var gestured = false;
+  ["pointerdown", "keydown", "touchstart"].forEach(function (evt) {
+    document.addEventListener(evt, function () { gestured = true; }, { once: true, capture: true });
+  });
+
+  function beep(freq, ms, vol) {
+    if (!STATE.settings.sound || !gestured) return;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      audioCtx = audioCtx || new AC();
+      /* Resume is a no-op when the context is already running. */
+      if (audioCtx.state === "suspended") audioCtx.resume();
+
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq || 660;
+      /* Short attack/release envelope — a raw gate would click. */
+      var t0 = audioCtx.currentTime, dur = (ms || 180) / 1000;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(vol == null ? 0.14 : vol, t0 + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t0); osc.stop(t0 + dur + 0.02);
+    } catch (e) { /* audio is a nicety, never a failure */ }
+  }
+
+  function vibrate(pattern) {
+    if (!STATE.settings.sound) return;
+    try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+  }
+
+  /* A two-note chime for "phase changed", a triad for "you're finished". */
+  function cueChange() { beep(620, 140); setTimeout(function () { beep(830, 170); }, 130); vibrate(120); }
+  function cueDone()   { beep(660, 150); setTimeout(function () { beep(880, 150); }, 150);
+                         setTimeout(function () { beep(1046, 280); }, 300); vibrate([90, 70, 90, 70, 180]); }
+
+  /* ======================================================================
+     12. NOTIFICATIONS
+     ----------------------------------------------------------------------
+     IMPORTANT: the Notification API needs a secure origin. Pages opened from
+     disk (file://) are NOT secure origins in Chrome, so notifications are
+     unavailable there — the app detects this and says so in Settings rather
+     than silently doing nothing. Everything else works identically.
+     ====================================================================== */
+  var notify = {
+    supported: function () { return typeof window.Notification !== "undefined"; },
+    /* Whether this origin can actually deliver desktop notifications.
+       `file:` is excluded explicitly: Chrome reports file:// pages as secure
+       contexts (isSecureContext === true) but still won't deliver notifications
+       from them, so trusting isSecureContext alone would show the wrong advice
+       and leave the user waiting for notifications that never arrive. */
+    availableHere: function () {
+      if (!this.supported()) return false;
+      if (location.protocol === "file:") return false;
+      return window.isSecureContext === true || location.protocol === "https:" ||
+             location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    },
+    permission: function () { return this.supported() ? Notification.permission : "unsupported"; },
+
+    /* Explain first, THEN trigger the browser's own prompt — never fire the
+       native prompt cold on page load. */
+    request: function (cb) {
+      var self = this;
+      if (!this.availableHere()) {
+        modal({
+          title: "Notifications aren't available here",
+          body:
+            "<p>This page is open straight from your file system (<code class='mono'>file://</code>), and browsers only " +
+            "allow desktop notifications on secure origins.</p>" +
+            "<p><strong>To enable them,</strong> serve the folder locally — for example run " +
+            "<code class='mono'>python3 -m http.server</code> in this folder and open " +
+            "<code class='mono'>http://localhost:8000</code>.</p>" +
+            "<p>Everything else in the app works exactly the same either way, and in-app reminders " +
+            "(toasts) still appear while this tab is open.</p>",
+          actions: [{ label: "Got it", variant: "primary" }]
+        });
+        return;
+      }
+      if (Notification.permission === "granted") { if (cb) cb(true); return; }
+      if (Notification.permission === "denied") {
+        modal({
+          title: "Notifications are blocked",
+          body: "<p>Your browser is blocking notifications for this page. You can re-allow them from the " +
+                "padlock/settings icon in the address bar.</p><p>In-app reminders will still appear while this tab is open.</p>",
+          actions: [{ label: "OK", variant: "primary" }]
+        });
+        return;
+      }
+
+      modal({
+        title: "Turn on reminders?",
+        body:
+          "<p>The hub can nudge you for eye breaks, water, posture checks, brushing and flossing.</p>" +
+          "<p>Your browser will ask for permission next — nothing is sent anywhere, and there's no account. " +
+          "Reminders are generated right here in the page.</p>" +
+          "<p><strong>They only fire while this tab is open.</strong> You can minimise the window or switch to " +
+          "another tab, but if you close it entirely the reminders stop until you open it again.</p>",
+        actions: [
+          { label: "Not now", variant: "ghost", onClick: function () { if (cb) cb(false); } },
+          {
+            label: "Continue", variant: "primary",
+            onClick: function () {
+              try {
+                var p = Notification.requestPermission(function (res) { done(res); });
+                if (p && typeof p.then === "function") p.then(done);
+              } catch (e) { if (cb) cb(false); }
+            }
+          }
+        ],
+        onOpen: function () {
+          STATE.settings.notificationsAsked = true;
+          save();
+        }
+      });
+
+      function done(res) {
+        if (res === "granted") toast("Reminders enabled.", "success");
+        else if (res === "denied") toast("Notifications blocked — in-app reminders still work.", "warn", 5000);
+        if (cb) cb(res === "granted");
+        refresh();
+      }
+    },
+
+    /* Show a notification if we're allowed to; always show an in-app toast so
+       the reminder is never silently lost. */
+    fire: function (title, body, viewId, remKey) {
+      toastReminder(title, body, viewId, remKey);
+      if (!this.availableHere() || Notification.permission !== "granted") return;
+
+      var opts = {
+        body: body,
+        tag: "wellness-" + (viewId || "general"),   // replaces, never stacks
+        icon: notificationIcon(),
+        badge: notificationIcon(),
+        data: { view: viewId || "dashboard", key: remKey || null }
+      };
+
+      /* Preferred path: the service worker owns the notification, so clicking
+         it focuses the existing window instead of opening a second one, AND it
+         can carry action buttons — `new Notification()` cannot. Some platforms
+         (notably Android) refuse the constructor outright anyway. */
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        var swOpts = Object.assign({}, opts, {
+          actions: remKey
+            ? [{ action: "snooze", title: "Snooze " + (STATE.settings.snoozeMin || 15) + "m" },
+               { action: "done", title: "Done" }]
+            : []
+        });
+        navigator.serviceWorker.ready
+          .then(function (reg) { return reg.showNotification(title, swOpts); })
+          .catch(function () { legacyNotify(title, opts, viewId); });
+        return;
+      }
+      legacyNotify(title, opts, viewId);
+    }
+  };
+
+  /* The in-app version of a reminder, with the same two actions the desktop
+     notification offers — so snoozing works identically on file:// and on a
+     machine where notifications are blocked. */
+  function toastReminder(title, body, viewId, remKey) {
+    var host = document.getElementById("wh-toast-host");
+    if (!host) { toast(title + " — " + body, "warn", 6000); return; }
+
+    var el = document.createElement("div");
+    el.className = "wh-toast wh-toast--warn wh-toast--rem";
+    el.setAttribute("role", "alert");
+    el.innerHTML =
+      icon("bell") +
+      '<span class="wh-grow"><strong>' + esc(title) + "</strong><br>" +
+        '<span class="wh-xs">' + esc(body) + "</span></span>" +
+      '<span class="wh-toast__acts">' +
+        (remKey ? '<button type="button" class="wh-btn wh-btn--sm wh-btn--ghost" data-rem-snooze>Snooze</button>' : "") +
+        '<button type="button" class="wh-btn wh-btn--sm" data-rem-go>Open</button>' +
+      "</span>";
+    host.appendChild(el);
+
+    var t = setTimeout(remove, 12000);
+    function remove() { clearTimeout(t); el.classList.add("is-out"); setTimeout(function () { el.remove(); }, 240); }
+
+    var sn = el.querySelector("[data-rem-snooze]");
+    if (sn) sn.addEventListener("click", function () { reminders.snooze(remKey); remove(); });
+    el.querySelector("[data-rem-go]").addEventListener("click", function () {
+      if (viewId) show(viewId);
+      remove();
+    });
+  }
+
+  function legacyNotify(title, opts, viewId) {
+    try {
+      var n = new Notification(title, opts);
+      n.onclick = function () {
+        window.focus();
+        if (viewId) show(viewId);
+        n.close();
+      };
+    } catch (e) { /* nothing more we can do — the toast already fired */ }
+  }
+
+  /* Data-URI icon so notifications need no network and no image file. */
+  function notificationIcon() {
+    return "data:image/svg+xml," + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 24 24'>" +
+      "<rect width='24' height='24' rx='5' fill='#282828'/>" +
+      "<path d='M12 20s-6.5-4.3-6.5-9A3.8 3.8 0 0 1 12 8.4 3.8 3.8 0 0 1 18.5 11c0 4.7-6.5 9-6.5 9z' " +
+      "fill='none' stroke='#b8bb26' stroke-width='1.8' stroke-linejoin='round'/></svg>");
+  }
+
+  /* ======================================================================
+     13. REMINDER SCHEDULER
+     ----------------------------------------------------------------------
+     A single 1-second master tick drives everything. Interval reminders track
+     their own `nextAt` timestamp (re-seeded from "now" whenever they're turned
+     on or the interval changes); clock reminders compare against local time and
+     record the date they last fired so a reload can't double-fire them.
+     ====================================================================== */
+  var REMINDER_META = {
+    eye:       { label: "Eye break",     view: "eyecare",  title: "Time for a 20-20-20 break",
+                 body: "Look at something ~20 feet away for 20 seconds.", kind: "interval" },
+    hydration: { label: "Water",         view: "wellness", title: "Hydration check",
+                 body: "Have a glass of water and log it.", kind: "interval" },
+    posture:   { label: "Posture check", view: "wellness", title: "Posture check",
+                 body: "Sit tall, shoulders back, screen at eye level. Try a desk stretch.", kind: "interval" },
+    stand:     { label: "Stand up",      view: "desk",     title: "Stand up",
+                 body: "Get out of the chair for two minutes — walk, stretch, refill your glass.", kind: "interval" },
+    spf:       { label: "Sunscreen",     view: "bodycare", title: "Reapply sunscreen",
+                 body: "Every two hours while you're outdoors, and after swimming or sweating.", kind: "interval" },
+    brushAM:   { label: "Brush (AM)",    view: "dental",   title: "Morning brush",
+                 body: "Two minutes, all four quadrants.", kind: "clock" },
+    brushPM:   { label: "Brush (PM)",    view: "dental",   title: "Evening brush",
+                 body: "Two minutes, all four quadrants.", kind: "clock" },
+    floss:     { label: "Floss",         view: "dental",   title: "Flossing time",
+                 body: "Once a day is all it takes.", kind: "clock" },
+    skinAM:    { label: "Skin (AM)",     view: "bodycare", title: "Morning skin routine",
+                 body: "Cleanse, moisturise, sunscreen.", kind: "clock" },
+    skinPM:    { label: "Skin (PM)",     view: "bodycare", title: "Evening skin routine",
+                 body: "Cleanse off the day, then moisturise.", kind: "clock" },
+    medsAM:    { label: "Meds (AM)",     view: "health",   title: "Morning medication",
+                 body: "Take and tick off your morning items.", kind: "clock" },
+    medsNoon:  { label: "Meds (midday)", view: "health",   title: "Midday medication",
+                 body: "Take and tick off your midday items.", kind: "clock" },
+    medsPM:    { label: "Meds (PM)",     view: "health",   title: "Evening medication",
+                 body: "Take and tick off your evening items.", kind: "clock" },
+    mobility:  { label: "Mobility",      view: "mobility", title: "Mobility session",
+                 body: "Ten minutes of joint work pays for itself.", kind: "clock" },
+    mood:      { label: "Mood check-in", view: "wellness", title: "How was today?",
+                 body: "Log mood, energy and stress while it's still fresh.", kind: "clock" },
+    contraceptive: { label: "Contraceptive", view: "repro", title: "Contraceptive pill",
+                 body: "Same time every day is what makes it work. Take it and tick it off.", kind: "clock" }
+  };
+
+  var nextAt = {};    // in-memory only: reminderKey -> epoch ms
+  var snoozed = {};   // reminderKey -> epoch ms it may fire again
+
+  /* Is `hhmm` inside the quiet window? Handles a window that wraps midnight,
+     which is the normal case (22:00 → 07:00). */
+  function inQuietHours(when) {
+    var q = STATE.settings.quietHours;
+    if (!q || !q.enabled) return false;
+    var d = when || new Date();
+    var mins = d.getHours() * 60 + d.getMinutes();
+    var from = hhmmToMins(q.from), to = hhmmToMins(q.to);
+    if (from === to) return false;                    // a zero-length window
+    return from < to ? (mins >= from && mins < to)    // same-day window
+                     : (mins >= from || mins < to);   // wraps midnight
+  }
+
+  function hhmmToMins(hhmm) {
+    var p = String(hhmm || "00:00").split(":");
+    return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0);
+  }
+
+  /* Does this reminder run on the given weekday? */
+  function runsOn(cfg, date) {
+    var days = (cfg && cfg.days) || [0, 1, 2, 3, 4, 5, 6];
+    return days.indexOf((date || new Date()).getDay()) !== -1;
+  }
+
+  var reminders = {
+    meta: REMINDER_META,
+    inQuietHours: inQuietHours,
+    runsOn: runsOn,
+
+    /* Push one reminder out by the configured snooze. */
+    snooze: function (key, mins) {
+      mins = mins || Number(STATE.settings.snoozeMin) || 15;
+      snoozed[key] = Date.now() + mins * 60000;
+      /* A snoozed clock reminder has already stamped lastFired for today, so
+         clear it — otherwise the snooze would never come back. */
+      if (REMINDER_META[key] && REMINDER_META[key].kind === "clock") {
+        delete STATE.meta.lastFired[key];
+        save();
+      }
+      var label = (REMINDER_META[key] || {}).label || "Reminder";
+      toast(label + " snoozed for " + mins + " minutes.", "info", 3000);
+      updateChrome();
+    },
+    isSnoozed: function (key) { return !!(snoozed[key] && snoozed[key] > Date.now()); },
+    clearSnooze: function (key) { delete snoozed[key]; },
+
+    /* (Re)seed the interval reminders. Called at boot and whenever settings
+       change, so an interval edit takes effect immediately. */
+    sync: function () {
+      Object.keys(REMINDER_META).forEach(function (key) {
+        var m = REMINDER_META[key];
+        var cfg = STATE.settings.reminders[key];
+        if (m.kind !== "interval") return;
+        if (!cfg || !cfg.enabled) { delete nextAt[key]; return; }
+        var mins = Math.max(1, Number(cfg.intervalMin) || 20);
+        /* Keep an existing countdown if it's still valid for this interval,
+           so nudging an unrelated setting doesn't reset the user's timer. */
+        var due = nextAt[key];
+        if (!due || due - Date.now() > mins * 60000) nextAt[key] = Date.now() + mins * 60000;
+      });
+    },
+
+    /* Restart one reminder's countdown from now (used after the user acts on it). */
+    reset: function (key) {
+      var cfg = STATE.settings.reminders[key];
+      if (!cfg || !cfg.enabled) return;
+      var mins = Math.max(1, Number(cfg.intervalMin) || 20);
+      nextAt[key] = Date.now() + mins * 60000;
+    },
+
+    /* The soonest upcoming reminder, for the dashboard countdown. */
+    next: function () {
+      var best = null;
+      var nowMs = Date.now();
+
+      Object.keys(REMINDER_META).forEach(function (key) {
+        var m = REMINDER_META[key];
+        var cfg = STATE.settings.reminders[key];
+        if (!cfg || !cfg.enabled) return;
+
+        var inSec;
+        if (m.kind === "interval") {
+          if (!nextAt[key]) return;
+          inSec = (nextAt[key] - nowMs) / 1000;
+        } else {
+          inSec = secondsUntilClock(cfg.time);
+          /* Already fired today? Then the next one is tomorrow. */
+          if (STATE.meta.lastFired[key] === calendarToday() && inSec < 0) inSec += 86400;
+          if (inSec < 0) inSec += 86400;
+          /* Skip forward over any weekday this one doesn't run on, so the
+             countdown says Monday rather than counting down to a Saturday
+             that will never fire. */
+          var guard = 0;
+          while (!runsOn(cfg, new Date(nowMs + inSec * 1000)) && guard++ < 7) inSec += 86400;
+          if (guard > 6) return;
+        }
+        /* A snooze is what's actually next for this reminder. */
+        if (snoozed[key] && snoozed[key] > nowMs) {
+          inSec = Math.min(inSec, (snoozed[key] - nowMs) / 1000);
+        }
+        if (inSec < 0) return;
+        if (!best || inSec < best.inSec) {
+          best = { key: key, label: m.label, inSec: inSec, view: m.view,
+                   snoozed: !!(snoozed[key] && snoozed[key] > nowMs) };
+        }
+      });
+      return best;
+    },
+
+    /* Called once a second by the master tick. */
+    check: function () {
+      var nowMs = Date.now();
+      var now = new Date();
+      var td = calendarToday();
+      var quiet = inQuietHours(now);
+
+      Object.keys(REMINDER_META).forEach(function (key) {
+        var m = REMINDER_META[key];
+        var cfg = STATE.settings.reminders[key];
+        if (!cfg || !cfg.enabled) return;
+
+        /* A snooze that has come due fires regardless of schedule — the user
+           asked for it back, and quiet hours are about not being ambushed,
+           not about overriding an explicit request. */
+        if (snoozed[key]) {
+          if (nowMs >= snoozed[key]) {
+            delete snoozed[key];
+            if (m.kind === "interval") reminders.reset(key);
+            else STATE.meta.lastFired[key] = td;
+            notify.fire(m.title, m.body, m.view, key);
+          }
+          return;     // snoozed reminders don't also fire on their own schedule
+        }
+
+        if (!runsOn(cfg, now)) return;                       // not one of its days
+
+        if (m.kind === "interval") {
+          if (nextAt[key] && nowMs >= nextAt[key]) {
+            /* Restart the countdown either way, so a quiet-hours skip doesn't
+               leave it primed to fire the instant the window ends. */
+            reminders.reset(key);
+            if (!quiet) notify.fire(m.title, m.body, m.view, key);
+          }
+        } else {
+          if (STATE.meta.lastFired[key] === td) return;      // already fired today
+          var diff = secondsUntilClock(cfg.time);
+          /* Fire in the 60s window starting at the scheduled minute. A tab that
+             was closed at the scheduled time simply misses it — by design. */
+          if (diff <= 0 && diff > -60) {
+            STATE.meta.lastFired[key] = td;
+            save();
+            /* A clock reminder deliberately set inside quiet hours (a 22:00
+               skin routine, with quiet from 22:00) is an instruction, not an
+               accident — so only interval nagging is suppressed. */
+            notify.fire(m.title, m.body, m.view, key);
+          }
+        }
+      });
+    }
+  };
+
+  /* Seconds from now until "HH:MM" today (negative if it's already passed). */
+  function secondsUntilClock(hhmm) {
+    var p = String(hhmm || "00:00").split(":");
+    var t = new Date();
+    t.setHours(Number(p[0]) || 0, Number(p[1]) || 0, 0, 0);
+    return (t - Date.now()) / 1000;
+  }
+
+  /* ======================================================================
+     14. MASTER TICK
+     ====================================================================== */
+  var tickSubs = [];
+  function onTick(fn) { tickSubs.push(fn); return function () { tickSubs = tickSubs.filter(function (f) { return f !== fn; }); }; }
+
+  var lastTickDay = today();
+  function startTick() {
+    setInterval(function () {
+      reminders.check();
+
+      /* Day rollover: everything "today" just changed meaning. */
+      var td = today();
+      if (td !== lastTickDay) {
+        lastTickDay = td;
+        /* Backfilling "yesterday" across the rollover would silently become
+           "the day before yesterday". Snap back to today and say so. */
+        if (isBackfilling()) {
+          setViewDate(null, { render: false });
+          toast("The day rolled over — logging is back on today.", "info", 5000);
+        }
+        if (Hub.gamify) Hub.gamify.recompute();
+        save();
+        refresh();
+      }
+
+      updateChrome();
+      tickSubs.forEach(function (fn) { try { fn(); } catch (e) {} });
+    }, 1000);
+  }
+
+  /* ======================================================================
+     15. MISC HELPERS
+     ====================================================================== */
+  function esc(str) {
+    return String(str == null ? "" : str).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function clamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
+  function pct(a, b) { return b > 0 ? clamp(Math.round(a / b * 100), 0, 100) : 0; }
+  function plural(n, one, many) { return n === 1 ? one : (many || one + "s"); }
+
+  /* SVG progress ring markup. `size`/`stroke` in px, `value` 0–100. */
+  function ring(value, opts) {
+    opts = opts || {};
+    var size = opts.size || 120, stroke = opts.stroke || 9;
+    var r = (size - stroke) / 2;
+    var c = 2 * Math.PI * r;
+    var off = c * (1 - clamp(value, 0, 100) / 100);
+    var color = opts.color || "var(--wh-accent)";
+    return '<div class="wh-ringwrap" style="width:' + size + 'px;height:' + size + 'px">' +
+      '<svg class="wh-ring" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" ' +
+        'role="img" aria-label="' + esc(opts.aria || (Math.round(value) + "% complete")) + '">' +
+        '<circle class="wh-ring__track" cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" stroke-width="' + stroke + '"/>' +
+        '<circle class="wh-ring__bar" cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" stroke-width="' + stroke + '" ' +
+          'stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '" style="stroke:' + color + '"/>' +
+      '</svg>' +
+      (opts.center ? '<div class="wh-ringwrap__mid">' + opts.center + "</div>" : "") +
+    "</div>";
+  }
+
+  /* Delegate clicks for elements matching `sel` inside `root`.
+     ----------------------------------------------------------------------
+     Views re-render by replacing `root.innerHTML`, but `root` itself persists.
+     A naive addEventListener per call therefore STACKS a new listener on every
+     re-render, and a handler that doesn't itself re-render then fires N times —
+     which silently breaks anything that toggles, because an even N is a no-op.
+     (That's what killed the dental tips accordion.)
+
+     So: one real listener per root, and a registry keyed by selector whose
+     handler is replaced rather than appended. */
+  function delegate(root, sel, handler) {
+    var reg = root.__whDelegates;
+    if (!reg) {
+      reg = root.__whDelegates = [];
+      root.addEventListener("click", function (e) {
+        /* Snapshot: a handler may re-render and re-register mid-dispatch. */
+        reg.slice().forEach(function (entry) {
+          var el = e.target.closest(entry.sel);
+          /* A previous handler may have re-rendered and detached the target. */
+          if (el && root.contains(el)) entry.fn(el, e);
+        });
+      });
+    }
+    var existing = null;
+    for (var i = 0; i < reg.length; i++) {
+      if (reg[i].sel === sel) { existing = reg[i]; break; }
+    }
+    if (existing) existing.fn = handler;
+    else reg.push({ sel: sel, fn: handler });
+  }
+
+  /* ======================================================================
+     16. PUBLIC NAMESPACE
+     ====================================================================== */
+  var Hub = window.Hub = {
+    STORAGE_KEY: STORAGE_KEY,
+    SCHEMA_VERSION: SCHEMA_VERSION,
+    NAV: NAV,
+
+    /* state */
+    get state() { return STATE; },
+    setState: function (s) { STATE = migrate(s); },
+    defaultState: defaultState,
+    load: load,
+    save: save,
+    commit: commit,
+    deepMerge: deepMerge,
+
+    /* day records */
+    day: day,
+    editDay: editDay,
+    dayKeys: dayKeys,
+    defaultCheckups: defaultCheckups,
+
+    /* dates */
+    ymd: ymd, today: today, calendarToday: calendarToday,
+    parseYmd: parseYmd, shiftDay: shiftDay,
+    daysBetween: daysBetween, prettyDate: prettyDate, relDay: relDay, clock: clock,
+
+    /* backfill: which day are we logging to? */
+    viewDate: viewDate, setViewDate: setViewDate, isBackfilling: isBackfilling,
+    dateNav: dateNav, wireDateNav: wireDateNav, updateBackfillBar: updateBackfillBar,
+
+    /* units (display only — storage is always metric) */
+    units: UNITS,
+
+    /* router */
+    registerView: registerView, show: show, refresh: refresh,
+    actions: actions, registerAction: registerAction,
+    activeView: activeView, buildNav: buildNav, updateChrome: updateChrome,
+    visibleNav: visibleNav, reproTabVisible: reproTabVisible,
+    uiGet: uiGet, uiSet: uiSet,
+
+    /* ui */
+    toast: toast, modal: modal, closeModal: closeModal, confirm: confirmDialog,
+    focus: focusLayer, icon: icon, ring: ring,
+
+    /* timers + cues */
+    Timer: Timer, beep: beep, vibrate: vibrate, cueChange: cueChange, cueDone: cueDone,
+
+    /* notifications + reminders */
+    notify: notify, reminders: reminders, onTick: onTick, startTick: startTick,
+
+    /* utils */
+    esc: esc, clamp: clamp, pct: pct, plural: plural, delegate: delegate
+  };
+
+  /* Global overlay dismissal: Escape closes the topmost layer, backdrop clicks
+     close the modal. Wired once, here, rather than per-view. */
+  document.addEventListener("click", function (e) {
+    if (e.target.closest("[data-wh-close]")) closeModal();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Tab") { trapTab(e); return; }
+    if (e.key !== "Escape") return;
+    if (focusLayer.isOpen()) { focusLayer.close(); return; }
+    closeModal();
+  });
+
+})();

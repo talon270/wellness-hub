@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#1d2021" />
+<meta name="description" content="Personal wellness hub — calisthenics, mobility &amp; recovery, eye care, dental care, body care, daily wellness habits and health records, with trackers, timers, reminders and streaks. Fully offline, all data stays in your browser." />
+<title>Wellness Hub</title>
+
+<!-- Installable app: manifest, icons, iOS meta. -->
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Wellness" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<!-- Favicon: inline SVG data URI, no network needed. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23282828'/%3E%3Cpath d='M12 20s-6.5-4.3-6.5-9A3.8 3.8 0 0 1 12 8.4 3.8 3.8 0 0 1 18.5 11c0 4.7-6.5 9-6.5 9z' fill='none' stroke='%23b8bb26' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E" />
+
+<!--
+  STYLESHEET ORDER MATTERS
+  1. fitness/basalt.css  — the original calisthenics app's stylesheet, extracted verbatim.
+  2. css/hub.css         — the Wellness Hub shell + all hub modules (Gruvbox tokens live here).
+  3. css/basalt-gruvbox.css — re-maps BASALT's design tokens onto the Gruvbox palette and
+                              reshapes its chrome so it reads as a native tab, not a bolt-on.
+  4. css/themes.css      — the alternate palettes. Last, and scoped to
+                           html[data-theme="…"], so it outranks every :root block above.
+  Everything is local: no CDN, no web fonts, works offline and over file://.
+-->
+<link rel="stylesheet" href="fitness/basalt.css" />
+<link rel="stylesheet" href="css/hub.css" />
+<link rel="stylesheet" href="css/basalt-gruvbox.css" />
+<link rel="stylesheet" href="css/basalt-makeover.css" />
+<link rel="stylesheet" href="css/muscles.css" />
+<link rel="stylesheet" href="css/themes.css" />
+
+<!--
+  Stamp the saved palette before the first paint. This has to be inline and
+  before <body>: js/theme.js runs at the end of the document, by which time a
+  themed page would already have flashed Gruvbox. Deliberately dependency-free
+  and wrapped in try/catch — if storage is unavailable the app simply loads in
+  the default theme, which is what :root says anyway.
+-->
+<script>
+(function () {
+  try {
+    var id = (JSON.parse(localStorage.getItem("wellnessHub.ui") || "{}") || {}).theme;
+    if (id && id !== "gruvbox") document.documentElement.setAttribute("data-theme", id);
+  } catch (e) {}
+})();
+</script>
+
+<!-- Chart.js, vendored locally (Progress charts in the Fitness tab). -->
+<script src="vendor/chart.umd.min.js"></script>
+</head>
+
+<body>
+
+<!-- =========================================================================
+     SKIP LINK + MOBILE TOP BAR
+     ===================================================================== -->
+<a class="wh-skip" href="#wh-main">Skip to content</a>
+
+<header class="wh-topbar">
+  <div class="wh-topbar__brand">
+    <span class="wh-logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M12 20s-6.5-4.3-6.5-9A3.8 3.8 0 0 1 12 8.4 3.8 3.8 0 0 1 18.5 11c0 4.7-6.5 9-6.5 9z"/>
+      </svg>
+    </span>
+    <span class="wh-topbar__title" id="wh-topbar-title">Dashboard</span>
+  </div>
+  <div class="wh-topbar__streak" id="wh-topbar-streak" title="Perfect-day streak"></div>
+</header>
+
+<!-- Shown only while the logging date isn't today (see Hub.setViewDate). -->
+<div class="wh-backfill" id="wh-backfill" role="status" hidden></div>
+
+<!-- =========================================================================
+     SIDEBAR NAV (desktop) / BOTTOM NAV (mobile) — both render from the same
+     source of truth in js/core.js (Hub.NAV) via Hub.buildNav().
+     ===================================================================== -->
+<nav class="wh-sidebar" id="wh-sidebar" aria-label="Primary">
+  <div class="wh-sidebar__brand">
+    <span class="wh-logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M12 20s-6.5-4.3-6.5-9A3.8 3.8 0 0 1 12 8.4 3.8 3.8 0 0 1 18.5 11c0 4.7-6.5 9-6.5 9z"/>
+      </svg>
+    </span>
+    <span class="wh-sidebar__name">Wellness<span>Hub</span></span>
+  </div>
+  <div class="wh-sidebar__links" id="wh-nav-desktop"><!-- injected --></div>
+  <div class="wh-sidebar__foot">
+    <div class="wh-sidebar__date mono" id="wh-sidebar-date"></div>
+    <div class="wh-sidebar__next mono" id="wh-sidebar-next">No reminders on</div>
+  </div>
+</nav>
+
+<nav class="wh-bottomnav" id="wh-nav-mobile" aria-label="Primary (mobile)"><!-- injected --></nav>
+
+<!-- =========================================================================
+     MAIN CONTENT — one <section> per view. Each view module in js/views/
+     registers a renderer with Hub.registerView(name, fn).
+     ===================================================================== -->
+<main class="wh-main" id="wh-main">
+
+  <!-- ---------- DASHBOARD ---------- -->
+  <section class="wh-view" id="wh-view-dashboard" data-view="dashboard" aria-label="Dashboard"></section>
+
+  <!-- ---------- FITNESS (BASALT calisthenics OS, integrated) ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-fitness" data-view="fitness" aria-label="Fitness">
+
+    <!-- BASALT's own appbar, restyled by css/basalt-gruvbox.css into an
+         in-tab sub-navigation strip rather than a second app header. -->
+    <header class="appbar" id="appbar" hidden>
+      <div class="brand">
+        <div class="brand__mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7L12 2.5z"/><path d="M12 2.5V21.5M3.5 7l8.5 5 8.5-5"/></svg>
+        </div>
+        <div>
+          <div class="brand__name">BASALT</div>
+          <div class="brand__tag">Training OS</div>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav" aria-label="Fitness sections"><!-- nav buttons injected by buildNav() --></nav>
+
+      <div class="appbar__io">
+        <button class="btn btn--ghost btn--sm" id="btn-settings" title="Training settings &amp; data">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6 1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Training setup</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- BASALT's six section views. Was <main>; now a <div> so the document
+         keeps exactly one <main>. All JS references it by #app, unchanged. -->
+    <div id="app" hidden>
+      <div class="container">
+        <section class="view" id="view-dashboard"  data-view="dashboard"></section>
+        <section class="view hide" id="view-today"      data-view="today"></section>
+        <section class="view hide" id="view-program"    data-view="program"></section>
+        <section class="view hide" id="view-skills"     data-view="skills"></section>
+        <section class="view hide" id="view-muscles"    data-view="muscles"></section>
+        <section class="view hide" id="view-running"    data-view="running"></section>
+        <section class="view hide" id="view-progress"   data-view="progress"></section>
+        <section class="view hide" id="view-evaluation" data-view="evaluation"></section>
+      </div>
+    </div>
+
+    <!-- BASALT onboarding host. Restyled from a full-screen overlay into an
+         in-tab setup panel so it never covers the rest of the hub. -->
+    <div id="onboarding" aria-hidden="true"></div>
+  </section>
+
+  <!-- ---------- DESK & MOVEMENT ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-desk" data-view="desk" aria-label="Desk and movement"></section>
+
+  <!-- ---------- MOBILITY & RECOVERY ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-mobility" data-view="mobility" aria-label="Mobility and recovery"></section>
+
+  <!-- ---------- EYE CARE ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-eyecare" data-view="eyecare" aria-label="Eye care"></section>
+
+  <!-- ---------- DENTAL CARE ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-dental" data-view="dental" aria-label="Dental care"></section>
+
+  <!-- ---------- BODY CARE ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-bodycare" data-view="bodycare" aria-label="Body care"></section>
+
+  <!-- ---------- WELLNESS ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-wellness" data-view="wellness" aria-label="Wellness"></section>
+
+  <!-- ---------- REPRODUCTIVE HEALTH (shown per profile — see Hub.reproTabVisible) ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-repro" data-view="repro" aria-label="Reproductive health"></section>
+
+  <!-- ---------- HEALTH RECORDS ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-health" data-view="health" aria-label="Health records"></section>
+
+  <!-- ---------- INSIGHTS ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-insights" data-view="insights" aria-label="Insights"></section>
+
+  <!-- ---------- ACHIEVEMENTS ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-achievements" data-view="achievements" aria-label="Achievements"></section>
+
+  <!-- ---------- SETTINGS ---------- -->
+  <section class="wh-view wh-hide" id="wh-view-settings" data-view="settings" aria-label="Settings"></section>
+
+</main>
+
+<!-- =========================================================================
+     HUB OVERLAYS — kept at <body> level so they are never inside a hidden view.
+     ===================================================================== -->
+
+<!-- Generic hub modal (confirmations, exercise detail, first-run note) -->
+<div class="wh-modal" id="wh-modal" role="dialog" aria-modal="true" aria-labelledby="wh-modal-title" hidden>
+  <div class="wh-modal__backdrop" data-wh-close></div>
+  <div class="wh-modal__dialog" role="document">
+    <div class="wh-modal__head">
+      <h2 class="wh-modal__title" id="wh-modal-title">Title</h2>
+      <button class="wh-modal__close" data-wh-close aria-label="Close dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="wh-modal__body" id="wh-modal-body"></div>
+    <div class="wh-modal__foot" id="wh-modal-foot"></div>
+  </div>
+</div>
+
+<!-- Full-screen focus overlay used by guided timers (breathing, palming, brushing…) -->
+<div class="wh-focus" id="wh-focus" hidden aria-live="polite"></div>
+
+<!-- Hub toast host (BASALT keeps its own separate host, below) -->
+<div class="wh-toasts" id="wh-toast-host" aria-live="polite" aria-atomic="false"></div>
+
+<!-- Badge-unlock celebration layer -->
+<div class="wh-celebrate" id="wh-celebrate" aria-live="polite"></div>
+
+
+<!-- =========================================================================
+     BASALT OVERLAYS — hoisted to <body> level for the same reason.
+     ===================================================================== -->
+
+<!-- BASALT settings / data modal (training profile, equipment, rest timers) -->
+<div class="modal" id="modal-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__dialog">
+    <div class="modal__head">
+      <div>
+        <div class="eyebrow">Fitness</div>
+        <h3 class="display h3" id="settings-title">Training setup &amp; data</h3>
+      </div>
+      <button class="modal__close" data-close aria-label="Close">
+        <svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <p class="muted text-sm mb-4">Your training profile, equipment and rest timers. This covers the Fitness tab only — hub-wide reminders, hydration goals and full backups live in <b>Settings</b>.</p>
+
+    <div class="stack" style="gap:var(--sp-5)">
+
+      <!-- PROFILE -->
+      <div class="set-sec">
+        <div class="set-sec__label">Profile</div>
+        <div class="set-grid">
+          <label class="field"><span class="field__label">Name</span>
+            <input class="input" id="set-name" type="text" maxlength="24" /></label>
+          <label class="field"><span class="field__label">Age</span>
+            <input class="input" id="set-age" type="number" min="13" max="100" inputmode="numeric" /></label>
+          <label class="field"><span class="field__label">Height (cm)</span>
+            <input class="input" id="set-height" type="number" min="120" max="230" inputmode="numeric" /></label>
+          <label class="field"><span class="field__label">Weight (kg)</span>
+            <input class="input" id="set-weight" type="number" min="30" max="250" step="0.1" inputmode="decimal" /></label>
+        </div>
+        <div class="field mt-2"><span class="field__label">Primary goal</span>
+          <div class="seg" id="set-goal">
+            <button class="seg__btn" data-goal="strength" type="button">Strength</button>
+            <button class="seg__btn" data-goal="size" type="button">Size</button>
+            <button class="seg__btn" data-goal="both" type="button">Both</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- EQUIPMENT -->
+      <div class="set-sec">
+        <div class="set-sec__label">Equipment</div>
+        <p class="faint text-xs" style="margin:0 0 var(--sp-3)">Toggle what you have access to. This controls which movements appear as "ready" when you swap exercises.</p>
+        <div class="set-equip" id="set-equip"></div>
+      </div>
+
+      <!-- REST TIMER -->
+      <div class="set-sec">
+        <div class="set-sec__label">Rest timer</div>
+        <div class="set-grid">
+          <label class="field"><span class="field__label">After reps (sec)</span>
+            <input class="input" id="set-rest" type="number" min="15" max="600" step="5" inputmode="numeric" /></label>
+          <label class="field"><span class="field__label">After holds (sec)</span>
+            <input class="input" id="set-rest-hold" type="number" min="15" max="600" step="5" inputmode="numeric" /></label>
+        </div>
+        <div class="field mt-3"><span class="field__label">Default intensity</span>
+          <div class="seg" id="set-vol-mode">
+            <button class="seg__btn" data-voldefault="standard" type="button">Standard</button>
+            <button class="seg__btn" data-voldefault="extended" type="button">Extended</button>
+            <button class="seg__btn" data-voldefault="max" type="button">Max effort</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn--primary btn--block" id="btn-settings-save">Save changes</button>
+
+      <!-- DATA -->
+      <div class="set-sec">
+        <div class="set-sec__label">Training data only</div>
+        <p class="faint text-xs" style="margin:0 0 var(--sp-3)">These act on your training records alone. For a backup of <i>everything</i> (habits, streaks, badges and training), use Settings → Backup.</p>
+        <div class="stack">
+          <button class="btn btn--secondary btn--block" id="btn-export">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            Export training data (.json)
+          </button>
+          <button class="btn btn--ghost btn--block" id="btn-import">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 8l5-5 5 5"/><path d="M12 3v12"/></svg>
+            Import training data (.json)
+          </button>
+          <input type="file" id="file-import" accept="application/json,.json" hidden />
+          <hr class="divider" />
+          <button class="btn btn--danger btn--block" id="btn-reset">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Reset program &amp; restart onboarding
+          </button>
+        </div>
+      </div>
+    </div>
+    <p class="faint text-xs mt-4 mono">TRAINING SCHEMA v<span id="settings-version">—</span></p>
+  </div>
+</div>
+
+<!-- BASALT reset confirmation -->
+<div class="modal" id="modal-reset" role="dialog" aria-modal="true" aria-labelledby="reset-title">
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__dialog" style="max-width:440px">
+    <div class="modal__head">
+      <div>
+        <div class="eyebrow" style="color:var(--danger)">Danger zone</div>
+        <h3 class="display h3" id="reset-title">Wipe training data?</h3>
+      </div>
+    </div>
+    <p class="muted text-sm">This permanently deletes all sessions, logs, PRs, measurements and phase history from this browser, then restarts training onboarding. Your eye, dental and wellness habits are <b>not</b> affected. This cannot be undone — export a backup first if you're unsure.</p>
+    <div class="modal__foot">
+      <button class="btn btn--ghost" data-close>Cancel</button>
+      <button class="btn btn--danger" id="btn-reset-confirm">Yes, wipe &amp; restart</button>
+    </div>
+  </div>
+</div>
+
+<!-- BASALT toast host -->
+<div id="toast-host" aria-live="polite"></div>
+
+<!-- BASALT exercise guide modal -->
+<div class="modal modal--guide" id="modal-guide" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__dialog modal__dialog--guide">
+    <div class="guide-modal__head">
+      <div class="guide-modal__meta">
+        <span class="eyebrow" id="guide-pattern">Pattern</span>
+        <span class="badge" id="guide-level-badge">L1</span>
+      </div>
+      <h2 class="display h3" id="guide-title">Exercise</h2>
+      <div class="guide-modal__sub" id="guide-sub"></div>
+      <button class="modal__close" data-close aria-label="Close">
+        <svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="guide-modal__body">
+      <!-- Technique Steps -->
+      <div class="guide-section">
+        <div class="guide-section__label">
+          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22c5.52 0 10-4.48 10-10S17.52 2 12 2 2 6.48 2 12s4.48 10 10 10z"/><path d="M12 8v4l3 3"/></svg>
+          Technique
+        </div>
+        <ol class="guide-steps" id="guide-cues"></ol>
+      </div>
+      <!-- Common Mistakes -->
+      <div class="guide-section" id="guide-mistakes-wrap">
+        <div class="guide-section__label" style="color:var(--warn)">
+          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          Common mistakes
+        </div>
+        <ul class="guide-mistakes" id="guide-mistakes"></ul>
+      </div>
+      <!-- Two-column: Readiness + Injury -->
+      <div class="guide-2col">
+        <div class="guide-section guide-section--sm" id="guide-readiness-wrap">
+          <div class="guide-section__label" style="color:var(--success)">
+            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg>
+            Ready to advance when…
+          </div>
+          <p class="guide-text" id="guide-readiness"></p>
+        </div>
+        <div class="guide-section guide-section--sm" id="guide-injury-wrap">
+          <div class="guide-section__label" style="color:var(--secondary)">
+            <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11.5 15H7a4 4 0 0 0 0 8h9a5 5 0 0 0 4.22-7.68"/><path d="M13.5 3H12a2 2 0 0 0-2 2v3.5"/><path d="m14.5 7.5-3 3"/><path d="M16.5 9.5a2 2 0 0 1 0 2.83L13 15.83a2 2 0 0 1-2.83-2.83L13.5 9.5a2 2 0 0 1 3 0z"/></svg>
+            Injury note
+          </div>
+          <p class="guide-text" id="guide-injury"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- =========================================================================
+     SCRIPTS — plain classic scripts (no ES modules) so the app also works
+     when opened straight from disk via file://.
+     ===================================================================== -->
+<script src="js/core.js"></script>          <!-- store, router, toasts, reminders -->
+<script src="js/theme.js"></script>         <!-- palette switching -->
+<script src="js/gamify.js"></script>        <!-- streaks + badge engine -->
+<script src="js/insights.js"></script>      <!-- trends, patterns, advice -->
+<script src="js/pwa.js"></script>           <!-- install, offline, deep links -->
+<script src="js/calendar.js"></script>      <!-- .ics reminder export -->
+<script src="js/storage.js"></script>       <!-- durable storage + file backup -->
+<script src="js/photos.js"></script>        <!-- shared photo log (skin, niggles) -->
+<script src="js/onboarding.js"></script>     <!-- profile wizard + suggestion engine -->
+<script src="js/views/dashboard.js"></script>
+<script src="js/views/desk.js"></script>
+<script src="js/views/mobility.js"></script>
+<script src="js/views/eyecare.js"></script>
+<script src="js/views/dental.js"></script>
+<script src="js/views/bodycare.js"></script>
+<script src="js/views/wellness.js"></script>
+<script src="js/views/repro.js"></script>
+<script src="js/views/health.js"></script>
+<script src="js/views/insights.js"></script>
+<script src="js/views/achievements.js"></script>
+<script src="js/views/settings.js"></script>
+<script src="js/app.js"></script>           <!-- boot -->
+<script src="fitness/basalt.js"></script>   <!-- the calisthenics engine -->
+<script src="fitness/muscles.data.js"></script> <!-- exercise -> muscle map -->
+<script src="fitness/muscles.js"></script>      <!-- muscle coverage + conditioning levels -->
+
+</body>
+</html>

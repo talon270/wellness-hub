@@ -1,0 +1,175 @@
+/* ============================================================================
+   BASALT · GRUVBOX SKIN
+   ----------------------------------------------------------------------------
+   The calisthenics app (fitness/basalt.css) is entirely token-driven: every
+   surface, border and accent it paints resolves through a CSS custom property.
+   So rather than rewriting 1300 lines of its stylesheet, this file re-points
+   those tokens at the Gruvbox palette — the whole Fitness tab restyles itself.
+
+   Below the token block are the handful of *structural* overrides needed to
+   turn a standalone app into a tab inside the hub:
+     · its sticky appbar becomes an in-tab sub-navigation strip
+     · its full-screen onboarding overlay becomes an in-tab setup panel
+     · its <main> spacing, container width and toast placement defer to the hub
+
+   Loaded after both basalt.css and hub.css, so it always wins.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. TOKEN REMAP — Gruvbox values for BASALT's design system
+   ------------------------------------------------------------------------- */
+:root {
+  /* --- surfaces: BASALT's near-black ink ramp becomes the Gruvbox bg ramp --- */
+  --ink-1000: #191b1c;
+  --ink-900:  var(--bg0-hard);  /* page background */
+  --ink-850:  #202324;
+  --ink-800:  var(--bg0);       /* base surface */
+  --ink-750:  var(--bg0);       /* card surface */
+  --ink-700:  var(--bg0-soft);  /* raised surface */
+  --ink-650:  var(--bg1);       /* hover surface */
+  --ink-600:  var(--bg2);       /* strong border */
+  --line:     rgba(var(--fg4-rgb),.14);
+  --line-2:   rgba(var(--fg4-rgb),.24);
+
+  /* --- text: the Gruvbox foreground ramp --- */
+  --text-100: var(--fg0);
+  --text-200: var(--fg1);
+  --text-300: var(--fg2);
+  --text-400: var(--fg4);
+  --text-500: var(--gray);
+
+  /* --- brand / signal colours ---
+     Fitness owns orange in the hub's category scheme, so orange is the
+     dominant action colour here; aqua carries data/secondary. */
+  --primary:      var(--orange-bright);
+  --primary-rgb:  var(--orange-bright-rgb);
+  --primary-600:  #ff8f3d;
+  --primary-700:  var(--orange);
+  --primary-ink:  var(--bg0-hard);          /* text ON an orange fill */
+  --primary-soft: rgba(var(--orange-bright-rgb),.14);
+  --primary-glow: rgba(var(--orange-bright-rgb),.32);
+
+  --secondary:      var(--aqua-bright);
+  --secondary-rgb:  var(--aqua-bright-rgb);
+  --secondary-soft: rgba(var(--aqua-bright-rgb),.13);
+
+  --success: var(--green-bright);  --success-soft: rgba(var(--green-bright-rgb),.14);
+  --warn:    var(--yellow-bright); --warn-soft:    rgba(var(--yellow-bright-rgb),.15);
+  --danger:  var(--red-bright);    --danger-soft:  rgba(var(--red-bright-rgb),.14);
+  --info:    var(--blue-bright);   --info-soft:    rgba(var(--blue-bright-rgb),.14);
+
+  /* RGB triplets consumed by the rgba() values throughout basalt.css.
+     Repointing these is what recolours its charts, glows and hairlines. */
+  --warn-rgb:   var(--yellow-bright-rgb);    /* yellow-bright */
+  --info-rgb:   var(--blue-bright-rgb);   /* blue-bright   */
+  --accent:     var(--purple-bright);
+  --accent-rgb: var(--purple-bright-rgb);   /* purple-bright */
+  --fg-rgb:     var(--fg1-rgb);   /* fg1           */
+
+  /* --- era identity --- */
+  --era1: var(--aqua-bright);      --era1-soft: rgba(var(--aqua-bright-rgb),.16);
+  --era2: var(--orange-bright);    --era2-soft: rgba(var(--orange-bright-rgb),.16);
+
+  /* --- typography: system stacks, matching the hub, no web fonts ---
+     `--font-display` keeps a condensed feel where one is available and
+     degrades to the plain system sans everywhere else. */
+  --font-display: "Arial Narrow", "Helvetica Neue Condensed", "Liberation Sans Narrow",
+                  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body:    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+                  "Noto Sans", Arial, sans-serif;
+  --font-mono:    ui-monospace, "JetBrains Mono", "Fira Code", "SFMono-Regular",
+                  "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* --- shadows / glow: softer, no coloured bloom --- */
+  --shadow-sm: 0 2px 6px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 26px -10px rgba(0,0,0,.6);
+  --shadow-lg: 0 20px 50px -16px rgba(0,0,0,.72);
+  --glow:      0 0 0 1px rgba(var(--orange-bright-rgb),.28);
+
+  --maxw: 1180px;
+  --nav-h: 58px;
+}
+
+/* Anton is a heavy display face; the system fallbacks are lighter, so nudge
+   weight and tracking back up to keep BASALT's headings feeling deliberate. */
+.display, .brand__name, .brand__mark {
+  font-weight: 800;
+  letter-spacing: .015em;
+  text-transform: uppercase;
+}
+
+/* The `.is-active` nav pill hard-coded a red border in the original. */
+.nav__btn.is-active { border-color: rgba(var(--orange-bright-rgb),.34); }
+
+/* ---------------------------------------------------------------------------
+   2. STRUCTURAL — make BASALT read as a tab, not a second application
+   ------------------------------------------------------------------------- */
+
+/* --- appbar → in-tab sub-navigation strip --- */
+.appbar {
+  position: sticky; top: 0; z-index: 40;
+  height: auto; min-height: var(--nav-h);
+  margin-bottom: var(--wh-s5);
+  padding: var(--wh-s2) var(--wh-s4);
+  border: 1px solid var(--wh-line);
+  border-radius: var(--wh-r-lg);
+  background: color-mix(in srgb, var(--bg0) 94%, transparent);
+  flex-wrap: wrap;
+}
+/* BASALT's brand block becomes the Fitness tab's identity line. */
+.brand__mark {
+  background: color-mix(in srgb, var(--orange-bright) 16%, var(--bg0));
+  border: 1px solid rgba(var(--orange-bright-rgb),.36);
+  box-shadow: none;
+}
+.brand__mark svg { color: var(--orange-bright); }
+.brand__name { color: var(--fg1); font-size: 15px; }
+.brand__tag  { color: var(--fg4); }
+.appbar .nav { justify-content: flex-start; }
+
+/* On mobile the hub's own top bar is already sticky, so offset beneath it. */
+@media (max-width: 860px) {
+  .appbar { top: var(--wh-topbar-h); }
+}
+
+/* --- BASALT's #app / main spacing defers to the hub's page padding --- */
+#app { display: block; }
+#app > .container { max-width: none; padding: 0; margin: 0; width: 100%; }
+/* No `both` fill: an entrance animation that never runs must not leave the
+   section stuck at its opacity:0 first keyframe. */
+.view { animation: wh-viewin .3s var(--wh-ease); }
+
+/* --- onboarding: full-screen overlay → in-tab setup panel --- */
+#onboarding {
+  position: static; inset: auto; z-index: auto;
+  background: none; overflow: visible;
+}
+.onb-wrap { min-height: 0; padding: 0; display: block; }
+.onb-card { max-width: none; }
+
+/* --- BASALT toasts stack above the hub's, sharing the same corner --- */
+#toast-host {
+  position: fixed; z-index: 300;
+  right: var(--wh-s5); bottom: var(--wh-s5);
+  display: flex; flex-direction: column-reverse; gap: var(--wh-s2);
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+#toast-host > * { pointer-events: auto; }
+@media (max-width: 860px) {
+  #toast-host {
+    right: var(--wh-s3); left: var(--wh-s3);
+    bottom: calc(var(--wh-bottomnav-h) + env(safe-area-inset-bottom, 0px) + var(--wh-s3));
+    max-width: none;
+  }
+}
+
+/* --- BASALT modals sit above the hub's nav but below hub celebrations --- */
+.modal { z-index: 250; }
+
+/* --- focus ring parity with the hub --- */
+.btn:focus-visible, .nav__btn:focus-visible, .seg__btn:focus-visible,
+.input:focus-visible, .check__box:focus-visible {
+  outline: 2px solid var(--yellow-bright);
+  outline-offset: 2px;
+}

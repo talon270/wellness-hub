@@ -1,0 +1,297 @@
+/* ============================================================================
+   WELLNESS HUB · THEMES
+   ----------------------------------------------------------------------------
+   Four alternate palettes, each a straight re-point of the base tokens defined
+   in css/hub.css. Nothing here styles a component — a theme is data.
+
+   HOW IT WORKS
+     css/hub.css declares the Gruvbox ramp on :root. That stays the default, so
+     with no `data-theme` on <html> the app looks exactly as it always has. Each
+     block below overrides the same token names on `html[data-theme="…"]`, which
+     outranks :root, and every downstream sheet (basalt-gruvbox, basalt-makeover,
+     muscles) resolves through those tokens — so one attribute reskins the lot.
+
+   WHAT EACH BLOCK MUST REDEFINE
+     · the bg / fg ramps and the seven accents, plus their -rgb triplets
+       (component rules build washes with rgba(var(--x-rgb), a) — a theme that
+       skipped the triplets would keep Gruvbox's glows on a Tokyo Night ground)
+     · --ink-1000…--ink-600, the raised-surface ramp css/basalt-makeover.css
+       added for the Fitness tab, which is tuned per palette rather than derived
+     · the thirteen --wh-c-* category accents
+
+   THE CATEGORY ACCENTS ARE NOT COPIED FROM THE DEFAULT
+     Gruvbox spans hues 2°–170° and then stops, so thirteen tabs end up sharing
+     four hue neighbourhoods and two pairs collide outright. Each theme below
+     instead assigns hues on a fixed semantic plan — dashboard 77°, fitness 52°,
+     desk 222°, mobility 117°, eye 200°, dental 141°, body 330°, wellness 300°,
+     repro 2°, health 248°, insights 179°, achievements 25°, settings neutral —
+     taking the palette's own accent where one lands within 14° and generating
+     the rest at that palette's mean OKLCH lightness and chroma, so the new hues
+     read as siblings rather than imports. Health moves off red so red belongs
+     to danger alone. Every accent clears 5:1 on its own page ground.
+
+   ADDING ONE
+     Copy a block, change the values, then add a matching entry to THEMES in
+     js/theme.js — the picker in Settings builds itself from that list.
+   ========================================================================== */
+
+/* Gruvbox Material — accent envelope L 0.721 C 0.108 */
+html[data-theme="gruvbox-material"] {
+  --bg0-hard: #232323;
+  --bg0: #282828;
+  --bg0-soft: #32302f;
+  --bg1: #3a3735;
+  --bg2: #45403d;
+  --bg3: #5a524c;
+  --bg4: #7c6f64;
+  --wh-bg-deep: #1c1c1c;
+  --fg0: #e6d4b0;
+  --fg1: #d4be98;
+  --fg2: #c5b18a;
+  --fg3: #a89984;
+  --fg4: #928374;
+  --gray: #7c6f64;
+  --red: #be3e3b;
+  --green: #828e3b;
+  --yellow: #af7e28;
+  --blue: #55867c;
+  --purple: #a95f74;
+  --aqua: #628c5b;
+  --orange: #bc611e;
+  --red-bright: #ea6962;
+  --green-bright: #a9b665;
+  --yellow-bright: #d8a657;
+  --blue-bright: #7daea3;
+  --purple-bright: #d3869b;
+  --aqua-bright: #89b482;
+  --orange-bright: #e78a4e;
+  --red-bright-rgb: 234,105,98;
+  --green-bright-rgb: 169,182,101;
+  --yellow-bright-rgb: 216,166,87;
+  --blue-bright-rgb: 125,174,163;
+  --purple-bright-rgb: 211,134,155;
+  --aqua-bright-rgb: 137,180,130;
+  --orange-bright-rgb: 231,138,78;
+  --yellow-rgb: 175,126,40;
+  --fg1-rgb: 212,190,152;
+  --fg4-rgb: 146,131,116;
+  --ink-1000: #1c1c1c;
+  --ink-850: #252525;
+  --ink-800: #2a2a29;
+  --ink-750: #2e2d2b;
+  --ink-700: #35332f;
+  --ink-650: #3f3c37;
+  --ink-600: #45403d;
+  --primary-600: #faa36d;
+  --line: rgba(var(--fg4-rgb),.10);
+  --line-2: rgba(var(--fg4-rgb),.18);
+  --wh-c-dashboard: #d8a657;          /* palette yellow · 7.12:1 */
+  --wh-c-fitness: #e78a4e;            /* palette orange · 6.09:1 */
+  --wh-c-desk: #49b4d5;               /* generated 222° · 6.57:1 */
+  --wh-c-mobility: #a9b665;           /* palette green · 7.16:1 */
+  --wh-c-eyecare: #3ab9bf;            /* generated 200° · 6.64:1 */
+  --wh-c-dental: #89b482;             /* palette aqua · 6.67:1 */
+  --wh-c-bodycare: #cb8cc5;           /* generated 330° · 6.06:1 */
+  --wh-c-wellness: #af95de;           /* generated 300° · 6.12:1 */
+  --wh-c-repro: #d3869b;              /* palette purple · 5.73:1 */
+  --wh-c-health: #6caae5;             /* generated 248° · 6.38:1 */
+  --wh-c-insights: #7daea3;           /* palette blue · 6.33:1 */
+  --wh-c-achievements: #ea6962;       /* palette red · 5.01:1 */
+  --wh-c-settings: #a89984;           /* neutral */
+}
+
+/* Everforest — accent envelope L 0.756 C 0.092 */
+html[data-theme="everforest"] {
+  --bg0-hard: #232a2e;
+  --bg0: #2d353b;
+  --bg0-soft: #343f44;
+  --bg1: #3d484d;
+  --bg2: #475258;
+  --bg3: #4f585e;
+  --bg4: #56635f;
+  --wh-bg-deep: #1e2326;
+  --fg0: #e3d9c0;
+  --fg1: #d3c6aa;
+  --fg2: #bfb695;
+  --fg3: #9da9a0;
+  --fg4: #859289;
+  --gray: #7a8478;
+  --red: #bb5559;
+  --green: #7f9758;
+  --yellow: #b29356;
+  --blue: #56938b;
+  --purple: #ac718e;
+  --aqua: #5a976b;
+  --orange: #bb704d;
+  --red-bright: #e67e80;
+  --green-bright: #a7c080;
+  --yellow-bright: #dbbc7f;
+  --blue-bright: #7fbbb3;
+  --purple-bright: #d699b6;
+  --aqua-bright: #83c092;
+  --orange-bright: #e69875;
+  --red-bright-rgb: 230,126,128;
+  --green-bright-rgb: 167,192,128;
+  --yellow-bright-rgb: 219,188,127;
+  --blue-bright-rgb: 127,187,179;
+  --purple-bright-rgb: 214,153,182;
+  --aqua-bright-rgb: 131,192,146;
+  --orange-bright-rgb: 230,152,117;
+  --yellow-rgb: 178,147,86;
+  --fg1-rgb: 211,198,170;
+  --fg4-rgb: 133,146,137;
+  --ink-1000: #1e2326;
+  --ink-850: #283035;
+  --ink-800: #2d353b;
+  --ink-750: #313940;
+  --ink-700: #384349;
+  --ink-650: #414d53;
+  --ink-600: #475258;
+  --primary-600: #fab08f;
+  --line: rgba(var(--fg4-rgb),.10);
+  --line-2: rgba(var(--fg4-rgb),.18);
+  --wh-c-dashboard: #dbbc7f;          /* palette yellow · 7.98:1 */
+  --wh-c-fitness: #e69875;            /* palette orange · 6.32:1 */
+  --wh-c-desk: #67bdda;               /* generated 222° · 6.84:1 */
+  --wh-c-mobility: #a7c080;           /* palette green · 7.28:1 */
+  --wh-c-eyecare: #5fc2c7;            /* generated 200° · 6.95:1 */
+  --wh-c-dental: #83c092;             /* palette aqua · 6.88:1 */
+  --wh-c-bodycare: #d29bcc;           /* generated 330° · 6.45:1 */
+  --wh-c-wellness: #b9a3e2;           /* generated 300° · 6.52:1 */
+  --wh-c-repro: #d699b6;              /* palette purple · 6.30:1 */
+  --wh-c-health: #80b5e8;             /* generated 248° · 6.72:1 */
+  --wh-c-insights: #7fbbb3;           /* palette blue · 6.70:1 */
+  --wh-c-achievements: #e67e80;       /* palette red · 5.31:1 */
+  --wh-c-settings: #9da9a0;           /* neutral */
+}
+
+/* Rosé Pine Moon — accent envelope L 0.777 C 0.099 */
+html[data-theme="rose-pine"] {
+  --bg0-hard: #232136;
+  --bg0: #2a273f;
+  --bg0-soft: #2f2b45;
+  --bg1: #393552;
+  --bg2: #44415a;
+  --bg3: #56526e;
+  --bg4: #6e6a86;
+  --wh-bg-deep: #1c1a2e;
+  --fg0: #eeedf7;
+  --fg1: #e0def4;
+  --fg2: #c9c5e0;
+  --fg3: #908caa;
+  --fg4: #817d9c;
+  --gray: #6e6a86;
+  --red: #bf456b;
+  --green: #66a679;
+  --yellow: #cc984b;
+  --blue: #418eab;
+  --purple: #9c7fbd;
+  --aqua: #73a6af;
+  --orange: #bf7270;
+  --red-bright: #eb6f92;
+  --green-bright: #8fcfa1;
+  --yellow-bright: #f6c177;
+  --blue-bright: #6cb6d4;
+  --purple-bright: #c4a7e7;
+  --aqua-bright: #9ccfd8;
+  --orange-bright: #ea9a97;
+  --red-bright-rgb: 235,111,146;
+  --green-bright-rgb: 143,207,161;
+  --yellow-bright-rgb: 246,193,119;
+  --blue-bright-rgb: 108,182,212;
+  --purple-bright-rgb: 196,167,231;
+  --aqua-bright-rgb: 156,207,216;
+  --orange-bright-rgb: 234,154,151;
+  --yellow-rgb: 204,152,75;
+  --fg1-rgb: 224,222,244;
+  --fg4-rgb: 129,125,156;
+  --ink-1000: #1c1a2e;
+  --ink-850: #262338;
+  --ink-800: #2a273f;
+  --ink-750: #2e2b44;
+  --ink-700: #37334c;
+  --ink-650: #413d59;
+  --ink-600: #44415a;
+  --primary-600: #feb2af;
+  --line: rgba(var(--fg4-rgb),.10);
+  --line-2: rgba(var(--fg4-rgb),.18);
+  --wh-c-dashboard: #f6c177;          /* palette yellow · 9.55:1 */
+  --wh-c-fitness: #e9a57b;            /* generated 52° · 7.55:1 */
+  --wh-c-desk: #6cb6d4;               /* palette blue · 6.91:1 */
+  --wh-c-mobility: #b2bf75;           /* generated 117° · 7.90:1 */
+  --wh-c-eyecare: #9ccfd8;            /* palette aqua · 9.19:1 */
+  --wh-c-dental: #8fcfa1;             /* palette green · 8.65:1 */
+  --wh-c-bodycare: #dba0d5;           /* generated 330° · 7.45:1 */
+  --wh-c-wellness: #c4a7e7;           /* palette purple · 7.47:1 */
+  --wh-c-repro: #eb6f92;              /* palette red · 5.38:1 */
+  --wh-c-health: #83bcf3;             /* generated 248° · 7.79:1 */
+  --wh-c-insights: #68cbb8;           /* generated 179° · 8.06:1 */
+  --wh-c-achievements: #ea9a97;       /* palette orange · 7.13:1 */
+  --wh-c-settings: #908caa;           /* neutral */
+}
+
+/* Tokyo Night — accent envelope L 0.769 C 0.130 */
+html[data-theme="tokyo-night"] {
+  --bg0-hard: #16161e;
+  --bg0: #1a1b26;
+  --bg0-soft: #1f2335;
+  --bg1: #292e42;
+  --bg2: #3b4261;
+  --bg3: #414868;
+  --bg4: #565f89;
+  --wh-bg-deep: #101014;
+  --fg0: #d8e0ff;
+  --fg1: #c0caf5;
+  --fg2: #a9b1d6;
+  --fg3: #8f96bd;
+  --fg4: #787c99;
+  --gray: #565f89;
+  --red: #cb4b67;
+  --green: #76a53e;
+  --yellow: #b6863d;
+  --blue: #5379cd;
+  --purple: #9371cd;
+  --aqua: #43b0a1;
+  --orange: #d37538;
+  --red-bright: #f7768e;
+  --green-bright: #9ece6a;
+  --yellow-bright: #e0af68;
+  --blue-bright: #7aa2f7;
+  --purple-bright: #bb9af7;
+  --aqua-bright: #73daca;
+  --orange-bright: #ff9e64;
+  --red-bright-rgb: 247,118,142;
+  --green-bright-rgb: 158,206,106;
+  --yellow-bright-rgb: 224,175,104;
+  --blue-bright-rgb: 122,162,247;
+  --purple-bright-rgb: 187,154,247;
+  --aqua-bright-rgb: 115,218,202;
+  --orange-bright-rgb: 255,158,100;
+  --yellow-rgb: 182,134,61;
+  --fg1-rgb: 192,202,245;
+  --fg4-rgb: 120,124,153;
+  --ink-1000: #101014;
+  --ink-850: #191a24;
+  --ink-800: #1c1d2b;
+  --ink-750: #20212f;
+  --ink-700: #272b3f;
+  --ink-650: #333854;
+  --ink-600: #3b4261;
+  --primary-600: #ffb782;
+  --line: rgba(var(--fg4-rgb),.10);
+  --line-2: rgba(var(--fg4-rgb),.18);
+  --wh-c-dashboard: #e0af68;          /* palette yellow · 8.99:1 */
+  --wh-c-fitness: #ff9e64;            /* palette orange · 8.84:1 */
+  --wh-c-desk: #35c6ef;               /* generated 222° · 8.97:1 */
+  --wh-c-mobility: #9ece6a;           /* palette green · 9.84:1 */
+  --wh-c-eyecare: #0bccd4;            /* generated 200° · 9.08:1 */
+  --wh-c-dental: #84c879;             /* generated 141° · 9.01:1 */
+  --wh-c-bodycare: #e295db;           /* generated 330° · 8.18:1 */
+  --wh-c-wellness: #bb9af7;           /* palette purple · 7.77:1 */
+  --wh-c-repro: #f7768e;              /* palette red · 6.80:1 */
+  --wh-c-health: #6cbaff;             /* generated 248° · 8.65:1 */
+  --wh-c-insights: #73daca;           /* palette aqua · 10.80:1 */
+  --wh-c-achievements: #fc918a;       /* generated 25° · 8.18:1 */
+  --wh-c-settings: #8f96bd;           /* neutral */
+}
+

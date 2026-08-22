@@ -1,0 +1,211 @@
+/* ============================================================================
+   BASALT · MUSCLES — styles for the Muscles section
+   ----------------------------------------------------------------------------
+   Built on the tokens already in play (Gruvbox via css/hub.css, BASALT's
+   component tokens via css/basalt-gruvbox.css, the surface ramp from
+   css/basalt-makeover.css). No new palette.
+
+   The heat ramp is the one place colour carries meaning, so it never carries it
+   alone: every row states its status in words and its numbers in figures, and
+   `peak` gets a hatch so it is distinguishable without hue.
+   ========================================================================== */
+
+/* --- heat scale ----------------------------------------------------------- */
+:root {
+  --ms-cold: var(--ink-650);
+  --ms-low:  var(--blue-bright);
+  --ms-on:   var(--green-bright);
+  --ms-high: var(--yellow-bright);
+  --ms-peak: var(--orange-bright);
+}
+
+/* --- window selector sits inside the card head ---------------------------- */
+.ms-seg { flex: 0 0 auto; }
+.ms-seg .seg__btn { font-size: var(--fs-xs); padding: var(--sp-1) var(--sp-3); }
+
+/* --- the table ------------------------------------------------------------ */
+.ms-table { display: flex; flex-direction: column; }
+
+.ms-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 1.1fr) minmax(104px, .9fr) minmax(140px, 1.6fr) 64px 116px 76px;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-2);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-200);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  transition: background .16s var(--ease);
+}
+.ms-row:hover { background: var(--ink-700); }
+.ms-row:last-child { border-bottom: 0; }
+
+.ms-row--head {
+  cursor: default;
+  padding-top: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-400);
+}
+.ms-row--head:hover { background: transparent; }
+
+.ms-row__name { font-weight: 600; color: var(--text-100); }
+.ms-row__lvl  { color: var(--text-300); font-size: var(--fs-sm); }
+.ms-row__lvl b { color: var(--text-100); }
+
+.ms-row__bar   { display: flex; align-items: center; gap: var(--sp-2); }
+.ms-row__units { font-size: var(--fs-2xs); color: var(--text-400); white-space: nowrap; }
+.ms-row__win   { text-align: right; color: var(--text-200); }
+.ms-row__last  { font-size: var(--fs-xs); color: var(--text-400); }
+
+.ms-row__heat { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-300); }
+
+/* --- bars ----------------------------------------------------------------- */
+.ms-bar {
+  flex: 1 1 auto; min-width: 48px; height: 6px;
+  background: var(--ink-700); border-radius: var(--r-pill); overflow: hidden;
+}
+/* Length = progress toward the next conditioning level. That is ALL it means,
+   so it gets one colour. Weekly heat is the dot and the status text. */
+.ms-bar__fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--primary); }
+
+/* --- status dots ----------------------------------------------------------
+   Colour is never the only channel: every dot sits beside its own status in
+   words, and the raw figures are in the two columns to its left. */
+.ms-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--ms-cold); }
+.ms-dot--low  { background: var(--ms-low); }
+.ms-dot--on   { background: var(--ms-on); }
+.ms-dot--high { background: var(--ms-high); }
+.ms-dot--peak {
+  background: repeating-linear-gradient(135deg,
+    var(--ms-peak) 0 2px, color-mix(in srgb, var(--ms-peak) 55%, #000) 2px 4px);
+}
+.ms-dot--cold { background: transparent; border: 1px solid var(--ink-600); }
+
+/* --- neglected list ------------------------------------------------------- */
+.ms-neg { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--sp-2); }
+.ms-neg__item {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px var(--sp-2);
+  padding: var(--sp-3); border-radius: var(--r-sm);
+  background: var(--ink-700); border: 1px solid transparent;
+  color: var(--text-200); font: inherit; text-align: left; cursor: pointer;
+  transition: border-color .16s var(--ease);
+}
+.ms-neg__item:hover { border-color: var(--line-2); }
+.ms-neg__name { font-weight: 600; color: var(--text-100); }
+.ms-neg__meta { font-size: var(--fs-xs); color: var(--warn); text-align: right; }
+.ms-neg__go   { grid-column: 1 / -1; font-size: var(--fs-xs); color: var(--primary); }
+
+/* --- detail modal --------------------------------------------------------- */
+.ms-detail__lvl { display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-3); }
+.ms-detail__num {
+  font-family: var(--font-display); font-size: 2.4rem; line-height: 1;
+  color: var(--primary); letter-spacing: -.02em;
+}
+.ms-detail__rank { font-weight: 700; color: var(--text-100); font-size: var(--fs-md); }
+
+.ms-detail__grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--sp-3); margin-top: var(--sp-4);
+}
+.ms-detail__k {
+  font-family: var(--font-mono); font-size: var(--fs-2xs);
+  letter-spacing: .12em; text-transform: uppercase; color: var(--text-400);
+}
+.ms-detail__v { color: var(--text-100); font-weight: 600; margin-top: 2px; }
+
+.ms-exlist { list-style: none; margin: var(--sp-2) 0 0; padding: 0; display: flex; flex-direction: column; }
+.ms-ex {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  padding: var(--sp-2) 0; border-bottom: 1px solid var(--line);
+}
+.ms-ex:last-child { border-bottom: 0; }
+.ms-ex__name { color: var(--text-200); font-size: var(--fs-sm); }
+.ms-ex__role {
+  font-family: var(--font-mono); font-size: var(--fs-2xs);
+  letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); color: var(--text-400); white-space: nowrap;
+}
+.ms-ex__role--0 { color: var(--primary); border-color: rgba(var(--orange-bright-rgb),.3); }
+.ms-ex__role--1 { color: var(--secondary); border-color: rgba(var(--aqua-bright-rgb),.3); }
+
+/* --- responsive: the table collapses to stacked cards on narrow screens ---- */
+@media (max-width: 860px) {
+  .ms-row--head { display: none; }
+  .ms-row {
+    grid-template-columns: 1fr auto;
+    gap: var(--sp-1) var(--sp-3);
+    padding: var(--sp-3);
+    margin-bottom: var(--sp-2);
+    background: var(--ink-700);
+    border-bottom: 0;
+    border-radius: var(--r-sm);
+  }
+  .ms-row__name { grid-column: 1; }
+  .ms-row__lvl  { grid-column: 2; text-align: right; }
+  .ms-row__bar  { grid-column: 1 / -1; }
+  .ms-row__win  { display: none; }
+  .ms-row__heat { grid-column: 1; }
+  .ms-row__last { grid-column: 2; text-align: right; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-row, .ms-neg__item { transition: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   THE TODAY STRIP — "what today works"
+   Bars are SHARES of the session, scaled against the largest, so the shape of
+   the session is readable at a glance. The live variant nests a second fill
+   inside each bar: outer = planned, inner = logged.
+   ------------------------------------------------------------------------- */
+.ms-strip__lead { margin: 0 0 var(--sp-3); }
+
+.ms-strip__rows { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.ms-strip__row {
+  display: grid;
+  grid-template-columns: minmax(84px, 140px) 1fr 40px;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.ms-strip__name {
+  font-size: var(--fs-sm); color: var(--text-200);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.ms-strip__track { height: 10px; background: var(--ink-700); border-radius: var(--r-pill); overflow: hidden; }
+
+/* Planned share. Muted on its own so the logged fill inside it is the thing
+   that reads as progress. */
+.ms-strip__plan {
+  display: block; height: 100%; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--primary) 26%, transparent);
+  position: relative;
+}
+.ms-strip__done {
+  display: block; height: 100%; border-radius: var(--r-pill);
+  background: var(--primary);
+  transition: width .3s var(--ease);
+}
+
+.ms-strip__pct {
+  font-size: var(--fs-xs); color: var(--text-400); text-align: right;
+}
+
+@media (max-width: 560px) {
+  .ms-strip__row { grid-template-columns: minmax(72px, 96px) 1fr 36px; gap: var(--sp-2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ms-strip__done { transition: none; }
+}

@@ -1,0 +1,242 @@
+/* ============================================================================
+   BASALT · MAKEOVER
+   ----------------------------------------------------------------------------
+   Loaded last, after basalt.css → hub.css → basalt-gruvbox.css.
+
+   basalt-gruvbox.css repointed BASALT's tokens at the Gruvbox palette. That got
+   the colours right. This file fixes how they are USED, which is where the
+   "bolted-on second app" feel actually came from:
+
+     1. SURFACE RAMP     — --ink-750 and --ink-800 both resolved to #282828, so a
+                           card inside a card was invisible and 1px borders had
+                           to carry the whole hierarchy. Now there are three real
+                           steps: card / raised / hover.
+     2. QUIETER ACCENT   — orange was doing eight jobs (eyebrows, chips, links,
+                           notches, CTAs, nav, progress, focus). It now does two:
+                           the primary action, and "you are here". Everything
+                           else drops to the foreground ramp.
+     3. SENTENCE CASE    — .display forced uppercase on every heading, so each
+                           screen shouted its own title under an already-shouting
+                           mono eyebrow. Only the wordmark stays capitalised.
+     4. LESS CHROME      — the in-tab appbar loses its duplicate BASALT brand
+                           block; the hub sidebar already says "Fitness".
+     5. TIGHTER RHYTHM   — sparse cards were becoming tall empty rectangles.
+
+   Nothing here changes behaviour. Remove the <link> and the old look returns.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. SURFACE RAMP
+   Warm, Gruvbox-consistent, and genuinely stepped. The card gradient reads
+   top-lit against the page instead of merging into it.
+   ------------------------------------------------------------------------- */
+:root {
+  /* Page ground is the hub's --bg0-hard (#1d2021) and is shared with the other
+     twelve tabs, so it stays put. Everything above it steps UP, never down —
+     the first attempt at this ramp went darker than the page and tall cards
+     sank into the background instead of lifting off it. */
+  --ink-800: #262726;   /* card, bottom of gradient */
+  --ink-750: #2b2c2a;   /* card, top of gradient   */
+  --ink-700: #33322f;   /* raised: inputs, ghost buttons, badges, chips */
+  --ink-650: #3d3b37;   /* hover */
+  --ink-600: #504945;   /* strong border (bg2, unchanged) */
+
+  /* Borders step back now that surfaces do the separating. */
+  --line:   rgba(var(--fg4-rgb),.10);
+  --line-2: rgba(var(--fg4-rgb),.18);
+
+  /* No coloured bloom under primary buttons — it read as a glow effect. */
+  --primary-glow: rgba(0,0,0,.5);
+  --glow: 0 0 0 1px rgba(var(--orange-bright-rgb),.24);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.28);
+  --shadow-md: 0 8px 22px -12px rgba(0,0,0,.55);
+}
+
+/* ---------------------------------------------------------------------------
+   2. TYPOGRAPHY — stop shouting
+   ------------------------------------------------------------------------- */
+
+/* basalt-gruvbox.css set `text-transform: uppercase` on .display to compensate
+   for losing the Anton display face. Sentence case + real weight reads better
+   and stops every page title competing with its own eyebrow. */
+.display,
+.brand__mark {
+  text-transform: none;
+  letter-spacing: -.01em;
+  font-weight: 700;
+  line-height: 1.08;
+}
+/* The wordmark is a name, so it keeps its capitals. */
+.brand__name { text-transform: uppercase; letter-spacing: .06em; }
+
+/* Page titles no longer need to be enormous to feel like titles. */
+.page-head .h2,
+.h2 { font-size: clamp(1.45rem, 3vw, 1.95rem); }
+.h3 { font-size: 1.2rem; }
+.page-head { margin-bottom: var(--sp-5); }
+
+/* The eyebrow becomes a quiet label above the title, not a second headline. */
+.eyebrow {
+  letter-spacing: .14em;
+  color: var(--text-400);
+  font-weight: 600;
+}
+/* Two eyebrows in basalt.js carry an inline `color:var(--primary)`, which no
+   normal rule can outrank. Semantic ones (danger, secondary) are left alone. */
+.eyebrow[style*="--primary"] { color: var(--text-400) !important; }
+
+/* Numbers stay in the display face but lose the caps-era tracking. */
+.num, .stat__value { letter-spacing: -.02em; }
+
+/* ---------------------------------------------------------------------------
+   3. CARDS — separation by surface, not by outline
+   ------------------------------------------------------------------------- */
+.card {
+  background: linear-gradient(180deg, var(--ink-750), var(--ink-800));
+  border-radius: 14px;
+  padding: var(--sp-5);
+}
+
+/* The orange tick on the top-left corner of every card was pure decoration
+   competing with real accent use. Keep the shape, drop the colour. */
+.card--notch::before { background: var(--line-2); width: 22px; }
+
+/* `card--accent` was a full orange border + glow around whole sections. A
+   left rule is enough to say "this one matters". */
+.card--accent {
+  border-color: var(--line-2);
+  box-shadow: var(--shadow-sm);
+  border-left: 2px solid rgba(var(--orange-bright-rgb),.5);
+}
+
+/* Nested surfaces sit on the raised step so the nesting is legible without
+   every level needing its own outline. */
+.card .card,
+.card--glass,
+.pg-split > *,
+.pg-targets > * { background: var(--ink-700); border-color: transparent; }
+
+.card__head { margin-bottom: var(--sp-3); }
+.card__title { font-size: 1rem; }
+
+/* ---------------------------------------------------------------------------
+   4. BUTTONS — one loud action per screen
+   ------------------------------------------------------------------------- */
+.btn { border-radius: 9px; }
+
+/* Flat fill, no gradient, no coloured drop shadow. */
+.btn--primary {
+  --bg: var(--primary);
+  box-shadow: none;
+  font-weight: 700;
+}
+.btn--primary:hover { --bg: var(--primary-600); box-shadow: none; }
+
+/* Full-width primaries were reading as banners. Cap them and let the row
+   breathe — except inside modals and the live session, where block is right. */
+.btn--block { border-radius: 10px; }
+
+/* `btn--danger` inherited the orange border token by mistake upstream. */
+.btn--danger { --bd: rgba(var(--red-bright-rgb),.34); }
+.btn--danger:hover { --bg: rgba(var(--red-bright-rgb),.22); }
+
+/* Secondary drops its aqua tint to a neutral — it was reading as a second
+   accent colour rather than a quieter button. */
+.btn--secondary {
+  --bg: var(--ink-700); --bd: var(--line-2); --fg: var(--text-200);
+}
+.btn--secondary:hover { --bg: var(--ink-650); }
+
+/* ---------------------------------------------------------------------------
+   5. BADGES & CHIPS — informational, not decorative
+   ------------------------------------------------------------------------- */
+.badge {
+  letter-spacing: .06em;
+  background: var(--ink-700);
+  border-color: transparent;
+  color: var(--text-300);
+}
+/* Status badges keep their colour as text only; the filled pill was too heavy
+   for something that appears three or four times per screen. */
+.badge--primary { background: transparent; border-color: rgba(var(--orange-bright-rgb),.3); color: var(--primary); }
+.badge--success { background: transparent; border-color: rgba(var(--green-bright-rgb),.3); }
+.badge--warn    { background: transparent; border-color: rgba(var(--yellow-bright-rgb),.32); }
+.badge--info    { background: transparent; border-color: rgba(var(--blue-bright-rgb),.3); }
+.badge--era1    { background: transparent; border-color: rgba(var(--aqua-bright-rgb),.3); }
+.badge--era2    { background: transparent; border-color: rgba(var(--orange-bright-rgb),.3); }
+
+/* ---------------------------------------------------------------------------
+   6. APPBAR — a nav strip, not a second application header
+   ------------------------------------------------------------------------- */
+
+/* The hub sidebar already says "Fitness"; BASALT re-announcing itself with a
+   logo, a name and a tagline is what made the tab feel bolted on. */
+.appbar .brand { display: none; }
+
+.appbar {
+  min-height: 0;
+  padding: var(--wh-s2) var(--wh-s3);
+  gap: var(--wh-s2);
+  background: color-mix(in srgb, var(--bg0-hard) 92%, transparent);
+  border-color: var(--line);
+  backdrop-filter: blur(8px);
+}
+.appbar .nav { justify-content: flex-start; gap: 2px; }
+
+.nav__btn {
+  padding: var(--sp-2) var(--sp-3);
+  font-weight: 600;
+  border-radius: 8px;
+  color: var(--text-400);
+}
+.nav__btn .ic { width: 15px; height: 15px; opacity: .8; }
+.nav__btn:hover { color: var(--text-100); background: var(--ink-700); }
+
+/* "You are here" is one of the two remaining jobs orange has. */
+.nav__btn.is-active {
+  color: var(--primary);
+  background: rgba(var(--orange-bright-rgb),.12);
+  border-color: transparent;
+}
+
+/* Training setup is a settings affordance, not a peer of the nav items. */
+.appbar__io .btn { color: var(--text-400); border-color: transparent; }
+.appbar__io .btn:hover { color: var(--text-100); }
+
+/* ---------------------------------------------------------------------------
+   7. RHYTHM — sparse cards shouldn't become tall empty rectangles
+   ------------------------------------------------------------------------- */
+.stack { gap: var(--sp-4); }
+.stat { padding: var(--sp-4); }
+.stat__label { letter-spacing: .12em; }
+.stat__value { font-size: 1.9rem; margin-top: 6px; }
+.stat__sub { margin-top: 4px; }
+
+/* Empty states were sized for cards that had content. */
+.placeholder { padding: var(--sp-6) var(--sp-5); }
+.placeholder__ic { width: 30px; height: 30px; opacity: .5; }
+
+/* Explanatory prose inside cards reads as documentation. Keep it, shrink it,
+   and stop it running the full width of a 1180px column. */
+.card > p.muted.text-sm,
+.card > p.faint.text-xs { max-width: 62ch; line-height: 1.5; }
+
+/* ---------------------------------------------------------------------------
+   8. FOCUS — one consistent ring (matches the hub's)
+   ------------------------------------------------------------------------- */
+.btn:focus-visible,
+.nav__btn:focus-visible,
+.seg__btn:focus-visible,
+.input:focus-visible,
+.check__box:focus-visible {
+  outline: 2px solid var(--yellow-bright);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   9. MOTION — respect the OS setting (basalt.css animates view entry)
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .view, .card, .btn { animation: none !important; transition: none !important; }
+}

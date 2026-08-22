@@ -1,0 +1,84 @@
+push_1	push	Wall Push-up
+push_2	push	Push-up
+push_3	push	Diamond Push-up
+push_4	push	Decline Push-up
+push_5	push	Archer Push-up
+push_6	push	Pseudo Planche Push-up
+push_e2_weighted	push	Weighted Push-up
+push_e2_dbpress	push	Dumbbell Floor/Bench Press
+pull_1	pull	Dead Hang
+pull_2	pull	Scapular Pull
+pull_3	pull	Negative Pull-up
+pull_4	pull	Pull-up
+pull_5	pull	Chin-up
+pull_6	pull	Archer Pull-up
+pull_e2_dbrow	pull	Dumbbell Row
+squat_1	squat	Bodyweight Squat
+squat_2	squat	Pause Squat
+squat_3	squat	Bulgarian Split Squat
+squat_4	squat	Shrimp Squat
+squat_5	squat	Pistol Squat
+squat_6	squat	Weighted Pistol Squat
+squat_e2_goblet	squat	Kettlebell Goblet Squat
+hinge_1	hinge	Glute Bridge
+hinge_2	hinge	Hip Thrust
+hinge_3	hinge	Single-Leg Hip Thrust
+hinge_4	hinge	Nordic Curl Negative
+hinge_5	hinge	Nordic Curl
+hinge_6	hinge	Shaking Nordic
+hinge_e2_rdl	hinge	Dumbbell Romanian Deadlift
+hinge_e2_swing	hinge	Kettlebell Swing
+core_1	core	Plank
+core_2	core	Hollow Body Hold
+core_3	core	Tuck L-Sit
+core_4	core	L-Sit
+core_5	core	Dragon Flag Negative
+core_6	core	Dragon Flag
+shoulder_1	shoulder	Pike Push-up
+shoulder_2	shoulder	Elevated Pike Push-up
+shoulder_3	shoulder	Wall Handstand Hold
+shoulder_4	shoulder	Kick-to-Handstand
+shoulder_5	shoulder	Handstand Push-up Negative
+shoulder_6	shoulder	Handstand Push-up
+shoulder_e2_ohp	shoulder	Dumbbell Overhead Press
+dip_1	dip	Bench Dip
+dip_2	dip	Straight Bar Dip
+dip_3	dip	Parallel Bar Dip
+dip_4	dip	Korean Dip
+dip_5	dip	Ring Dip
+dip_6	dip	Weighted Dip
+push_alt_scapula	push	Scapular Push-up
+push_alt_wide	push	Wide Push-up
+push_alt_negative	push	Negative Push-up
+push_alt_explosive	push	Explosive Push-up
+push_alt_onearm	push	One-Arm Push-up
+push_alt_tricep	push	Bench Tricep Extension
+pull_alt_passivehang	pull	Passive Hang
+pull_alt_australian	pull	Australian Row (Inverted Row)
+pull_alt_bandassist	pull	Band-Assisted Pull-up
+pull_alt_row	pull	Bent-Over Dumbbell Row
+squat_alt_narrow	squat	Narrow-Stance Squat
+squat_alt_deep	squat	Deep (Ass-to-Grass) Squat
+squat_alt_cossack	squat	Cossack Squat
+squat_alt_assistedpistol	squat	Assisted Pistol Squat
+skill_planche_1	skill	Planche Lean
+skill_planche_2	skill	Tuck Planche
+skill_planche_3	skill	Advanced Tuck Planche
+skill_planche_4	skill	Straddle Planche
+skill_planche_5	skill	Full Planche
+skill_frontlever_1	skill	Tuck Front Lever
+skill_frontlever_2	skill	Advanced Tuck Front Lever
+skill_frontlever_3	skill	Straddle Front Lever
+skill_frontlever_4	skill	Full Front Lever
+skill_handstand_1	skill	Wall Plank (Toes on Wall)
+skill_handstand_2	skill	Chest-to-Wall Handstand
+skill_handstand_3	skill	Back-to-Wall Handstand
+skill_handstand_4	skill	Freestanding Handstand
+skill_lsit_1	skill	Foot-Supported L-Sit
+skill_lsit_2	skill	Tuck L-Sit
+skill_lsit_3	skill	Full L-Sit
+skill_vsit	skill	V-Sit
+pull_alt_tabledoor	pull	Table / Door-Edge Row
+pull_alt_towel	pull	Towel Door Row
+dip_alt_chair	dip	Chair Bench Dip
+dip_alt_twochair	dip	Two-Chair Dip
