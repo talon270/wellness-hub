@@ -13,9 +13,15 @@
    Why this is a separate implementation from Hub.Timer: every guided flow
    (brushing, eye exercises, mobility holds, breathing) drives the single
    `#wh-focus` overlay, so those are exclusive by construction — one at a
-   time, full screen, with cues and logging attached. A rack is the opposite
-   shape: many at once, in the background, no logging. Sharing one class
-   between the two would force the overlay's assumptions onto both.
+   time, full screen. A rack is the opposite shape: many at once, in the
+   background. Sharing one class between the two would force the overlay's
+   assumptions onto both.
+
+   Each catalogue entry can carry a `log` function, run when that timer
+   finishes, that records the habit the same way its Quick log tile or
+   guided flow would (Hub.editDay + Hub.commit + Hub.reminders.reset). A
+   background countdown that finishes silently is a countdown you can't
+   trust — this is what makes it worth trusting.
 
    Public namespace: window.Hub.timers
    ========================================================================== */
@@ -31,28 +37,60 @@
   /* ======================================================================
      CATALOGUE
      ----------------------------------------------------------------------
-     Durations mirror the guided flows so the rack can't drift away from the
-     real protocol: 20s is the eye break in js/views/eyecare.js, 90s is the
-     desk reset step length in js/views/desk.js.
+     The two rows mean two different things, deliberately:
+       - Eye break counts UP TO the moment you should stop looking at the
+         screen: 20 minutes, mirroring the "eye" reminder's own default
+         interval (REMINDER_META.eye in js/core.js). Press it when you sit
+         down; it logs and cues you when the 20 minutes are up.
+       - Desk reset counts THE BREAK ITSELF: 90s of actually standing and
+         walking, same as the guided flow in js/views/desk.js.
+     Don't average these into one "duration" concept — one is a countdown to
+     an action, the other is the action's own length.
 
      `view` is where the guided version lives — every row offers it, because a
      bare countdown is the weaker option whenever you can afford the real one.
 
-     Deliberately just these two. The other six (brushing, both breathing
+     `log` runs once, when the timer reaches zero, and records the habit the
+     way its Quick log tile does — see the CUES section below for where it's
+     called.
+
+     Deliberately just these two rows. The other six (brushing, both breathing
      patterns, stretch hold, meditation, set rest) already have a natural home
      in their own guided flow or don't get reached for as a background
-     countdown the way eye breaks and desk resets do — add them back here if
-     that changes. */
+     countdown the way these two do — add them back here if that changes. */
   var CATALOGUE = [
     {
-      id: "eye20", name: "Eye break", sec: 20,
+      id: "eye20", name: "Eye break", sec: 20 * 60,
       icon: "eye", color: "var(--blue-bright)", view: "eyecare",
-      note: "20-20-20 — look 20 feet away"
+      note: "on screen now — 20 min to your next 20-20-20 break",
+      log: function () {
+        var d = Hub.editDay();
+        d.eye2020++;
+        Hub.commit();
+        Hub.reminders.reset("eye");
+        if (Hub.gamify) Hub.gamify.checkMilestone("eye");
+        Hub.beep(660, 90);
+        Hub.toast("Eye break logged — " + d.eye2020 + " today. Look 20 feet away for 20 seconds.", "success", 5000);
+      }
     },
     {
       id: "deskreset", name: "Desk reset", sec: 90,
       icon: "stand", color: "var(--wh-c-desk)", view: "desk",
-      note: "stand, walk, look away"
+      note: "stand, walk, look away",
+      log: function () {
+        /* Hub.desk.logStand already does the commit, the reminder reset, the
+           milestone check, the beep and its own toast — one implementation
+           of "a stand break happened," not a second one drifting beside it. */
+        if (Hub.desk && Hub.desk.logStand) Hub.desk.logStand("Desk reset done — stand break logged.");
+        else {
+          var d = Hub.editDay();
+          d.stand++;
+          Hub.commit();
+          Hub.reminders.reset("stand");
+          Hub.beep(700, 90);
+          Hub.toast("Stand break logged.", "success", 2200);
+        }
+      }
     }
   ];
 
@@ -146,7 +184,7 @@
     paint();
     if (added) {
       Hub.beep(700, 90);
-      Hub.toast(added + " " + Hub.plural(added, "timer") + " started. They count only — log with the tiles above.", "info", 4000);
+      Hub.toast(added + " " + Hub.plural(added, "timer") + " started — finishing one logs it automatically.", "info", 4000);
     }
   }
 
@@ -170,9 +208,17 @@
     if (!changed) return;
     persist(map);
     done.forEach(function (t) {
-      Hub.cueDone();
       Hub.vibrate([120, 80, 120]);
-      Hub.toast(t.name + " timer done.", "success", 5000);
+      /* A logging entry owns its own beep + toast, phrased the way its
+         Quick log tile already speaks (see the CATALOGUE entries above) —
+         calling cueDone() as well would layer a second, unrelated chime
+         over it. A future entry with no `log` still gets one. */
+      if (t.log) {
+        try { t.log(); } catch (e) { Hub.cueDone(); Hub.toast(t.name + " timer done.", "success", 5000); }
+      } else {
+        Hub.cueDone();
+        Hub.toast(t.name + " timer done.", "success", 5000);
+      }
     });
   }
 
@@ -192,10 +238,9 @@
         '<button type="button" class="wh-btn wh-btn--sm wh-btn--ghost" data-tm-none>' +
           Hub.icon("stop") + "Clear all</button>" +
       "</div>" +
-      '<p class="wh-help wh-mt4">These count, they don\'t log — Quick log does that. ' +
-        "Several run at once, they keep counting while you're on another tab, and they " +
-        "survive a reload. The guided version of each, with its cues and its logging, is " +
-        "the arrow on its row.</p>" +
+      '<p class="wh-help wh-mt4">Finishing a timer logs it automatically, the same as its ' +
+        "Quick log tile. Several run at once, they keep counting while you're on another " +
+        "tab, and they survive a reload. The guided version of each is the arrow on its row.</p>" +
     "</div>";
   }
 
