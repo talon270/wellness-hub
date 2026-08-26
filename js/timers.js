@@ -37,15 +37,14 @@
   /* ======================================================================
      CATALOGUE
      ----------------------------------------------------------------------
-     The two rows mean two different things, deliberately:
-       - Eye break counts UP TO the moment you should stop looking at the
-         screen: 20 minutes, mirroring the "eye" reminder's own default
-         interval (REMINDER_META.eye in js/core.js). Press it when you sit
-         down; it logs and cues you when the 20 minutes are up.
-       - Desk reset counts THE BREAK ITSELF: 90s of actually standing and
-         walking, same as the guided flow in js/views/desk.js.
-     Don't average these into one "duration" concept — one is a countdown to
-     an action, the other is the action's own length.
+     Both rows are the same shape: a countdown TO the moment you should stop
+     what you're doing, not the break's own length. Press one when you sit
+     down; it logs the break and cues you when time's up.
+       - Eye break: 20 minutes, mirroring the "eye" reminder's own default
+         interval (REMINDER_META.eye in js/core.js — the 20-20-20 rule).
+       - Desk reset: 45 minutes, mirroring settings.sitAlertMin's own default
+         in js/views/desk.js — the same number the desk sit-alert already
+         uses, not a separate guess.
 
      `view` is where the guided version lives — every row offers it, because a
      bare countdown is the weaker option whenever you can afford the real one.
@@ -74,15 +73,16 @@
       }
     },
     {
-      id: "deskreset", name: "Desk reset", sec: 90,
+      id: "deskreset", name: "Desk reset", sec: 45 * 60,
       icon: "stand", color: "var(--wh-c-desk)", view: "desk",
-      note: "stand, walk, look away",
+      note: "on screen now — 45 min to your next stand break",
       log: function () {
         /* Hub.desk.logStand already does the commit, the reminder reset, the
            milestone check, the beep and its own toast — one implementation
            of "a stand break happened," not a second one drifting beside it. */
-        if (Hub.desk && Hub.desk.logStand) Hub.desk.logStand("Desk reset done — stand break logged.");
-        else {
+        if (Hub.desk && Hub.desk.logStand) {
+          Hub.desk.logStand("Time to stand — break logged. Walk, stretch, look away for a minute.");
+        } else {
           var d = Hub.editDay();
           d.stand++;
           Hub.commit();
