@@ -380,8 +380,16 @@ svg.wh-i {
 .wh-main {
   margin-left: var(--wh-sidebar-w);
   padding: var(--wh-s8) var(--wh-s8) var(--wh-s12);
-  max-width: 1180px;
 }
+/* The width cap belongs on the view, and it centres itself. With the cap on
+   .wh-main instead, and a fixed 232px sidebar pinned to its left, a 1920px
+   window stranded ~508px of bare background down the right-hand edge — every
+   view read as shunted into the corner. Invisible at 1440px, where the gap is
+   only 28px, which is why it survived this long.
+   Raising the cap on its own would just have left single-column views sparse
+   at the wider size, so 1180 -> 1320 ships alongside the dashboard's Timers
+   module, which is what earns the extra width. */
+.wh-main > .wh-view { max-width: 1320px; margin-inline: auto; }
 .wh-view { animation: wh-viewin .3s var(--wh-ease); }
 @keyframes wh-viewin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
@@ -425,6 +433,9 @@ svg.wh-i {
 .wh-grid--3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
 .wh-grid--4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
 .wh-grid--auto { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+/* Quick log takes the wider column: ten-plus tiles against the timer rack's
+   eight fixed rows. Collapses to one column with the other grids at 860px. */
+.wh-grid--dash { grid-template-columns: minmax(0, 1.3fr) minmax(340px, 1fr); }
 /* Stops a short card being stretched to match a tall neighbour. */
 .wh-grid--top { align-items: start; }
 .wh-stack { display: flex; flex-direction: column; gap: var(--wh-s4); }
@@ -778,6 +789,88 @@ svg.wh-i {
 .wh-quickbtn__meta { font-size: 11px; color: var(--wh-text-faint); font-family: var(--wh-mono); }
 .wh-quickbtn.is-done { border-color: rgba(var(--green-bright-rgb),.34); background: rgba(var(--green-bright-rgb),.07); }
 .wh-quickbtn.is-done .wh-quickbtn__ic { background: rgba(var(--green-bright-rgb),.15); color: var(--green-bright); }
+
+/* --------------------------------------------------------------------------
+   TIMER RACK (dashboard)
+   Every countdown the app knows about, in one list, each independently
+   controllable. Rows are deliberately dense — this is a control surface you
+   scan, not a feature to be sold, so the clock and the four controls get the
+   space and the decoration goes to the running state only.
+   -------------------------------------------------------------------------- */
+.wh-timers { display: flex; flex-direction: column; gap: 5px; }
+/* One line per timer. Stacking the note under the name pushed rows to ~70px,
+   which made an eight-row rack 320px taller than the Quick log card beside it
+   — the same stranded-space problem as the un-centred main column, rotated 90
+   degrees. Inline and truncated, a row is 38px and the two columns balance. */
+.wh-timer {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: var(--wh-s3);
+  padding: 5px var(--wh-s3);
+  background: var(--bg0-soft); border: 1px solid var(--wh-line);
+  border-radius: var(--wh-r-sm);
+  transition: border-color var(--wh-fast), background var(--wh-fast);
+}
+.wh-timer__ic {
+  width: 24px; height: 24px; flex: 0 0 auto; display: grid; place-items: center;
+  border-radius: var(--wh-r-sm); background: var(--bg1); color: var(--wh-tm-c, var(--fg3));
+}
+.wh-timer__ic svg { width: 14px; height: 14px; stroke-width: 2; }
+.wh-timer__body {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: baseline; gap: var(--wh-s2);
+}
+.wh-timer__name { flex: 0 0 auto; font-size: 12.5px; color: var(--fg2); font-weight: 600; }
+.wh-timer__note {
+  flex: 1 1 auto; min-width: 0; font-size: 10.5px; color: var(--wh-text-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Pinned to the row's bottom edge so progress costs no layout height, and only
+   painted once a timer has been touched — an always-on empty rail across eight
+   idle rows is decoration that says nothing. */
+.wh-timer__bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: var(--bg2); opacity: 0; transition: opacity var(--wh-fast);
+}
+.wh-timer__fill {
+  display: block; height: 100%;
+  background: var(--wh-tm-c, var(--fg3)); transition: width 1s linear;
+}
+.wh-timer__clock {
+  flex: 0 0 auto; font-size: 12.5px; font-variant-numeric: tabular-nums;
+  color: var(--wh-text-faint); min-width: 46px; text-align: right;
+}
+.wh-timer__acts { flex: 0 0 auto; display: flex; gap: 2px; }
+.wh-timer__btn {
+  width: 24px; height: 24px; display: grid; place-items: center; cursor: pointer;
+  background: none; border: 1px solid transparent; border-radius: var(--wh-r-sm);
+  color: var(--fg4); font: inherit;
+  transition: background var(--wh-fast), color var(--wh-fast), border-color var(--wh-fast);
+}
+.wh-timer__btn svg { width: 14px; height: 14px; stroke-width: 2; }
+.wh-timer__btn:hover:not(:disabled) { background: var(--bg2); color: var(--fg0); border-color: var(--bg3); }
+.wh-timer__btn:disabled { opacity: .3; cursor: default; }
+.wh-timer__btn--go { color: var(--fg4); }
+
+/* Running and paused are the two states worth distinguishing at a glance:
+   one is spending time, the other is holding it. */
+.wh-timer.is-running {
+  border-color: color-mix(in srgb, var(--wh-tm-c) 40%, var(--wh-line));
+  background: color-mix(in srgb, var(--wh-tm-c) 6%, var(--bg0-soft));
+}
+.wh-timer.is-running .wh-timer__bar,
+.wh-timer.is-paused .wh-timer__bar { opacity: 1; }
+.wh-timer.is-running .wh-timer__ic { background: color-mix(in srgb, var(--wh-tm-c) 18%, var(--bg1)); }
+.wh-timer.is-running .wh-timer__clock { color: var(--wh-tm-c); font-weight: 650; }
+.wh-timer.is-paused { border-color: var(--bg3); }
+.wh-timer.is-paused .wh-timer__clock { color: var(--fg3); }
+.wh-timer.is-paused .wh-timer__fill { background: var(--fg4); }
+
+/* Under ~520px the note and the guided-version arrow are the first things to
+   go: the clock and the three controls are the point of the row. */
+@media (max-width: 520px) {
+  .wh-timer__note { display: none; }
+  .wh-timer__btn--go { display: none; }
+}
 
 /* recent badges strip */
 .wh-badgestrip { display: flex; gap: var(--wh-s3); overflow-x: auto; padding-bottom: 4px; }
@@ -1341,6 +1434,9 @@ svg.wh-i {
 @media (max-width: 1080px) {
   .wh-main { padding: var(--wh-s6); }
   .wh-grid--4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  /* Below this the quick-log column drops under 450px and its tiles reflow to
+     two per row, which reads worse than stacking the two cards. */
+  .wh-grid--dash { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 860px) {
@@ -1352,7 +1448,7 @@ svg.wh-i {
     padding: var(--wh-s5) var(--wh-s4)
              calc(var(--wh-bottomnav-h) + env(safe-area-inset-bottom, 0px) + var(--wh-s8));
   }
-  .wh-grid--2, .wh-grid--3, .wh-grid--4 { grid-template-columns: 1fr; }
+  .wh-grid--2, .wh-grid--3, .wh-grid--4, .wh-grid--dash { grid-template-columns: 1fr; }
   .wh-toasts { right: var(--wh-s3); left: var(--wh-s3); bottom: calc(var(--wh-bottomnav-h) + env(safe-area-inset-bottom, 0px) + var(--wh-s3)); max-width: none; }
   .wh-hero { padding: var(--wh-s5); }
   .wh-pills { width: 100%; overflow-x: auto; flex-wrap: nowrap; border-radius: var(--wh-r); }

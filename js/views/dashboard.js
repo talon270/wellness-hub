@@ -279,22 +279,32 @@
         "</div>" +
       "</div>" +
 
-      /* ---------- quick log ---------- */
-      '<div class="wh-card wh-mt6">' +
-        '<div class="wh-card__head">' +
-          '<div class="wh-card__title">' + Hub.icon("plus") + "Quick log</div>" +
-          '<span class="wh-chip">one tap</span>' +
+      /* ---------- do-something column + timers ----------
+         Paired in one row on purpose: the two things you come to the dashboard
+         to *do* are log something and time something.
+         Quick log and the badge strip are stacked into the left column rather
+         than run full-width, because the timer rack is eight fixed rows tall
+         and Quick log is only three — side by side on their own they left a
+         ~400px hole under Quick log, which is the same stranded-space problem
+         as the one the centring fix above solves, just rotated. */
+      '<div class="wh-grid wh-grid--dash wh-grid--top wh-mt6">' +
+        '<div class="wh-stack">' +
+          '<div class="wh-card">' +
+            '<div class="wh-card__head">' +
+              '<div class="wh-card__title">' + Hub.icon("plus") + "Quick log</div>" +
+              '<span class="wh-chip">one tap</span>' +
+            "</div>" +
+            '<div class="wh-quick">' + quickTiles(d) + "</div>" +
+          "</div>" +
+          '<div class="wh-card">' +
+            '<div class="wh-card__head">' +
+              '<div class="wh-card__title">' + Hub.icon("trophy") + "Recently earned</div>" +
+              '<button type="button" class="wh-btn wh-btn--ghost wh-btn--sm" data-goto="achievements">Trophy case</button>' +
+            "</div>" +
+            recentBadges() +
+          "</div>" +
         "</div>" +
-        '<div class="wh-quick">' + quickTiles(d) + "</div>" +
-      "</div>" +
-
-      /* ---------- badges ---------- */
-      '<div class="wh-card wh-mt6">' +
-        '<div class="wh-card__head">' +
-          '<div class="wh-card__title">' + Hub.icon("trophy") + "Recently earned</div>" +
-          '<button type="button" class="wh-btn wh-btn--ghost wh-btn--sm" data-goto="achievements">Trophy case</button>' +
-        "</div>" +
-        recentBadges() +
+        (Hub.timers ? Hub.timers.card() : "") +
       "</div>" +
 
       /* ---------- tip ---------- */
@@ -519,6 +529,7 @@
 
     Hub.delegate(el, "[data-goto]", function (btn) { Hub.show(btn.dataset.goto); });
     if (Hub.adviceUI) Hub.adviceUI.wire(el);
+    if (Hub.timers) Hub.timers.wire(el.querySelector("#wh-timers"));
 
     /* --- profile & suggestions --- */
     Hub.delegate(el, "[data-onboard]", function () { Hub.onboarding.start(); });
