@@ -262,8 +262,13 @@
       "</div>" +
       '<div class="wh-streaks wh-mb4">' + streakTiles(st) + "</div>" +
 
-      /* ---------- next reminder + quick log ---------- */
-      '<div class="wh-grid wh-grid--2 wh-mt6">' +
+      /* ---------- next reminder + today + timers ----------
+         Three cards of the same rough shape: a short glanceable status block.
+         The timer rack used to sit beside Quick log, sized for eight rows —
+         cut down to two (see js/timers.js), it belongs here instead, next to
+         cards of a similar height, not stranding ~200px of background under a
+         now-short card the way it would next to Quick log's ten-plus tiles. */
+      '<div class="wh-grid wh-grid--3 wh-grid--top wh-mt6">' +
         '<div class="wh-card">' +
           '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("bell") + "Next reminder</div></div>" +
           '<div id="wh-next-reminder"></div>' +
@@ -277,34 +282,25 @@
             miniBar("Mindfulness", (d.mindful || []).length, 1, "sessions", "var(--purple-bright)") +
           "</div>" +
         "</div>" +
+        (Hub.timers ? Hub.timers.card() : "") +
       "</div>" +
 
-      /* ---------- do-something column + timers ----------
-         Paired in one row on purpose: the two things you come to the dashboard
-         to *do* are log something and time something.
-         Quick log and the badge strip are stacked into the left column rather
-         than run full-width, because the timer rack is eight fixed rows tall
-         and Quick log is only three — side by side on their own they left a
-         ~400px hole under Quick log, which is the same stranded-space problem
-         as the one the centring fix above solves, just rotated. */
-      '<div class="wh-grid wh-grid--dash wh-grid--top wh-mt6">' +
-        '<div class="wh-stack">' +
-          '<div class="wh-card">' +
-            '<div class="wh-card__head">' +
-              '<div class="wh-card__title">' + Hub.icon("plus") + "Quick log</div>" +
-              '<span class="wh-chip">one tap</span>' +
-            "</div>" +
-            '<div class="wh-quick">' + quickTiles(d) + "</div>" +
-          "</div>" +
-          '<div class="wh-card">' +
-            '<div class="wh-card__head">' +
-              '<div class="wh-card__title">' + Hub.icon("trophy") + "Recently earned</div>" +
-              '<button type="button" class="wh-btn wh-btn--ghost wh-btn--sm" data-goto="achievements">Trophy case</button>' +
-            "</div>" +
-            recentBadges() +
-          "</div>" +
+      /* ---------- quick log ---------- */
+      '<div class="wh-card wh-mt6">' +
+        '<div class="wh-card__head">' +
+          '<div class="wh-card__title">' + Hub.icon("plus") + "Quick log</div>" +
+          '<span class="wh-chip">one tap</span>' +
         "</div>" +
-        (Hub.timers ? Hub.timers.card() : "") +
+        '<div class="wh-quick">' + quickTiles(d) + "</div>" +
+      "</div>" +
+
+      /* ---------- badges ---------- */
+      '<div class="wh-card wh-mt6">' +
+        '<div class="wh-card__head">' +
+          '<div class="wh-card__title">' + Hub.icon("trophy") + "Recently earned</div>" +
+          '<button type="button" class="wh-btn wh-btn--ghost wh-btn--sm" data-goto="achievements">Trophy case</button>' +
+        "</div>" +
+        recentBadges() +
       "</div>" +
 
       /* ---------- tip ---------- */

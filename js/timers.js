@@ -32,13 +32,17 @@
      CATALOGUE
      ----------------------------------------------------------------------
      Durations mirror the guided flows so the rack can't drift away from the
-     real protocol: 20s is the eye break in js/views/eyecare.js, 120s is
-     4 quadrants x 30s in js/views/dental.js, the breathing lengths are whole
-     cycles of the patterns in js/views/wellness.js.
+     real protocol: 20s is the eye break in js/views/eyecare.js, 90s is the
+     desk reset step length in js/views/desk.js.
 
      `view` is where the guided version lives — every row offers it, because a
      bare countdown is the weaker option whenever you can afford the real one.
-     ====================================================================== */
+
+     Deliberately just these two. The other six (brushing, both breathing
+     patterns, stretch hold, meditation, set rest) already have a natural home
+     in their own guided flow or don't get reached for as a background
+     countdown the way eye breaks and desk resets do — add them back here if
+     that changes. */
   var CATALOGUE = [
     {
       id: "eye20", name: "Eye break", sec: 20,
@@ -46,39 +50,9 @@
       note: "20-20-20 — look 20 feet away"
     },
     {
-      id: "brush", name: "Brushing", sec: 120,
-      icon: "dental", color: "var(--aqua-bright)", view: "dental",
-      note: "4 quadrants, 30s each"
-    },
-    {
-      id: "box", name: "Box breathing", sec: 4 * 16,
-      icon: "wind", color: "var(--purple-bright)", view: "wellness",
-      note: "4 cycles of 4-4-4-4"
-    },
-    {
-      id: "478", name: "4-7-8 breathing", sec: 4 * 19,
-      icon: "moon", color: "var(--purple-bright)", view: "wellness",
-      note: "4 cycles, long exhale"
-    },
-    {
-      id: "stretch", name: "Stretch hold", sec: 45,
-      icon: "stretchIc", color: "var(--yellow)", view: "mobility",
-      note: "one side, or 22s each way"
-    },
-    {
       id: "deskreset", name: "Desk reset", sec: 90,
       icon: "stand", color: "var(--wh-c-desk)", view: "desk",
       note: "stand, walk, look away"
-    },
-    {
-      id: "meditate", name: "Meditation", sec: 5 * 60,
-      icon: "wellness", color: "var(--green-bright)", view: "wellness",
-      note: "5 minutes, silent"
-    },
-    {
-      id: "rest", name: "Set rest", sec: 90,
-      icon: "clockIc", color: "var(--orange-bright)", view: "fitness",
-      note: "between working sets"
     }
   ];
 
