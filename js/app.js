@@ -45,6 +45,59 @@
 
     watchForFitnessApp();
     wireGlobalKeys();
+    wireGlobalNav();
+  }
+
+  /* ======================================================================
+     GLOBAL NAV — the heart mark and the "At Desk" toggle
+     ----------------------------------------------------------------------
+     Both logo marks (mobile topbar, desktop sidebar) go to Dashboard: a
+     brand mark that does nothing is a wasted click target on every screen
+     of the app.
+
+     "At Desk" surfaces js/views/desk.js's sitting clock (Hub.desk) from
+     everywhere, not just the Desk tab it lives in — the point of a global
+     control is starting the clock without a detour through nav first.
+     ====================================================================== */
+  function wireGlobalNav() {
+    [document.getElementById("wh-logo-mobile"), document.getElementById("wh-logo-sidebar")]
+      .forEach(function (btn) {
+        if (btn) btn.addEventListener("click", function () { Hub.show("dashboard"); });
+      });
+
+    var atDeskBtns = [document.getElementById("wh-atdesk-mobile"), document.getElementById("wh-atdesk-sidebar")]
+      .filter(Boolean);
+    if (!atDeskBtns.length || !Hub.desk) return;
+
+    function paintAtDesk() {
+      var on = Hub.desk.isSitting();
+      var mins = on ? Math.round(Hub.desk.sittingMinutes()) : 0;
+      atDeskBtns.forEach(function (btn) {
+        btn.classList.toggle("is-running", on);
+        var t = btn.querySelector(".wh-atdesk-btn__t");
+        if (t) t.textContent = on ? (mins + "m at desk") : "At Desk";
+        btn.title = on
+          ? "Sitting " + mins + "m — click to stop the clock"
+          : "Start the sitting clock";
+      });
+    }
+
+    atDeskBtns.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (Hub.desk.isSitting()) {
+          var mins = Hub.desk.stopSitting();
+          Hub.toast("Clock stopped — " + mins + " min banked, no break counted.", "info", 3000);
+        } else {
+          Hub.desk.startSitting();
+        }
+        paintAtDesk();
+      });
+    });
+
+    paintAtDesk();
+    /* Piggybacks the same tick every reminder check already runs on — no
+       second interval just to keep a minute counter honest. */
+    Hub.onTick(paintAtDesk);
   }
 
   /* ======================================================================

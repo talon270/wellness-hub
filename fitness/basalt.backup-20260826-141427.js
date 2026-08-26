@@ -44,7 +44,7 @@
     }
   ];
   var UI_KEY        = "ironframe.ui";        // tiny, non-schema UI prefs
-  var SCHEMA_VERSION = 3;                    // v2: prefs.sessionLength · v3: repaired progression targets
+  var SCHEMA_VERSION = 1;
 
   /* ----------------------------------------------------------------------
      STATIC PROGRAM DATA — Level 1–6 progressions per movement pattern.
@@ -131,11 +131,7 @@
       prefs: {
         restDefaultSec: 90,       // default between-set rest timer
         restHoldSec: 60,          // default rest after a timed hold
-        volumeMode: "standard",   // "standard" | "extended" | "max"
-        /* How MANY movements a session contains, as opposed to how hard each
-           one is — volumeMode only ever adds sets/reps/density to the same
-           3-4 exercises. Independent of it and combinable with it. */
-        sessionLength: "focused"  // "focused" | "full"
+        volumeMode: "standard"    // "standard" | "extended" | "max"
       },
 
       /* — Running program (complements the lifting rotation on off-days) —
@@ -208,62 +204,14 @@
       return deepMerge(defaultState(), state);
     }
     if (state.version < SCHEMA_VERSION) {
-      /* v1 -> v2 adds prefs.sessionLength. It is additive with a default of
-         "focused", which is exactly today's behaviour, so the deep-merge
-         below IS the migration: every pre-v2 save keeps the session shape it
-         already had and nobody's program silently gets longer on upgrade. */
+      // No structural migrations yet for v1; merge to backfill any new keys.
       state = deepMerge(defaultState(), state);
-      if (state.version < 3) repairTargets(state);   // v2 -> v3, see below
       state.version = SCHEMA_VERSION;
     } else {
-      // Same version: still backfill keys added during default development.
+      // Same version: still backfill keys added during development.
       state = deepMerge(defaultState(), state);
     }
     return state;
-  }
-
-  /* v2 -> v3 · REPAIR TARGETS LEFT BY THE OLD PROGRESSION CODE
-     ----------------------------------------------------------------------
-     Two defects wrote real, wrong numbers into saved state, so fixing the
-     algorithm alone would leave existing users on the damage:
-
-       1. BASE_REPS.core was 30 — a SECONDS value — and levelling core from
-          L4 (L-Sit, hold) to L5 (Dragon Flag Negative, reps) copied it
-          straight across as a REP target. Anyone who made that jump is
-          carrying "30 reps of dragon flag negatives".
-       2. Hold targets could climb past the point their own progression says
-          to advance at, one second per session, with nothing to stop them.
-
-     Targets are only ever moved DOWN here, and only when they are impossible
-     for the movement actually prescribed — a target you legitimately earned
-     is never touched.
-
-     This runs in the FIRST IIFE, where the exercise DB and the engine's
-     tables do not exist as locals — they are defined in later blocks. It
-     therefore reads them off the globals they publish (window.DB,
-     App.engine), and no-ops if it is somehow called before they exist rather
-     than throwing on every legacy load. */
-  function repairTargets(state) {
-    var tiers = state.tiers; if (!tiers) return;
-    var db = window.DB;
-    var eng = window.App && window.App.engine;
-    if (!db || !db.byLevel || !eng) return;
-    var caps = eng.HOLD_ADVANCE_AT || {};
-    var baseReps = { push: 12, pull: 8, squat: 14, hinge: 14, core: 5, shoulder: 8, dip: 8 };
-
-    Object.keys(tiers).forEach(function (p) {
-      var t = tiers[p]; if (!t || typeof t.repsTarget !== "number") return;
-      var ex = db.byLevel(p, t.level || 1);
-      if (!ex) return;
-      if (ex.mode === "hold") {
-        var cap = caps[ex.id];
-        if (cap && t.repsTarget > cap) t.repsTarget = cap;
-      } else if (t.repsTarget > 25) {
-        /* No reps-mode movement in this library is a 25+ rep prescription;
-           a number that high against a reps movement is leaked seconds. */
-        t.repsTarget = baseReps[p] || 8;
-      }
-    });
   }
 
   /* Deep-merge `source` onto a fresh `base` so newly-added schema keys are
@@ -690,11 +638,6 @@
     document.querySelectorAll("[data-voldefault]").forEach(function (b) {
       b.classList.toggle("is-active", b.dataset.voldefault === curVol);
     });
-    /* default length */
-    var curLen = (s.prefs && s.prefs.sessionLength) || "focused";
-    document.querySelectorAll("[data-lengthdefault]").forEach(function (b) {
-      b.classList.toggle("is-active", b.dataset.lengthdefault === curLen);
-    });
     populateThemePicker();
 
     // goal segment
@@ -744,8 +687,6 @@
     if (restHold >= 15 && restHold <= 600) s.prefs.restHoldSec = restHold;
     var volBtn = document.querySelector("[data-voldefault].is-active");
     if (volBtn) s.prefs.volumeMode = volBtn.dataset.voldefault;
-    var lenBtn = document.querySelector("[data-lengthdefault].is-active");
-    if (lenBtn) s.prefs.sessionLength = lenBtn.dataset.lengthdefault;
 
     // equipment
     document.querySelectorAll("#set-equip [data-equip]").forEach(function (b) {
@@ -772,12 +713,6 @@
     document.querySelectorAll("[data-voldefault]").forEach(function (b) {
       b.addEventListener("click", function () {
         document.querySelectorAll("[data-voldefault]").forEach(function (x) { x.classList.toggle("is-active", x === b); });
-      });
-    });
-    /* session length default */
-    document.querySelectorAll("[data-lengthdefault]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        document.querySelectorAll("[data-lengthdefault]").forEach(function (x) { x.classList.toggle("is-active", x === b); });
       });
     });
     document.getElementById("btn-settings-save").addEventListener("click", saveSettings);
@@ -1818,100 +1753,9 @@
     legs: ["squat", "hinge", "core"],
     fullbody: ["push", "pull", "squat", "core"]
   };
-
-  /* "Full" session length — one extra movement per day, chosen as the
-     antagonist the day is otherwise missing. Every added pattern already has
-     a complete tier ladder in DB, so this adds no new exercise content.
-
-     The added movement is marked `accessory: true` and is deliberately
-     EXCLUDED from tier progression and rep-target adaptation, exactly as
-     era-2 accessories already are. Without that, three sets of accessory
-     pull on push day would advance your real pull ladder and move your real
-     pull rep target — you would be levelling a pattern from support work
-     while never doing a dedicated session for it. */
-  var DAY_ACCESSORY = {
-    push: "pull",       // antagonist balance for a push-dominant day
-    pull: "push",
-    legs: "dip",        // legs is otherwise entirely lower-body
-    fullbody: "hinge"   // the one major pattern full body doesn't cover
-  };
-
-  function patternsFor(dayType, sessionLength) {
-    var base = DAY_PATTERNS[dayType] || DAY_PATTERNS.fullbody;
-    if (sessionLength !== "full") return base;
-    var extra = DAY_ACCESSORY[dayType];
-    return extra ? base.concat([extra]) : base;
-  }
-
-  /* Session-length modes — parallel to VOLUME_MODES, and independent of it.
-     "Full + Max effort" is a real combination: more movements, and more
-     sets/reps on each. */
-  var LENGTH_MODES = {
-    focused: { label: "Focused", desc: "3-4 movements — the core of the day" },
-    full:    { label: "Full",    desc: "+1 antagonist movement, doesn't affect your ladders" }
-  };
-  /* Reps-mode starting targets. `core: 30` USED to live here too and was the
-     source of a real bug: core's ladder switches from holds (L1-L4) to reps
-     (L5 Dragon Flag Negative), and levelling into L5 read this table and
-     prescribed 30 REPS of dragon flag negatives. A seconds value cannot
-     double as a reps value; holds get HOLD_START below instead. */
-  var BASE_REPS    = { push: 12, pull: 8, squat: 14, hinge: 14, core: 5, shoulder: 8, dip: 8 };
+  var BASE_REPS    = { push: 12, pull: 8, squat: 14, hinge: 14, core: 30, shoulder: 8, dip: 8 };
   var TARGET_SETS  = 3;
   var DAYS_PER_WEEK = 4;
-
-  /* ------------------------------------------------------------------------
-     PROGRESSION CALIBRATION
-     ------------------------------------------------------------------------
-     A flat ±1 was applied to every target regardless of unit, so a 30-second
-     plank progressed to 31 seconds — a 3% step — while a 5-rep pull-up
-     progressed to 6, a 20% step. Same code, opposite meanings.
-
-     Steps are BANDED by the current value, so a number that is already large
-     moves in proportionally larger jumps instead of crawling.
-     ------------------------------------------------------------------------ */
-  var STEP_BANDS = {
-    /* seconds: a hold under 45s is still short enough that 5s is a real
-       increase; past 90s, 5s is noise. */
-    hold: [{ under: 45, step: 5 }, { under: 90, step: 10 }, { under: Infinity, step: 15 }],
-    /* reps: +1 is genuinely standard calisthenics programming at low counts.
-       Past a dozen it stops being a meaningful week-to-week change. */
-    reps: [{ under: 12, step: 1 }, { under: Infinity, step: 2 }]
-  };
-
-  function stepFor(value, isHold) {
-    var bands = isHold ? STEP_BANDS.hold : STEP_BANDS.reps;
-    for (var i = 0; i < bands.length; i++) {
-      if (value < bands[i].under) return bands[i].step;
-    }
-    return bands[bands.length - 1].step;
-  }
-
-  /* Where each ladder hold stops being worth extending, promoted from the
-     `readiness` prose that already shipped in the exercise DB — the text and
-     the algorithm were previously free to disagree, and did.
-
-     These are NOT uniform on purpose: 60s is a respectable plank and 20s is a
-     respectable full L-sit. A flat cap would prescribe a 60-second L-sit,
-     which is an elite hold, and simultaneously let a plank crawl past the
-     point where a harder variation is the better use of the time. */
-  var HOLD_ADVANCE_AT = {
-    core_1: 60,        // Plank
-    core_2: 30,        // Hollow Body Hold
-    core_3: 30,        // Tuck L-Sit
-    core_4: 20,        // L-Sit
-    pull_1: 45,        // Dead Hang
-    shoulder_3: 45     // Wall Handstand Hold
-  };
-
-  /* Opening target for a hold, as a fraction of its own advance point rather
-     than a flat 30s. Levelling into the L-Sit used to prescribe 30s when its
-     advance point is 20s — arriving at a new progression already past the
-     threshold that means "you have mastered this". */
-  function holdStart(exId) {
-    var cap = HOLD_ADVANCE_AT[exId];
-    if (!cap) return 30;
-    return Math.max(10, Math.round((cap * 0.5) / 5) * 5);
-  }
 
   /* Volume modes — applied on top of phase volumeFactor and session adaptation.
      sets:    bonus sets added to the adapted count
@@ -1928,10 +1772,6 @@
     ROTATION: ROTATION, DAY_LABEL: DAY_LABEL, DAY_DESC: DAY_DESC,
     DAY_PATTERNS: DAY_PATTERNS, TARGET_SETS: TARGET_SETS, DAYS_PER_WEEK: DAYS_PER_WEEK,
     VOLUME_MODES: VOLUME_MODES,
-    DAY_ACCESSORY: DAY_ACCESSORY, LENGTH_MODES: LENGTH_MODES,
-    patternsFor: patternsFor,
-    STEP_BANDS: STEP_BANDS, stepFor: stepFor,
-    HOLD_ADVANCE_AT: HOLD_ADVANCE_AT, holdStart: holdStart,
 
     completedSessions: function () {
       return App.getState().sessions.filter(function (s) { return s.completed; });
@@ -1989,11 +1829,9 @@
       return null;
     },
 
-    buildWorkout: function (dayType, overrideMode, overrideLength) {
+    buildWorkout: function (dayType, overrideMode) {
       var s = App.getState();
-      var lengthName = overrideLength || (s.prefs && s.prefs.sessionLength) || "focused";
-      var pats = patternsFor(dayType, lengthName);
-      var accessoryPattern = lengthName === "full" ? DAY_ACCESSORY[dayType] : null;
+      var pats = DAY_PATTERNS[dayType] || DAY_PATTERNS.fullbody;
       var ph = s.currentPhase || {};
       var vf = Number(ph.volumeFactor) || 1;                 // deload phases < 1
       var baseSetCount = Math.max(2, Math.round(TARGET_SETS * vf));
@@ -2009,20 +1847,11 @@
       var adaptedSetCount = engine._adaptSets(s, dayType, baseSetCount);
       var setCount = Math.min(6, Math.max(2, adaptedSetCount + mode.sets));
 
-      var exercises = pats.map(function (p, i) {
-        /* The accessory is always the appended last entry, identified by
-           position rather than by pattern name — a name test would go wrong
-           the day an accessory duplicates a pattern already in the day. */
-        var isAccessory = accessoryPattern != null && i === pats.length - 1;
+      var exercises = pats.map(function (p) {
         var t = s.tiers[p];
         var ex = DB.byLevel(p, t.level) || DB.ladder(p)[0];
-        /* Adapt rep target from last session, then apply mode rep bonus.
-           An accessory holds its ladder's plain base target: it neither reads
-           adaptation nor feeds it, so support work can't drag a real
-           pattern's target around. */
-        var adapt = isAccessory
-          ? { target: t.repsTarget, delta: 0, reason: "" }
-          : engine._adaptTarget(s, p, t.repsTarget);
+        /* Adapt rep target from last session, then apply mode rep bonus */
+        var adapt = engine._adaptTarget(s, p, t.repsTarget);
         var finalTarget = adapt.target + mode.reps;
         return {
           pattern: p, id: ex.id, name: ex.name, level: t.level,
@@ -2030,17 +1859,12 @@
           cues: ex.cues || [], mistakes: ex.mistakes || [],
           readiness: ex.readiness || "", injury: ex.injury || "",
           target: finalTarget, targetDelta: adapt.delta, targetReason: adapt.reason,
-          era2: false, accessory: isAccessory,
-          restSec: Math.round((ex.mode === "hold" ? restHoldPref(s) : restRepPref(s)) * restMul),
+          era2: false, restSec: Math.round((ex.mode === "hold" ? restHoldPref(s) : restRepPref(s)) * restMul),
           sets: newSets(setCount),
           difficulty: null, flag: null
         };
       });
-      /* Full length REPLACES the era-2 accessory rather than stacking on it.
-         Both exist to add one extra movement to the day; stacking them makes
-         an Era-II push day six exercises at up to six sets, which is how a
-         40-minute session quietly becomes a 75-minute one. */
-      var acc = accessoryPattern ? null : engine.era2Accessory(dayType);
+      var acc = engine.era2Accessory(dayType);
       if (acc) {
         exercises.push({
           pattern: acc.pattern, id: acc.id, name: acc.name, level: null,
@@ -2067,27 +1891,18 @@
 
     /* -----------------------------------------------------------------------
        Adaptive target — reads the last 2 sessions containing this pattern,
-       compares what was logged to the prescribed target, and moves the target
-       for the next session.
-
-       Steps are BANDED by the current value and by unit (see STEP_BANDS), not
-       a flat ±1. A flat step meant a 30-second plank advanced to 31 seconds
-       while a 5-rep pull-up advanced to 6 — 3% against 20%, from one line of
-       code that could not tell seconds from reps.
+       compares logged reps to the prescribed target, and nudges the rep target
+       up or down for the next session.
 
        Rules (applied in order, first match wins):
-         • Any set rated "failed" last session       → −1 band step
-         • Avg < 80% of target last session          → −1 band step
-         • Avg ≥ 125% of target                      → +2 band steps (badly under-set)
-         • Avg ≥ target AND rated "easy"             → +1 band step
-         • Avg ≥ 110% of target                      → +1 band step
-         • Hit target in both of last 2 sessions     → +1 band step
-         • Otherwise                                 → hold
+         • Any set rated "failed" last session             → −1 rep
+         • Avg reps < 80% of target last session           → −1 rep
+         • Avg reps ≥ target AND rated "easy" last session → +1 rep
+         • Avg reps ≥ 110% of target last session          → +1 rep (over-performing)
+         • Hit target in both of last 2 sessions           → +1 rep (consistent)
+         • Otherwise                                       → 0 (hold)
 
-       Holds additionally stop at their own advance point (HOLD_ADVANCE_AT),
-       because past it a harder progression is better training than a longer
-       hold — `capped` is returned so the caller can act on that rather than
-       silently flat-lining the number.
+       Target is always clamped between (baseTarget / 2) and (baseTarget + 4).
        ----------------------------------------------------------------------- */
     _adaptTarget: function (s, pattern, baseTarget) {
       var sessions = (s.sessions || [])
@@ -2098,10 +1913,7 @@
       var relevant = [];
       for (var i = sessions.length - 1; i >= 0 && relevant.length < 2; i--) {
         var found = (sessions[i].exercises || []).filter(function (ex) {
-          /* Accessories are excluded for the same reason era-2 add-ons are:
-             support work done on another pattern's day is not evidence about
-             how this pattern's real sessions are going. */
-          return ex.pattern === pattern && !ex.era2 && !ex.accessory;
+          return ex.pattern === pattern && !ex.era2;
         })[0];
         if (found) relevant.push(found);
       }
@@ -2115,41 +1927,22 @@
       var avgReps = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
       var ratio = avgReps / baseTarget;
       var lastDiff = last.difficulty || "moderate";
-
-      /* The unit decides everything below, so it is read from the movement
-         actually prescribed rather than assumed from the pattern — core's
-         ladder is holds at L1-L4 and reps at L5-L6, so "core" alone does not
-         answer the question. */
-      var cur = engine.movementFor(pattern);
-      var isHold = !!(cur && cur.mode === "hold");
-      var step = stepFor(baseTarget, isHold);
-
-      /* 3 seconds of plank is not a floor, it is a typo waiting to happen.
-         The deload path already used `isHold ? 20 : 6`; this now agrees with
-         it instead of contradicting it two functions away. */
-      var floor = isHold ? Math.max(15, Math.round(baseTarget * 0.5 / 5) * 5)
-                         : Math.max(3, Math.round(baseTarget * 0.5));
-      var advanceAt = isHold && cur ? HOLD_ADVANCE_AT[cur.id] : null;
+      var floor = Math.max(3, Math.round(baseTarget * 0.5));
+      var cap   = baseTarget + 4;
 
       var delta = 0, reason = "";
 
       if (lastDiff === "failed" || (last.sets || []).some(function (st) { return st.reps === 0; })) {
-        delta = -step;
+        delta = -1;
         reason = "failed last session";
       } else if (ratio < 0.8) {
-        delta = -step;
+        delta = -1;
         reason = "below target last session";
-      } else if (ratio >= 1.25) {
-        /* Two steps: the target was not merely beaten, it was wrong. Creeping
-           up one band at a time from a target you already exceed by a quarter
-           just spends sessions catching up to where you already are. */
-        delta = +step * 2;
-        reason = "well past target — catching the target up";
       } else if ((lastDiff === "easy") && ratio >= 1.0) {
-        delta = +step;
+        delta = +1;
         reason = "felt easy and hit target";
       } else if (ratio >= 1.1) {
-        delta = +step;
+        delta = +1;
         reason = "exceeded target";
       } else if (relevant.length >= 2) {
         /* check 2nd-last session too */
@@ -2157,30 +1950,15 @@
         var prevVals = (prev.sets || []).map(function (st) { return Number(st.reps) || 0; }).filter(Boolean);
         var prevAvg  = prevVals.length ? prevVals.reduce(function (a, b) { return a + b; }, 0) / prevVals.length : 0;
         if (ratio >= 1.0 && prevAvg >= baseTarget) {
-          delta = +step;
+          delta = +1;
           reason = "hit target consistently";
         }
       }
 
-      var raw = baseTarget + delta;
-      var newTarget = Math.max(floor, raw);
-      var capped = false;
-      if (advanceAt && newTarget >= advanceAt) {
-        newTarget = advanceAt;
-        /* Only "capped" once you are actually AT the ceiling and trying to go
-           past it — arriving exactly on it for the first time is a normal
-           step, not a stall. */
-        capped = baseTarget >= advanceAt;
-      }
-
+      var newTarget = lib.clamp(baseTarget + delta, floor, cap);
+      /* if the clamp absorbed the delta, report 0 change to avoid misleading UI */
       var actualDelta = newTarget - baseTarget;
-      return {
-        target: newTarget,
-        delta: actualDelta,
-        reason: actualDelta !== 0 ? reason : (capped ? "at the advance point for this movement" : ""),
-        capped: capped,
-        advanceAt: advanceAt || null
-      };
+      return { target: newTarget, delta: actualDelta, reason: actualDelta !== 0 ? reason : "" };
     },
 
     /* -----------------------------------------------------------------------
@@ -2226,13 +2004,7 @@
         type: workout.dayType,
         exercises: workout.exercises.map(function (ex) {
           return {
-            /* `accessory` must persist alongside `era2`: _adaptTarget reads
-               its history out of s.sessions, so a flag that only existed on
-               the live workout object would be gone by the time it matters,
-               and support work would silently drive the real pattern's
-               targets after all. */
-            key: ex.id, pattern: ex.pattern, name: ex.name,
-            era2: !!ex.era2, accessory: !!ex.accessory,
+            key: ex.id, pattern: ex.pattern, name: ex.name, era2: !!ex.era2,
             mode: ex.mode, unit: ex.unit,
             sets: ex.sets.map(function (st) { return { reps: num(st.value), weight: num(st.weight) }; }),
             difficulty: ex.difficulty || "moderate",
@@ -2255,20 +2027,12 @@
 
       /* 2) progression per pattern-exercise */
       workout.exercises.forEach(function (ex) {
-        if (ex.era2) return;      // era-2 accessories don't drive Era-I tier progress
-        /* Nor does full-length accessory work. Levelling your pull ladder off
-           support sets done on push day would advance a pattern you never
-           trained a dedicated session for. */
-        if (ex.accessory) return;
+        if (ex.era2) return; // era-2 accessories don't drive Era-I tier progress
         var lvl = engine._progress(s, ex);
         if (lvl) result.levelUps.push(lvl);
       });
 
-      /* 3) PRs. Accessories are NOT excluded here, deliberately: progression
-         and target adaptation change your future program and must not be
-         driven by support work, but a PR only describes a rep you actually
-         performed. If you really did hit a best on an accessory set, that
-         happened. */
+      /* 3) PRs */
       workout.exercises.forEach(function (ex) {
         var pr = engine._checkPR(s, ex, session.dateISO);
         if (pr) result.prs.push(pr);
@@ -2329,62 +2093,17 @@
       return 0;
     },
 
-    /* Rest-day gate — the day immediately after a session, and only that one
-       day, is a mandatory rest day. Derived from the last COMPLETED session's
-       actual date, never a fixed weekday: train Tuesday and Wednesday is
-       rest, whatever calendar day that lands on. That is the "relative to
-       your last session" schedule, as opposed to fixed weekdays you'd have
-       to set up and keep in sync with how you actually train.
-
-       Deliberately a single fixed rest day, not a DAYS_PER_WEEK-derived
-       cadence — spacing sessions to average exactly 4/week needs an uneven
-       rest pattern (1-1-2), which is a schedule you'd have to be told about
-       to make sense of. One day is the same rule every time. */
-    restDayInfo: function (s) {
-      var done = engine.completedSessions();
-      if (!done.length) return { isRest: false };
-      var lastKey = lib.dayKey(done[done.length - 1].dateISO);
-      var gap = lib.daysBetween(lastKey, lib.today());
-      /* gap 0: trained today already — that state is handled elsewhere
-         (resume/already-done), not this gate.
-         gap 1: today is the mandatory rest day.
-         gap 2+: clear to train — a longer break is your call, not a debt. */
-      if (gap !== 1) return { isRest: false };
-      return {
-        isRest: true, lastKey: lastKey,
-        lastType: done[done.length - 1].type,
-        nextKey: lib.dayKey(lib.addDays(lastKey, 2))
-      };
-    },
-
     _progress: function (s, ex) {
       var t = s.tiers[ex.pattern]; if (!t) return null;
       var hit = ex.sets.filter(function (st) { return (Number(st.value) || 0) >= ex.target; }).length;
       var ratio = ex.sets.length ? hit / ex.sets.length : 0;
       var base = { easy: 40, moderate: 26, hard: 12, failed: 0 }[ex.difficulty || "moderate"];
       var inc = Math.round(base * (0.5 + 0.5 * ratio));
-
-      /* A hold sitting at its advance point has nowhere left to go on
-         duration, so grinding out more sessions at the same number is wasted.
-         Clean sessions there accelerate the tier instead, which is the
-         "cap it and push a level-up" half of the cap: the ceiling is not a
-         dead end, it is the on-ramp to the next progression. */
-      var cap = HOLD_ADVANCE_AT[ex.id];
-      if (cap && ex.mode === "hold" && (Number(ex.target) || 0) >= cap && ratio >= 0.5 && inc > 0) {
-        inc = Math.round(inc * 1.75);
-      }
-
       t.progress = lib.clamp((t.progress || 0) + inc, 0, 100);
       if (t.progress >= 100 && t.level < 6) {
         t.level += 1; t.progress = 0;
         var nx = DB.byLevel(ex.pattern, t.level);
-        /* Each hold opens at half its OWN advance point, not a flat 30s.
-           Levelling into the L-Sit used to prescribe 30s against an advance
-           point of 20s — arriving at a new progression already past the
-           number that means you have finished with it. */
-        t.repsTarget = (nx && nx.mode === "hold")
-          ? holdStart(nx.id)
-          : BASE_REPS[ex.pattern];
+        t.repsTarget = (nx && nx.mode === "hold") ? 30 : BASE_REPS[ex.pattern];
         return { pattern: ex.pattern, level: t.level, name: nx ? nx.name : "" };
       }
       return null;
@@ -2828,51 +2547,7 @@
       '</div></div>';
   }
 
-  /* Overriding "train anyway" is remembered for today only — a decision made
-     once this morning shouldn't have to be repeated on every render, but it
-     also shouldn't quietly carry into tomorrow, which is a real training day
-     regardless. */
-  function restOverrideKey() { return "restOverride:" + lib.today(); }
-
-  /* The rest-day view. Deliberately much smaller than renderReady's — no
-     picker, no intensity/length controls, nothing to configure for a session
-     you're not supposed to start. "Train anyway" is one click away rather
-     than hidden, because a genuinely flexible schedule beats a rigid one
-     that argues with you (PLAN discussion, 2026-08-26): this only ever
-     blocks the single day right after a session, and you can always say no. */
-  function renderRestDay(el, s, restInfo) {
-    var done = engine.completedSessions();
-    var last = done[done.length - 1];
-    var tomorrow = lib.daysBetween(lib.today(), restInfo.nextKey) === 1;
-    var whenLabel = tomorrow ? "tomorrow" : lib.fmtDate(restInfo.nextKey);
-
-    el.innerHTML =
-      head("Today", "Session engine", "Resting today") +
-      '<div class="card card--accent card--pad-lg hero stack">' +
-        '<div class="row between wrap"><div><div class="eyebrow">Rest day</div>' +
-        '<h2 class="display h2">Next exercise day is ' + esc(whenLabel) + '</h2>' +
-        '<p class="muted text-sm" style="max-width:46ch">' +
-          'You trained ' + esc(DAY_LABEL[restInfo.lastType] || "") + ' yesterday. One rest day between ' +
-          'sessions is part of the program, not a delay — this is where the adaptation actually happens.' +
-        '</p></div>' +
-        '<span class="badge"><span class="dot"></span>rest</span></div>' +
-        '<button class="btn btn--ghost btn--sm" id="rest-train-anyway" type="button">Train anyway →</button>' +
-      '</div>' +
-      (last ? lastSessionCard(last) : "") +
-      streakStripCard(s);
-
-    var anyway = document.getElementById("rest-train-anyway");
-    if (anyway) anyway.addEventListener("click", function () {
-      App.util.uiSet(restOverrideKey(), true);
-      renderReady(el, s);
-    });
-  }
-
   function renderReady(el, s) {
-    var restInfo = engine.restDayInfo(s);
-    if (restInfo.isRest && !App.util.uiGet(restOverrideKey(), false)) {
-      return renderRestDay(el, s, restInfo);
-    }
     var rec = engine.recommendedDayType();
     var done = engine.completedSessions();
     var last = done[done.length - 1];
@@ -2898,18 +2573,6 @@
             '</button>';
           }).join("") +
         '</div></div>' +
-        /* Length sits beside intensity, not inside it: one decides how many
-           movements, the other how hard each one is, and they combine. */
-        '<div class="vol-mode-row mt-4"><div class="field__label mb-2">Length</div><div class="vol-mode-grid" id="len-mode-grid">' +
-          Object.keys(LENGTH_MODES).map(function (k) {
-            var m = LENGTH_MODES[k];
-            var cur = (s.prefs && s.prefs.sessionLength) || "focused";
-            return '<button class="vol-mode-btn ' + (k === cur ? "is-active" : "") + '" data-lenmode="' + k + '" type="button">' +
-              '<span class="vol-mode-btn__label">' + m.label + '</span>' +
-              '<span class="vol-mode-btn__desc">' + m.desc + '</span>' +
-            '</button>';
-          }).join("") +
-        '</div></div>' +
         '<div id="today-preview"></div>' +
         '<button class="btn btn--ghost btn--sm btn--block" id="preview-all-toggle" type="button" style="margin-top:var(--sp-2)">Preview all days ▾</button>' +
         '<div id="all-days-preview" style="display:none"></div>' +
@@ -2922,11 +2585,7 @@
       (last ? lastSessionCard(last) : "") +
       streakStripCard(s);
 
-    var chosen = {
-      day: rec, overrides: {},
-      volumeMode: (s.prefs && s.prefs.volumeMode) || "standard",
-      sessionLength: (s.prefs && s.prefs.sessionLength) || "focused"
-    };
+    var chosen = { day: rec, overrides: {}, volumeMode: (s.prefs && s.prefs.volumeMode) || "standard" };
     function previewMissing(ex) {
       return (ex.equipment || []).filter(function (e) { return !s.equipment[e]; });
     }
@@ -2938,11 +2597,7 @@
       return engine.movementFor(p);
     }
     function renderPreview() {
-      /* Both the pattern count and the time estimate derive from this list,
-         so switching length updates the "~N min" badge with no separate
-         estimate logic to keep in step. */
-      var pats = engine.patternsFor(chosen.day, chosen.sessionLength);
-      var accPat = chosen.sessionLength === "full" ? engine.DAY_ACCESSORY[chosen.day] : null;
+      var pats = DAY_PATTERNS[chosen.day];
       var mode = (engine.VOLUME_MODES || {})[chosen.volumeMode] || { sets: 0, reps: 0, restMul: 1 };
       var baseSetCount = 3 + mode.sets;
       var restMin = Math.round((90 * (mode.restMul || 1)) / 60 * 10) / 10;
@@ -2950,22 +2605,17 @@
       document.getElementById("today-preview").innerHTML =
         '<div class="card card--glass"><div class="card__head"><div class="card__title">Today\'s movements</div>' +
         '<span class="badge">' + pats.length + ' patterns · ~' + estMins + ' min</span></div>' +
-        pats.map(function (p, i) {
-          var isAcc = accPat != null && i === pats.length - 1;
+        pats.map(function (p) {
           var m = previewMovement(p);
           var missing = previewMissing(m);
           var baseTarget = (s.tiers[p] && s.tiers[p].repsTarget) || 8;
           var dispTarget = baseTarget + mode.reps;
           var warn = missing.length ? ' <span class="badge badge--warn" style="padding:1px 7px">needs gear</span>' : "";
           var ovTag = chosen.overrides[p] ? ' <span class="badge badge--secondary" style="padding:1px 7px">swapped</span>' : "";
-          /* Marked in the UI as well as in the data — an accessory that
-             looked identical to primary work would leave you wondering why
-             your ladder never moved. */
-          var accTag = isAcc ? ' <span class="badge" style="padding:1px 7px" title="Support work — does not affect your ladder or rep targets">accessory</span>' : "";
           return '<div class="kv" style="align-items:center"><span class="kv__k">' + cap(p) + ' · L' + s.tiers[p].level + '</span>' +
             '<span class="kv__v" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">' +
             esc(m.name) + ' <span class="faint text-xs mono">' + baseSetCount + '×' + dispTarget + '</span>' +
-            warn + ovTag + accTag +
+            warn + ovTag +
             '<button class="btn btn--ghost btn--sm" data-pvswap="' + p + '" type="button" style="padding:2px 10px">Swap</button></span></div>';
         }).join("") + '</div>';
       document.querySelectorAll("[data-pvswap]").forEach(function (b) {
@@ -2979,7 +2629,7 @@
       var box = document.getElementById("all-days-preview");
       if (!box) return;
       box.innerHTML = ROTATION.map(function (d) {
-        var pats = engine.patternsFor(d, chosen.sessionLength);
+        var pats = DAY_PATTERNS[d];
         var moves = pats.map(function (p) {
           var m = engine.movementFor(p);
           return '<div class="kv"><span class="kv__k">' + cap(p) + ' · L' + s.tiers[p].level + '</span>' +
@@ -3024,27 +2674,14 @@
       });
     });
 
-    /* Session length selector */
-    document.querySelectorAll("[data-lenmode]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        chosen.sessionLength = b.dataset.lenmode;
-        document.querySelectorAll("[data-lenmode]").forEach(function (x) {
-          x.classList.toggle("is-active", x === b);
-        });
-        renderPreview();
-        renderAllDays();
-      });
-    });
-
     document.getElementById("begin-session").addEventListener("click", function () {
-      /* persist the chosen volume mode + length so they're the defaults next time */
+      /* persist the chosen volume mode so it's the default next time */
       var st = App.getState();
       if (!st.prefs) st.prefs = {};
       st.prefs.volumeMode = chosen.volumeMode;
-      st.prefs.sessionLength = chosen.sessionLength;
       App.saveState();
 
-      var workout = engine.buildWorkout(chosen.day, chosen.volumeMode, chosen.sessionLength);
+      var workout = engine.buildWorkout(chosen.day, chosen.volumeMode);
       Object.keys(chosen.overrides).forEach(function (p) {
         var alt = DB.getExercise(chosen.overrides[p]);
         if (!alt) return;
@@ -3058,10 +2695,7 @@
       });
       setWorkout(workout);
       App.refresh();
-      App.toast(DAY_LABEL[chosen.day] + " · " +
-        ((engine.LENGTH_MODES[chosen.sessionLength] || {}).label || "") + " · " +
-        ((engine.VOLUME_MODES[chosen.volumeMode] || {}).label || "") +
-        " started. Warm up first.", "info");
+      App.toast(DAY_LABEL[chosen.day] + " · " + ((engine.VOLUME_MODES[chosen.volumeMode] || {}).label || "") + " started. Warm up first.", "info");
     });
 
     /* Running-in-Today + skill-reminder buttons */
@@ -3412,20 +3046,6 @@
     document.getElementById("guide-level-badge").textContent = ex.level ? ("L" + ex.level) : "E2";
     document.getElementById("guide-title").textContent = ex.name;
     document.getElementById("guide-sub").textContent = modeStr + "  ·  " + equipStr;
-
-    /* Phase visualiser. Rendered fresh each open rather than cached: it owns
-       a rAF tween and SVG bound to one exercise's rig, and reusing that across
-       exercises is how a pull-up ends up drawn as a squat. */
-    var phaseHost = document.getElementById("guide-phases");
-    var phaseWrap = document.getElementById("guide-phases-wrap");
-    if (phaseHost) {
-      if (App.phases) {
-        App.phases.render(phaseHost, exId);
-        if (phaseWrap) phaseWrap.hidden = !phaseHost.firstChild;
-      } else if (phaseWrap) {
-        phaseWrap.hidden = true;
-      }
-    }
 
     // Technique cues
     var cuesList = document.getElementById("guide-cues");
@@ -4197,36 +3817,19 @@
         goalsCard(s) +
       '</div>' +
 
-      /* ---- training calendar ----
-         Back on the dashboard, where it was before Progress was split into
-         tabs and it ended up two clicks deep. Same card, same code — Progress
-         keeps its copy as the "study it" view, this one is the glance.
-         `calState` is module-level, so the month you navigate to on one is
-         the month the other opens on. That is shared deliberately: two
-         calendars disagreeing about which month you were looking at is worse
-         than them agreeing. */
-      (App.calendarCard ? '<div class="mt-6">' + App.calendarCard(s) + '</div>' : "") +
-
       '<p class="faint text-xs mt-6 mono">DASHBOARD ONLINE · ' + done.length + ' session' + (done.length === 1 ? "" : "s") +
         ' logged · phase ' + phase.number + ' · era ' + (s.era === 1 ? "I" : "II") + ' · all data stored locally in this browser.</p>';
 
     wireDashboard(el, s);
-    if (App.wireCalendar) App.wireCalendar(el, s);
   }
 
   /* ---- hero ---- */
   function heroCard(s, rec, wip) {
-    /* A session in progress shows what it actually contains; an upcoming one
-       shows what the current length preference would build. */
-    var chips = (wip
-      ? (wip.exercises || []).map(function (ex) {
-          return '<span class="chip">' + ui.cap(ex.pattern) + ' · ' + esc(ex.name) + "</span>";
-        })
-      : engine.patternsFor(rec, (s.prefs && s.prefs.sessionLength) || "focused").map(function (p) {
-          var m = engine.movementFor(p);
-          return '<span class="chip">' + ui.cap(p) + ' · ' + esc(m.name) + "</span>";
-        })
-    ).join("");
+    var pats = engine.DAY_PATTERNS[wip ? wip.dayType : rec] || [];
+    var chips = pats.map(function (p) {
+      var m = engine.movementFor(p);
+      return '<span class="chip">' + ui.cap(p) + ' · ' + esc(m.name) + "</span>";
+    }).join("");
 
     var title = wip ? engine.DAY_LABEL[wip.dayType] : engine.DAY_LABEL[rec];
     var desc  = wip ? "You have a session underway — pick up right where you left off." : engine.DAY_DESC[rec];
@@ -5538,12 +5141,6 @@
   function mount() {
     themeChart();
     App.registerView("progress", renderProgress);
-    /* The calendar is defined in this part but rendered from the dashboard
-       too, and the two live in separate IIFEs — so it is published rather
-       than duplicated. Both callers get the same card and the same month
-       state. */
-    App.calendarCard = trainingCalendarCard;
-    App.wireCalendar = wireCalendar;
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
   else mount();
@@ -5914,7 +5511,7 @@
   function actionBlurb(s, a) {
     var n = s.currentPhase.number + 1;
     return {
-      advance: "Phase " + n + " nudges targets up a step where you're hitting them — one rep on low counts, five seconds on a short hold, more once the numbers get bigger — and keeps your hard-won levels. Progressive overload, continued.",
+      advance: "Phase " + n + " nudges rep targets up by 1 where you're hitting them and keeps your hard-won levels. Progressive overload, continued.",
       consolidate: "Phase " + n + " repeats your current movements and targets but tightens rest ~20% — more density to bank the adaptation before reaching for the next level.",
       deload: "Phase " + n + " is a back-off block: working sets drop ~40% and rep targets ease, same movements at lighter intent. Recover, then resume."
     }[a];
@@ -5952,18 +5549,10 @@
       var t = s.tiers[p]; if (!t) return;
       var cur = engine.movementFor(p);
       var isHold = cur && cur.mode === "hold";
-      if (action === "advance" && canOverload) {
-        /* Holds used to be excluded here outright (`&& !isHold`), which left
-           the per-session +1s as their ONLY upward path — the four-weekly
-           evaluator bumped every reps pattern and silently stepped over every
-           hold. They advance on their own banded step now, and stop at their
-           own advance point rather than a REF_TARGET-derived number that was
-           never expressed in seconds. */
-        var step = engine.stepFor(t.repsTarget || REF_TARGET[p] || 10, isHold);
-        var bump = wasDeload ? step * 2 : step;   // recover faster out of a deload
-        var capTo = isHold
-          ? (engine.HOLD_ADVANCE_AT[cur && cur.id] || ((t.repsTarget || 30) + step))
-          : (REF_TARGET[p] || 10) + 6;
+      if (action === "advance" && canOverload && !isHold) {
+        /* If we just came out of a deload, give +2 rep target to recover faster */
+        var bump = wasDeload ? 2 : 1;
+        var capTo = (REF_TARGET[p] || 10) + 6;
         t.repsTarget = Math.min((t.repsTarget || REF_TARGET[p] || 10) + bump, capTo);
       } else if (action === "deload") {
         /* Deload: ease rep targets ~30% (was 40%) and only halve progress (not wipe it).
@@ -6314,7 +5903,7 @@
 
     /* weekly split */
     var split = engine.ROTATION.map(function (d) {
-      var pats = engine.patternsFor(d, (s.prefs && s.prefs.sessionLength) || "focused");
+      var pats = engine.DAY_PATTERNS[d] || [];
       return '<div class="pg-day' + (d === rec ? " is-next" : "") + '">' +
         '<div class="row between"><span class="pg-day__t">' + engine.DAY_LABEL[d] + '</span>' +
           (d === rec ? '<span class="badge badge--primary" style="padding:2px 7px">up next</span>' : '') + '</div>' +

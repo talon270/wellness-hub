@@ -19,7 +19,7 @@
 
   var STORAGE_KEY = "wellnessHub.v1";
   var UI_KEY = "wellnessHub.ui";      // tiny non-schema prefs (last view)
-  var SCHEMA_VERSION = 4;
+  var SCHEMA_VERSION = 3;
 
   /* ======================================================================
      1. DEFAULT STATE
@@ -325,21 +325,6 @@
       }
     }
 
-    /* v3 → v4: multi-device sync through a shared folder. Every day record
-       and every id-keyed row gains an `updatedAt`, which is what a merge
-       compares — without it, two machines can only fall back to
-       whole-file-newest-wins, and an evening where you logged a weight on one
-       and a lab result on the other loses whichever wrote first.
-
-       Additive only: nothing is removed or renamed, so a v4 save opened by an
-       older build still loads through the deep-merge above.
-
-       Backfill is deliberately conservative — see syncmerge.js — so nothing
-       written before the upgrade can outrank a live edit after it. */
-    if (!raw.version || raw.version < 4) {
-      if (Hub.syncMerge) Hub.syncMerge.backfillStamps(s);
-    }
-
     s.version = SCHEMA_VERSION;
     return heal(s);
   }
@@ -482,21 +467,12 @@
       console.warn("Wellness Hub: saved data unreadable, starting fresh.", e);
       STATE = defaultState();
     }
-    /* Seed the index from what was just loaded, so the first save after a
-       reload doesn't stamp every record in your history as changed today. */
-    if (Hub.syncMerge) syncIndex = Hub.syncMerge.index(STATE);
     return STATE;
   }
-
-  /* What every syncable record looked like at the last save. Comparing
-     against it is how a record gets an honest `updatedAt` without every view
-     in the app having to remember to set one — see syncmerge.js. */
-  var syncIndex = null;
 
   var saveFailed = false;
   function save() {
     try {
-      if (Hub.syncMerge) syncIndex = Hub.syncMerge.stampChanges(STATE, syncIndex);
       STATE.meta.updatedAt = new Date().toISOString();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
       saveFailed = false;
@@ -1420,19 +1396,6 @@
   function cueDone()   { beep(660, 150); setTimeout(function () { beep(880, 150); }, 150);
                          setTimeout(function () { beep(1046, 280); }, 300); vibrate([90, 70, 90, 70, 180]); }
 
-  /* A reminder fires while you are very likely NOT looking at this tab — the
-     entire point of it — so it gets the loudest, most insistent cue in the
-     app rather than the same quiet chime a mid-session timer uses right next
-     to your ears. Three sharp double-taps at 0.30 gain vs. the session cues'
-     default 0.14, plus a distinct buzz-pause-buzz-pause vibration pattern
-     that reads as "reminder" even felt through a pocket. */
-  function cueReminder() {
-    [0, 260, 520].forEach(function (t) {
-      setTimeout(function () { beep(880, 120, 0.30); beep(1180, 90, 0.22); }, t + 90);
-    });
-    vibrate([140, 90, 140, 90, 260]);
-  }
-
   /* ======================================================================
      12. NOTIFICATIONS
      ----------------------------------------------------------------------
@@ -1524,13 +1487,6 @@
        the reminder is never silently lost. */
     fire: function (title, body, viewId, remKey) {
       toastReminder(title, body, viewId, remKey);
-      /* A reminder must be heard/felt from any tab, not just seen on the one
-         that happens to be open — a beep at settings volume plus vibration
-         is the only part of a reminder that reaches you when this tab is in
-         the background. cueReminder is deliberately louder than the
-         in-session cues (js/core.js "MASTER TICK"/cueChange/cueDone) rather
-         than sharing their default gain, which is the "not loud enough" gap. */
-      cueReminder();
       if (!this.availableHere() || Notification.permission !== "granted") return;
 
       var opts = {
@@ -1538,16 +1494,7 @@
         tag: "wellness-" + (viewId || "general"),   // replaces, never stacks
         icon: notificationIcon(),
         badge: notificationIcon(),
-        data: { view: viewId || "dashboard", key: remKey || null },
-        /* Persist on screen until you dismiss or act on it, instead of the
-           browser's default few-second auto-hide. This is what actually makes
-           a reminder a computer-wide popup rather than a flash you can miss
-           while looking at a different window. */
-        requireInteraction: true,
-        /* Without this, a SECOND reminder sharing the same tag (the common
-           case — two "Stand up" reminders in a row) silently replaces the
-           first with no new alert sound/vibration at the OS level at all. */
-        renotify: true
+        data: { view: viewId || "dashboard", key: remKey || null }
       };
 
       /* Preferred path: the service worker owns the notification, so clicking
@@ -1939,13 +1886,7 @@
 
     /* state */
     get state() { return STATE; },
-    setState: function (s) {
-      STATE = migrate(s);
-      /* Reseed, or the next save stamps every record in the incoming state as
-         having changed on this machine right now — which would make a merged
-         copy outrank the machine it came from. */
-      if (Hub.syncMerge) syncIndex = Hub.syncMerge.index(STATE);
-    },
+    setState: function (s) { STATE = migrate(s); },
     defaultState: defaultState,
     load: load,
     save: save,

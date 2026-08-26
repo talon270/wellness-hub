@@ -82,6 +82,23 @@
         return v ? v.hr : null;
       }
     },
+    /* Deliberately absent from PAIRS. VO2 max is measured a handful of times a
+       year, so a lagged daily correlation would sit at "not enough data"
+       forever — and if it ever cleared MIN_PAIRS, a same-day Pearson between a
+       quarterly measurement and last night's sleep would be noise wearing a
+       coefficient. As a chartable series it does the useful thing instead:
+       overlay it on resting HR or training volume and the relationship is
+       visible over months, which is the scale it actually moves on.
+       Sparse like restingHR — a day with no reading is null, never carried
+       forward, because inventing 200 days of a value you measured six times
+       is the exact lie this engine exists to avoid. */
+    vo2max: {
+      label: "VO2 max", unit: " ml/kg/min", color: "var(--blue-bright)", chart: "#83a598",
+      get: function (k) {
+        var v = (Hub.state.logs.vo2max || []).filter(function (e) { return e.date === k; })[0];
+        return v ? Number(v.value) || null : null;
+      }
+    },
     loudMinutes: {
       label: "Loud exposure", unit: " min", color: "var(--purple-bright)", chart: "#d3869b",
       get: function (k) { return Hub.day(k).loudMinutes || null; }
@@ -516,6 +533,7 @@
                   .sort(function (a, b) { return b.level - a.level; }),
       vitals: (Hub.state.logs.vitals || []).filter(function (v) { return v.date === key; }),
       labs: (Hub.state.logs.labs || []).filter(function (l) { return l.date === key; }),
+      vo2max: (Hub.state.logs.vo2max || []).filter(function (v) { return v.date === key; }),
       photos: (Hub.state.logs.photos || []).filter(function (p) { return p.date === key; }),
       mindful: d.mindful || [],
       workouts: Hub.gamify.fitnessDates().has(key)

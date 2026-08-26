@@ -223,8 +223,13 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 760px) {
   .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); }
 }
+/* A wider first column for a chart paired with a narrower stat card. Lives in
+   the stylesheet rather than an inline style so the mobile rule below can
+   actually override it — an inline grid-template-columns wins on specificity
+   and was forcing 464px of cards onto a 390px screen. */
+.grid-bias { grid-template-columns: 1.3fr 1fr; }
 @media (max-width: 460px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3, .grid-4, .grid-bias { grid-template-columns: 1fr; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -944,6 +949,52 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 .cal-day--today { border-color: var(--secondary); color: var(--secondary); }
 .cal-day--planned { border-style: dashed; border-color: var(--line-2); background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.02) 4px, rgba(255,255,255,.02) 8px); color: var(--text-300); }
 .cal-legend__swatch--planned { border-style: dashed; border-color: var(--line-2); background: transparent; }
+
+/* The next session outranks every other planned day: solid instead of dashed,
+   full-strength border, and a ring so it reads at a glance from across the
+   grid. Everything else stays deliberately quiet. */
+.cal-day--next {
+  border-style: solid; border-color: var(--primary);
+  background: var(--primary-soft); color: var(--text-100);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb),.22);
+}
+.cal-day--next .cal-day__num { font-weight: 700; }
+.cal-day--next .cal-day__type { opacity: 1; color: var(--primary); font-weight: 700; }
+.cal-legend__swatch--next { border-style: solid; border-color: var(--primary); background: var(--primary-soft); }
+
+/* Was inline 9px / .55 opacity — too small and too faint for the label that
+   tells you which session a day is. */
+.cal-day__type {
+  font-family: var(--font-mono); font-size: 10px; line-height: 1;
+  letter-spacing: .04em; opacity: .85; margin-top: 1px;
+}
+.cal-day--trained .cal-day__type { opacity: .9; }
+
+/* Next-session banner — answers "when do I train next" above the grid. */
+.nextsess {
+  display: flex; align-items: center; gap: var(--sp-4);
+  padding: var(--sp-4); margin-bottom: var(--sp-4);
+  border: 1px solid rgba(var(--primary-rgb),.35); border-radius: var(--r-md);
+  background: linear-gradient(180deg, var(--primary-soft), transparent);
+}
+.nextsess.is-today { border-color: var(--secondary); background: linear-gradient(180deg, rgba(var(--secondary-rgb),.14), transparent); }
+.nextsess__when {
+  font-family: var(--font-display); font-size: var(--fs-2xl); line-height: 1;
+  text-transform: uppercase; letter-spacing: .02em; color: var(--primary); white-space: nowrap;
+}
+.nextsess.is-today .nextsess__when { color: var(--secondary); }
+.nextsess__main { flex: 1; min-width: 0; }
+.nextsess__type {
+  font-family: var(--font-display); font-size: var(--fs-lg); letter-spacing: .03em;
+  color: var(--text-100); text-transform: uppercase;
+}
+.nextsess__type.is-legs { color: var(--secondary); }
+.nextsess__date { font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: .1em; text-transform: uppercase; color: var(--text-400); margin-top: 2px; }
+.nextsess__tag { font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: .14em; text-transform: uppercase; color: var(--text-400); white-space: nowrap; }
+@media (max-width: 560px) {
+  .nextsess { flex-wrap: wrap; gap: var(--sp-3); }
+  .nextsess__when { font-size: var(--fs-xl); }
+}
 /* run-day marker: a small dot bottom-right so a day can show lift + run together */
 .cal-day--run { box-shadow: inset 0 -3px 0 -1px rgba(var(--accent-rgb),.55); }
 .cal-day--run-done { box-shadow: inset 0 -3px 0 -1px rgba(var(--secondary-rgb),.85); }
@@ -954,7 +1005,10 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 .upcoming__head { font-family: var(--font-mono); font-size: var(--fs-2xs); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--text-400); margin-bottom: var(--sp-2); }
 .upcoming__row { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
 .upcoming__row:last-child { border-bottom: 0; }
-.upcoming__when { font-size: var(--fs-sm); color: var(--text-200); font-family: var(--font-mono); letter-spacing: .02em; }
+.upcoming__when { font-size: var(--fs-sm); color: var(--text-200); font-family: var(--font-mono); letter-spacing: .02em; display: flex; flex-direction: column; gap: 2px; }
+.upcoming__when small { font-size: var(--fs-2xs); color: var(--text-400); letter-spacing: .08em; text-transform: uppercase; }
+.upcoming__row.is-next { background: var(--primary-soft); margin: 0 calc(var(--sp-3) * -1); padding-left: var(--sp-3); padding-right: var(--sp-3); border-radius: var(--r-sm); }
+.upcoming__row.is-next .upcoming__when { color: var(--text-100); font-weight: 700; }
 .upcoming__type { font-family: var(--font-display); font-size: var(--fs-md); letter-spacing: .03em; color: var(--primary); padding: 2px 12px; border: 1px solid rgba(var(--primary-rgb),.3); border-radius: var(--r-pill); background: var(--primary-soft); }
 .upcoming__type.is-legs { color: var(--secondary); border-color: rgba(var(--secondary-rgb),.35); background: rgba(var(--secondary-rgb),.12); }
 .upcoming__type.is-full { color: var(--text-100); border-color: rgba(var(--primary-rgb),.5); background: rgba(var(--primary-rgb),.22); }
@@ -1181,7 +1235,11 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 /* ----------------------------------------------------------------------------
    RUNNING MODULE STYLES — reuses the global design system tokens.
    -------------------------------------------------------------------------- */
-.run-goal-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp-4); }
+/* Four goals. Explicit breakpoints rather than auto-fit, because auto-fit
+   lands on three columns at mid widths and orphans the fourth card alone on
+   a second row. 4 / 2x2 / 1 never leaves a gap. */
+.run-goal-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:var(--sp-4); }
+@media (max-width:1180px){ .run-goal-grid { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:760px){ .run-goal-grid { grid-template-columns:1fr; } }
 .run-goal {
   position:relative; text-align:left; cursor:pointer;
@@ -1264,3 +1322,126 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 
 .run-stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:var(--sp-4); }
 @media (max-width:760px){ .run-stat-row { grid-template-columns:repeat(2,1fr); } }
+
+/* ==========================================================================
+   PHASE VISUALISER  (fitness/phases.js)
+   The muscle fills are set inline from the data ramp rather than from theme
+   tokens — a colour that MEANS something has to stay the same colour in both
+   themes. Everything around them uses the surface/line/text tokens, so the
+   panel still belongs to whichever theme is on.
+   ========================================================================== */
+
+.phz { display: grid; gap: var(--sp-3); }
+
+/* ---- phase tabs ---- */
+.phz-tabs {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  background: var(--ink-850); border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); padding: 4px;
+}
+.phz-tab {
+  flex: 1 1 auto; min-width: 88px;
+  cursor: pointer; font: inherit; font-size: 11px; letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 7px 8px; border-radius: calc(var(--r-sm) - 2px);
+  background: transparent; border: 1px solid transparent; color: var(--text-300);
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.phz-tab:hover { color: var(--text-100); background: var(--ink-700); }
+.phz-tab.is-active {
+  background: var(--primary-soft); border-color: rgba(var(--primary-rgb), .45);
+  color: var(--text-100);
+}
+
+.phz-desc {
+  margin: 0; min-height: 2.6em;
+  font-size: 13px; line-height: 1.55; color: var(--text-200);
+}
+
+/* ---- figures ---- */
+.phz-figs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3);
+}
+.phz-figwrap { margin: 0; display: grid; gap: 4px; justify-items: center; }
+.phz-figwrap figcaption {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-400);
+}
+.phz-fig {
+  width: 100%; max-width: 190px; height: auto;
+  background: var(--ink-850); border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.phz-ref { stroke: var(--text-500); stroke-width: 1.1; stroke-linecap: round; }
+.phz-bone {
+  fill: none; stroke: var(--text-500); stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.phz-head { fill: none; stroke: var(--text-500); stroke-width: 2; }
+/* Muscles sit UNDER the skeleton strokes visually by being drawn after but
+   kept translucent, so the figure's outline stays readable through a fully
+   lit muscle instead of being swallowed by it. */
+.phz-mus { stroke: none; }
+
+/* ---- legend ---- */
+.phz-legend {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-400);
+}
+.phz-legend__ramp {
+  flex: 0 1 120px; height: 8px; border-radius: 4px;
+  border: 1px solid var(--line-2);
+}
+.phz-legend__note { flex: 1 1 auto; text-transform: none; letter-spacing: 0; font-size: 11px; }
+
+/* ---- bars ---- */
+.phz-bars { display: grid; gap: 5px; }
+.phz-bar {
+  display: grid; grid-template-columns: 92px 1fr 42px;
+  align-items: center; gap: 8px;
+}
+.phz-bar__l { font-size: 11.5px; color: var(--text-200); }
+.phz-bar__t {
+  height: 9px; border-radius: 5px; overflow: hidden;
+  background: var(--ink-700); border: 1px solid var(--line);
+}
+.phz-bar__t > i {
+  display: block; height: 100%; width: 0; border-radius: 5px;
+  /* The static fallback has no rAF tween driving it, so it transitions here.
+     The phase view sets width every frame, where a CSS transition would fight
+     the tween — same property, two clocks. It sets width via style each frame,
+     which lands inside this transition's duration and is effectively ignored. */
+  transition: width 120ms linear;
+}
+.phz-bar__v {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px; text-align: right; color: var(--text-300);
+  font-variant-numeric: tabular-nums;
+}
+
+.phz-caveat {
+  margin: 0; padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  font-size: 11.5px; line-height: 1.5; color: var(--text-400);
+}
+.phz-caveat strong { color: var(--text-300); }
+
+/* ---- static fallback ---- */
+.phz-head__t {
+  font-size: 12px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-200); margin-bottom: 3px;
+}
+.phz-head__s { font-size: 11.5px; line-height: 1.5; color: var(--text-400); }
+.phz--static { gap: var(--sp-3); }
+.phz--static .phz-bar { grid-template-columns: 92px 1fr 70px; }
+.phz--static .phz-bar__v { text-transform: uppercase; font-size: 10px; letter-spacing: .05em; }
+
+@media (max-width: 560px) {
+  .phz-figs { grid-template-columns: 1fr; justify-items: center; }
+  .phz-bar { grid-template-columns: 80px 1fr 38px; }
+}
+
+/* Trunk mass: faint enough that the muscle shapes on top stay the signal. */
+.phz-trunk { fill: var(--text-500); fill-opacity: .30; stroke: none; }

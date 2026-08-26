@@ -219,6 +219,20 @@ svg.wh-i {
   display: flex; align-items: center; gap: var(--wh-s3);
   padding: 0 var(--wh-s2) var(--wh-s5);
 }
+.wh-sidebar__brand--btn,
+.wh-logo--btn {
+  cursor: pointer; background: transparent; border: none;
+  font: inherit; text-align: left; width: 100%;
+  border-radius: var(--wh-r-sm);
+  transition: background var(--wh-fast);
+}
+.wh-sidebar__brand--btn:hover { background: var(--bg0-soft); }
+.wh-sidebar__brand--btn:hover .wh-logo { color: var(--fg0); border-color: var(--green-bright); }
+.wh-logo--btn { padding: 0; }
+.wh-logo--btn:hover .wh-logo,
+.wh-logo--btn:hover { color: var(--fg0); }
+.wh-logo--btn:active,
+.wh-sidebar__brand--btn:active { transform: translateY(1px); }
 .wh-logo {
   width: 32px; height: 32px; flex: 0 0 auto;
   display: grid; place-items: center;
@@ -263,6 +277,53 @@ svg.wh-i {
   margin-left: auto; width: 7px; height: 7px; border-radius: 50%;
   background: var(--green-bright); flex: 0 0 auto;
 }
+
+/* --- "At Desk" — one button, everywhere, for the sitting clock
+   js/views/desk.js already tracks (sit.start/sit.stop). Global because the
+   whole point of a sitting clock is that you start it without having to go
+   find the Desk tab first. --- */
+.wh-atdesk-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 7px 12px; border-radius: var(--wh-r);
+  background: var(--bg1); border: 1px solid var(--bg2); color: var(--wh-text-muted);
+  transition: background var(--wh-fast), color var(--wh-fast), border-color var(--wh-fast);
+  white-space: nowrap;
+}
+.wh-atdesk-btn:hover { color: var(--fg0); border-color: var(--green-bright); }
+.wh-atdesk-btn:active { transform: translateY(1px); }
+.wh-atdesk-btn__ic {
+  width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--wh-text-faint);
+}
+/* Running: filled dot, warm border — reads as "on" at a glance from any tab. */
+.wh-atdesk-btn.is-running {
+  background: var(--yellow-soft, rgba(217, 176, 60, .14)); border-color: var(--yellow);
+  color: var(--yellow-bright, var(--yellow));
+}
+.wh-atdesk-btn.is-running .wh-atdesk-btn__ic {
+  background: var(--yellow-bright, var(--yellow));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--yellow) 30%, transparent);
+}
+.wh-sidebar__row { display: flex; gap: var(--wh-s2); margin: 0 var(--wh-s2) var(--wh-s3); }
+.wh-atdesk-btn--sidebar { flex: 1 1 auto; }
+@media (max-width: 640px) {
+  .wh-atdesk-btn__t { display: none; }             /* icon + dot only on mobile — the topbar is tight */
+  .wh-atdesk-btn { padding: 7px 9px; }
+}
+.wh-topbar__right { display: flex; align-items: center; gap: var(--wh-s3); }
+
+/* --- guide "?" button, same treatment across mobile topbar and sidebar --- */
+.wh-guide-btn {
+  width: 30px; height: 30px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  cursor: pointer; font: inherit; font-weight: 700; font-size: 13px;
+  border-radius: 50%;
+  background: var(--bg1); border: 1px solid var(--bg2); color: var(--wh-text-muted);
+  transition: background var(--wh-fast), color var(--wh-fast), border-color var(--wh-fast);
+}
+.wh-guide-btn:hover { color: var(--fg0); border-color: var(--green-bright); }
+.wh-guide-btn:active { transform: translateY(1px); }
 
 .wh-sidebar__foot {
   border-top: 1px solid var(--wh-line);
@@ -1557,3 +1618,50 @@ button.wh-heat__cell:hover { outline: 1px solid var(--fg2); outline-offset: 1px;
   .wh-datenav { flex-wrap: wrap; }
   .wh-backfill { font-size: 12.5px; padding: var(--wh-s2) var(--wh-s3); }
 }
+
+/* ---- guided tour (js/guide.js) --------------------------------------------
+   Third build of this exact spotlight mechanic today (Docket, the Hub, now
+   here) — see Hub/PLAN-guide.md for the two real bugs the second build
+   found (a zero-area "visible" target, no focus trap). Both fixes are
+   already in js/guide.js rather than re-discovered here. */
+.wh-tour { position: fixed; inset: 0; z-index: 500; }
+
+.wh-tour-spot {
+  position: fixed;
+  border: 2px solid var(--yellow-bright);
+  border-radius: var(--wh-r-sm);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .72);
+  transition: top 200ms ease-out, left 200ms ease-out, width 200ms ease-out, height 200ms ease-out;
+  pointer-events: none;
+}
+
+.wh-tour-card {
+  position: fixed;
+  width: min(360px, calc(100vw - 2rem));
+  background: var(--bg0);
+  color: var(--fg1);
+  border: 1px solid var(--wh-line-strong);
+  border-left: 3px solid var(--yellow-bright);
+  border-radius: var(--wh-r);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  padding: var(--wh-s5) var(--wh-s5) var(--wh-s4);
+  transition: top 200ms ease-out, left 200ms ease-out;
+}
+.wh-tour-eyebrow {
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--yellow-bright); margin-bottom: var(--wh-s2);
+}
+.wh-tour-title { margin: 0 0 var(--wh-s2); font-size: 17px; color: var(--fg0); }
+.wh-tour-body { margin: 0 0 var(--wh-s4); font-size: 13.5px; line-height: 1.55; color: var(--fg3); }
+.wh-tour-actions {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--wh-s4);
+  padding-top: var(--wh-s3); border-top: 1px solid var(--wh-line);
+}
+.wh-tour-skip {
+  background: none; border: none; padding: 4px 0; cursor: pointer;
+  font: inherit; font-size: 12px; color: var(--fg4);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.wh-tour-skip:hover { color: var(--yellow-bright); }
+.wh-tour-nav { display: flex; gap: var(--wh-s2); }
+.wh-tour[hidden] { display: none; }

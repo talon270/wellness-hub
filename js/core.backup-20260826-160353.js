@@ -1420,19 +1420,6 @@
   function cueDone()   { beep(660, 150); setTimeout(function () { beep(880, 150); }, 150);
                          setTimeout(function () { beep(1046, 280); }, 300); vibrate([90, 70, 90, 70, 180]); }
 
-  /* A reminder fires while you are very likely NOT looking at this tab — the
-     entire point of it — so it gets the loudest, most insistent cue in the
-     app rather than the same quiet chime a mid-session timer uses right next
-     to your ears. Three sharp double-taps at 0.30 gain vs. the session cues'
-     default 0.14, plus a distinct buzz-pause-buzz-pause vibration pattern
-     that reads as "reminder" even felt through a pocket. */
-  function cueReminder() {
-    [0, 260, 520].forEach(function (t) {
-      setTimeout(function () { beep(880, 120, 0.30); beep(1180, 90, 0.22); }, t + 90);
-    });
-    vibrate([140, 90, 140, 90, 260]);
-  }
-
   /* ======================================================================
      12. NOTIFICATIONS
      ----------------------------------------------------------------------
@@ -1524,13 +1511,6 @@
        the reminder is never silently lost. */
     fire: function (title, body, viewId, remKey) {
       toastReminder(title, body, viewId, remKey);
-      /* A reminder must be heard/felt from any tab, not just seen on the one
-         that happens to be open — a beep at settings volume plus vibration
-         is the only part of a reminder that reaches you when this tab is in
-         the background. cueReminder is deliberately louder than the
-         in-session cues (js/core.js "MASTER TICK"/cueChange/cueDone) rather
-         than sharing their default gain, which is the "not loud enough" gap. */
-      cueReminder();
       if (!this.availableHere() || Notification.permission !== "granted") return;
 
       var opts = {
@@ -1538,16 +1518,7 @@
         tag: "wellness-" + (viewId || "general"),   // replaces, never stacks
         icon: notificationIcon(),
         badge: notificationIcon(),
-        data: { view: viewId || "dashboard", key: remKey || null },
-        /* Persist on screen until you dismiss or act on it, instead of the
-           browser's default few-second auto-hide. This is what actually makes
-           a reminder a computer-wide popup rather than a flash you can miss
-           while looking at a different window. */
-        requireInteraction: true,
-        /* Without this, a SECOND reminder sharing the same tag (the common
-           case — two "Stand up" reminders in a row) silently replaces the
-           first with no new alert sound/vibration at the OS level at all. */
-        renotify: true
+        data: { view: viewId || "dashboard", key: remKey || null }
       };
 
       /* Preferred path: the service worker owns the notification, so clicking

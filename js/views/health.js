@@ -18,6 +18,7 @@
 
   var PILLS = [
     { id: "vitals",   label: "Vitals",       icon: "pulse" },
+    { id: "vo2max",   label: "VO2 Max",      icon: "wind" },
     { id: "labs",     label: "Lab results",  icon: "flask" },
     { id: "checkups", label: "Check-ups",    icon: "calendar" },
     { id: "meds",     label: "Meds & Supps", icon: "pill" },
@@ -345,6 +346,361 @@
           (Math.abs(delta) > 0.001 ? " (" + (delta > 0 ? "+" : "") + Math.round(delta * 10) / 10 + ")" : "") + "</span>" +
       "</div>";
   }
+
+  /* ======================================================================
+     VO2 MAX
+     ----------------------------------------------------------------------
+     A VO2max number is only as good as how it was obtained, so every entry
+     carries a `source` and that source stays visible next to the value
+     everywhere it's shown. A watch estimate and a lab test differ by more
+     than the change you'd be looking for between them, so a history that
+     mixed them without saying which was which would be worse than no
+     history. The Cooper test calculator below fills the form; it never
+     saves on its own.
+     ====================================================================== */
+
+  /* The plausible human range. Below ~10 is incompatible with walking to the
+     kitchen; the highest values ever measured in elite endurance athletes sit
+     in the high 90s. Anything outside this is a data-entry error, not a
+     reading — and the Cooper calculator is held to the same range as the save
+     path so it can never print a number the form would then refuse. */
+  var VO2_MIN = 10, VO2_MAX = 95;
+
+  var VO2_SOURCES = [
+    { key: "device", label: "Device/watch estimate" },
+    { key: "field",  label: "Field-test estimate" },
+    { key: "lab",    label: "Lab-measured" }
+  ];
+  function vo2SourceLabel(key) {
+    return (VO2_SOURCES.filter(function (s) { return s.key === key; })[0] || {}).label || "Unknown source";
+  }
+
+  /* Cooper-Institute-style general-population norms, ml/kg/min, by sex and
+     ten-year age band (`max` is the last age the row covers: ≤29, ≤39, ≤49,
+     ≤59, then everyone older). These are widely published approximations,
+     not a lab-calibrated reference — the disclaimer on the tab says so.
+
+     Published norms start at 20. Anyone younger falls into the ≤29 row,
+     which is the closest available and is flagged in the UI rather than
+     passed off as a band that was written for them. */
+  var VO2_NORMS = {
+    male: [
+      { max: 29, bands: [25, 34, 43, 53, 60] },
+      { max: 39, bands: [23, 31, 39, 49, 56] },
+      { max: 49, bands: [20, 27, 36, 45, 53] },
+      { max: 59, bands: [18, 25, 34, 43, 50] },
+      { max: 999, bands: [16, 23, 31, 41, 46] }
+    ],
+    female: [
+      { max: 29, bands: [24, 31, 38, 49, 55] },
+      { max: 39, bands: [20, 28, 34, 45, 50] },
+      { max: 49, bands: [17, 24, 31, 42, 48] },
+      { max: 59, bands: [15, 21, 28, 38, 44] },
+      { max: 999, bands: [13, 18, 24, 35, 41] }
+    ]
+  };
+  var VO2_CATS = ["Very poor", "Poor", "Fair", "Good", "Excellent", "Superior"];
+
+  function vo2Age() {
+    var dob = (Hub.state.logs.profile || {}).dob;
+    return dob ? Math.floor(Hub.daysBetween(dob, Hub.today()) / 365.25) : null;
+  }
+
+  function vo2Band(value, sex, age) {
+    var table = VO2_NORMS[sex] || VO2_NORMS.male;
+    var row = table.filter(function (r) { return age <= r.max; })[0] || table[table.length - 1];
+    var idx = row.bands.filter(function (b) { return value >= b; }).length; // 0..5
+    var tones = ["bad", "bad", "warn", "good", "good", "good"];
+    return { label: VO2_CATS[idx], tone: tones[idx] };
+  }
+
+  function vo2BandLine(value) {
+    var age = vo2Age();
+    if (age == null) return '<p class="wh-help wh-mt4">Add your date of birth on the ' +
+      '<strong>Profile</strong> pill to see where this sits against age-based reference bands.</p>';
+
+    /* Published norms begin at 20, so a younger reader is being compared
+       against the nearest table rather than one written for their age. */
+    var young = age < 20
+      ? '<p class="wh-help">These norms start at age 20, so you\'re being read against the ' +
+        "20–29 band — treat the category as rough.</p>"
+      : "";
+
+    var gender = (Hub.state.settings.profile || {}).gender;
+    if (gender === "male" || gender === "female") {
+      var b = vo2Band(value, gender, age);
+      return '<p class="wh-sm wh-mt4"><span class="wh-chip wh-chip--' + b.tone + '">' + b.label +
+        '</span> <span class="wh-faint">for a ' + age + '-year-old ' + gender + ' (general population norms)</span></p>' + young;
+    }
+
+    /* No gender on file, or "other" — an identity answer picks a default,
+       it never gates content, so both categories are shown rather than guessed. */
+    var bm = vo2Band(value, "male", age), bf = vo2Band(value, "female", age);
+    return '<p class="wh-sm wh-mt4">' +
+      '<span class="wh-chip wh-chip--' + bm.tone + '">' + bm.label + ' (male norms)</span> ' +
+      '<span class="wh-chip wh-chip--' + bf.tone + '">' + bf.label + ' (female norms)</span></p>' +
+      '<p class="wh-help">No sex on file to pick one table, so both are shown — set it in ' +
+      'Settings if you\'d rather see one.</p>' + young;
+  }
+
+  /* ----------------------------------------------------------------------
+     RAISING IT
+     The training half. The protocols and the 8-week plan live in the running
+     module (`fitness/basalt.js`, goal `vo2max`) because that's where plan
+     generation, the interval timer, the calendar and the run log already are.
+     This card is the guide plus a way in, so the number and the thing that
+     moves the number aren't in two tabs pretending the other doesn't exist.
+     -------------------------------------------------------------------- */
+
+  var VO2_PROTOCOLS = [
+    ["Norwegian 4×4", "4 min hard / 3 min easy × 4",
+     "The most-studied VO2 max session there is. Roughly a 7% gain over 8 weeks in Helgerud's 2007 trial, beating the same volume run continuously."],
+    ["30/30", "30s hard / 30s easy × 12–20",
+     "Billat's protocol. Reaches the same territory as 4×4 at a fraction of the mental cost, which makes it the way in rather than a weaker option."],
+    ["Threshold", "20 min comfortably hard",
+     "Raises how much of your ceiling you can actually hold. Supports the number; doesn't move it much alone."],
+    ["Zone 2 base", "45–70 min conversational",
+     "The unglamorous 80%. Stroke volume and mitochondrial density get built here, and they're what let the hard days be hard enough to count."]
+  ];
+
+  function vo2TrainingCard() {
+    var R = (window.App && App.run) ? App.run : null;
+    var active = R && R.isActive() ? R.goalDef() : null;
+    var onVo2 = active && active.id === "vo2max";
+
+    var status;
+    if (!R) {
+      status = '<p class="wh-sm wh-faint">The training plan lives in the Fitness tab.</p>';
+    } else if (onVo2) {
+      var wk = R.currentWeek() + 1, total = R.totalWeeks();
+      var next = R.nextRun && R.nextRun();
+      status = '<div class="wh-row wh-row--between wh-mb4">' +
+          '<span class="wh-chip wh-chip--good">Week ' + wk + " of " + total + "</span>" +
+          (wk >= total ? '<span class="wh-chip wh-chip--warn">Re-test week</span>' : "") +
+        "</div>" +
+        (next && next.sess
+          ? '<p class="wh-sm">Next: <strong>' + Hub.esc(next.sess.title) + "</strong>" +
+            (next.dateISO ? ' <span class="wh-faint">· ' + Hub.esc(Hub.relDay(next.dateISO)) + "</span>" : "") + "</p>"
+          : "") +
+        '<button type="button" class="wh-btn wh-btn--sm wh-btn--primary wh-mt4" id="hc-goplan">Open the plan</button>';
+    } else if (active) {
+      status = '<p class="wh-sm wh-muted">You\'re running the <strong>' + Hub.esc(active.name) +
+        "</strong> plan right now. Finish it before switching — a half-done block is worth more " +
+        "than two started ones.</p>" +
+        '<button type="button" class="wh-btn wh-btn--sm wh-mt4" id="hc-goplan">See running plans</button>';
+    } else {
+      status = '<p class="wh-sm wh-muted">An 8-week plan is ready: two base weeks, then one hard ' +
+        "session a week, a deload at week 4, and a Cooper re-test at week 8 that logs straight back " +
+        "into this page.</p>" +
+        '<button type="button" class="wh-btn wh-btn--sm wh-btn--primary wh-mt4" id="hc-goplan">Start the 8-week plan</button>';
+    }
+
+    return '<div class="wh-card wh-mb4">' +
+        '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("flame") + "Raising it</div>" +
+          '<span class="wh-chip">8 weeks · 3 runs/week</span></div>' +
+
+        '<div class="wh-stack wh-stack--sm wh-mb4">' + VO2_PROTOCOLS.map(function (p) {
+          return '<div class="wh-vital">' +
+            '<span class="wh-grow"><span class="wh-vital__label">' + p[0] + "</span>" +
+              '<span class="wh-vital__meta">' + Hub.esc(p[2]) + "</span></span>" +
+            '<span class="wh-chip mono">' + Hub.esc(p[1]) + "</span>" +
+          "</div>";
+        }).join("") + "</div>" +
+
+        status +
+
+        '<div class="wh-disclaimer wh-mt4">' + Hub.icon("alert") +
+          "<span><strong>How much this will do for you is genuinely unknown until you re-test.</strong> " +
+          "Given identical training, measured gains across people range from around zero to over 40% — " +
+          "in the HERITAGE study, 20 weeks of the same prescription produced almost the full spread, and " +
+          "a real minority barely moved. Most people gain something. Nobody can tell you in advance which " +
+          "group you're in, which is exactly why week 8 is a re-test and not a congratulations screen. " +
+          "Hard intervals also need a base under them: if you're not already running easily for 25 minutes, " +
+          "do the First 5K or Stamina plan first.</span></div>" +
+      "</div>";
+  }
+
+  var vo2max = {
+    render: function () {
+      var entries = (Hub.state.logs.vo2max || []).slice().sort(function (a, b) {
+        return b.date < a.date ? -1 : 1;
+      });
+      var latest = entries[0] || null;
+      var series = entries.slice().reverse().map(function (e) { return { date: e.date, v: e.value }; });
+
+      return vo2TrainingCard() +
+
+        '<div class="wh-grid wh-grid--2 wh-mb4">' +
+          /* ---------- Cooper test calculator ---------- */
+          '<div class="wh-card">' +
+            '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("wind") + "Cooper test estimate</div></div>" +
+            '<p class="wh-sm wh-muted wh-mb4">Run as far as you can in <strong>12 minutes</strong>, flat out but ' +
+              "sustainable, then enter the distance. No watch estimate or lab test needed.</p>" +
+            '<label class="wh-field"><span class="wh-field__label">Distance covered (km)</span>' +
+              '<input class="wh-input" type="number" id="hc-dist" min="0.5" max="6" step="0.01" ' +
+              'inputmode="decimal" placeholder="2.40" /></label>' +
+            '<button type="button" class="wh-btn wh-btn--sm wh-mt4" id="hc-calc">' + Hub.icon("lungs") + "Calculate</button>" +
+            '<div id="hc-result" class="wh-mt4"></div>' +
+          "</div>" +
+
+          /* ---------- entry form ---------- */
+          '<div class="wh-card wh-card--accent">' +
+            '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("plus") + "New reading</div></div>" +
+            '<div class="wh-grid wh-grid--2" style="gap:var(--wh-s3)">' +
+              '<label class="wh-field"><span class="wh-field__label">Date</span>' +
+                '<input class="wh-input" type="date" id="hc-date" value="' + Hub.viewDate() +
+                  '" max="' + Hub.today() + '" /></label>' +
+              '<label class="wh-field"><span class="wh-field__label">VO2max (ml/kg/min)</span>' +
+                '<input class="wh-input" type="number" id="hc-value" min="' + VO2_MIN + '" max="' + VO2_MAX + '" step="0.1" ' +
+                'inputmode="decimal" placeholder="42.0" /></label>' +
+            "</div>" +
+            '<label class="wh-field wh-mt4"><span class="wh-field__label">Source</span>' +
+              '<select class="wh-input" id="hc-source">' + VO2_SOURCES.map(function (s) {
+                return '<option value="' + s.key + '">' + s.label + "</option>";
+              }).join("") + "</select></label>" +
+            '<label class="wh-field wh-mt4"><span class="wh-field__label">Note (optional)</span>' +
+              '<input class="wh-input" type="text" id="hc-note" maxlength="80" placeholder="race, treadmill test…" /></label>' +
+            '<button type="button" class="wh-btn wh-btn--primary wh-btn--block wh-mt4" id="hc-save">' +
+              Hub.icon("check") + "Save reading</button>" +
+          "</div>" +
+        "</div>" +
+
+        /* ---------- latest + trend ---------- */
+        '<div class="wh-card wh-mb4">' +
+          '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("wind") + "Latest</div></div>" +
+          (latest
+            ? '<div class="wh-vital">' +
+                '<span class="wh-vital__ic" style="color:var(--blue-bright)">' + Hub.icon("wind") + "</span>" +
+                '<span class="wh-grow"><span class="wh-vital__label">VO2max</span>' +
+                  '<span class="wh-vital__meta">' + Hub.relDay(latest.date) + " · " + vo2SourceLabel(latest.source) + "</span></span>" +
+                '<span class="wh-vital__value">' + latest.value + "<small> ml/kg/min</small></span>" +
+              "</div>" + vo2BandLine(latest.value) +
+              (series.length >= 2 ? sparkline(series, "var(--blue-bright)", " ml/kg/min") : "")
+            : '<div class="wh-empty">' + Hub.icon("wind") + "<strong>Nothing recorded yet</strong>" +
+              "Run the Cooper test above, copy a number from your watch, or enter a lab result.</div>") +
+        "</div>" +
+
+        /* ---------- history ---------- */
+        '<div class="wh-card">' +
+          '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("clockIc") + "History</div>" +
+            '<span class="wh-chip">' + entries.length + " " + Hub.plural(entries.length, "reading") + "</span></div>" +
+          (entries.length
+            ? '<div class="wh-loglist">' + entries.slice(0, 20).map(function (e) {
+                return '<div class="wh-logrow">' +
+                  '<span class="wh-logrow__date">' + Hub.prettyDate(e.date) + "</span>" +
+                  '<span class="wh-grow"><span class="wh-chip mono">' + e.value + " ml/kg/min</span> " +
+                    '<span class="wh-chip">' + vo2SourceLabel(e.source) + "</span>" +
+                    (e.note ? ' <span class="wh-xs wh-faint">' + Hub.esc(e.note) + "</span>" : "") + "</span>" +
+                  '<button type="button" class="wh-logrow__del" data-delvo2="' + e.id + '" ' +
+                    'aria-label="Delete reading from ' + Hub.prettyDate(e.date) + '">' + Hub.icon("trash") + "</button>" +
+                "</div>";
+              }).join("") + "</div>"
+            : '<p class="wh-sm wh-faint">No readings yet.</p>') +
+        "</div>" +
+
+        '<div class="wh-disclaimer wh-mt4">' + Hub.icon("alert") +
+          "<span>The reference bands are <strong>general adult population norms, not a diagnosis</strong>, " +
+          "and don't account for training history, altitude or health conditions. The Cooper test formula " +
+          "carries a real margin of error — commonly cited at around <strong>±3.5 ml/kg/min</strong> against a " +
+          "lab-measured value — and a watch estimate has its own, usually undisclosed, error. That's why every " +
+          "reading keeps its source: a device estimate, a field test and a lab test are not the same precision, " +
+          "and treating them as interchangeable would hide that.</span></div>";
+    },
+
+    wire: function (el) {
+      /* Hand off to the running module. If no plan is running, pre-select the
+         VO2 max goal so the chooser opens on the one they came here for —
+         but never auto-start it: picking a training block is the user's call,
+         not a side effect of tapping a link. */
+      var go = el.querySelector("#hc-goplan");
+      if (go) go.addEventListener("click", function () {
+        Hub.show("fitness");
+        setTimeout(function () {
+          if (window.App && App.showSection) App.showSection("running");
+        }, 60);
+      });
+
+      el.querySelector("#hc-calc").addEventListener("click", function () {
+        var km = parseFloat(el.querySelector("#hc-dist").value);
+        var out = el.querySelector("#hc-result");
+        if (!isFinite(km) || km <= 0) {
+          out.innerHTML = '<p class="wh-sm wh-faint">Enter the distance you covered.</p>';
+          return;
+        }
+        var vo2 = (km * 1000 - 504.9) / 44.73;
+        vo2 = Math.round(vo2 * 10) / 10;
+
+        /* The formula has a 504.9m intercept, so anything under about half a
+           kilometre goes negative — and the field is in km while every
+           published version of the test states the distance in metres, which
+           makes "2400" a genuinely easy thing to type. Say which it is rather
+           than printing an impossible number. */
+        if (vo2 < VO2_MIN || vo2 > VO2_MAX) {
+          out.innerHTML = '<p class="wh-sm wh-chip wh-chip--warn" style="display:inline-block">' +
+              "That gives " + vo2 + " ml/kg/min</p>" +
+            '<p class="wh-help wh-mt4">Outside the plausible range of ' + VO2_MIN + "–" + VO2_MAX +
+              " ml/kg/min, so it hasn't been offered. " +
+              (km > 100
+                ? "Did you mean <strong>" + (Math.round(km / 10) / 100) + " km</strong>? This field is in " +
+                  "kilometres — the test is usually written up in metres."
+                : "Check the distance — the Cooper test is 12 minutes of running.") + "</p>";
+          return;
+        }
+
+        out.innerHTML = '<div class="wh-vital">' +
+            '<span class="wh-vital__value">' + vo2 + "<small> ml/kg/min</small></span>" +
+          "</div>" +
+          '<p class="wh-help">±3.5 ml/kg/min against a lab test. ' +
+            '<button type="button" class="wh-btn wh-btn--sm wh-btn--ghost" id="hc-use">Use this value</button></p>';
+        el.querySelector("#hc-use").addEventListener("click", function () {
+          el.querySelector("#hc-value").value = vo2;
+          el.querySelector("#hc-source").value = "field";
+          el.querySelector("#hc-value").focus();
+        });
+      });
+
+      el.querySelector("#hc-save").addEventListener("click", function () {
+        var date = el.querySelector("#hc-date").value;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) date = Hub.viewDate();
+        if (Hub.daysBetween(date, Hub.today()) < 0) {
+          Hub.toast("You can't record a reading in the future.", "warn");
+          return;
+        }
+        var value = parseFloat(el.querySelector("#hc-value").value);
+        if (!isFinite(value) || value < VO2_MIN || value > VO2_MAX) {
+          Hub.toast("Enter a VO2max between " + VO2_MIN + " and " + VO2_MAX + " ml/kg/min.", "warn");
+          return;
+        }
+
+        Hub.state.logs.vo2max.push({
+          id: "o" + Date.now(),
+          date: date,
+          value: Math.round(value * 10) / 10,
+          source: el.querySelector("#hc-source").value,
+          note: el.querySelector("#hc-note").value.trim() || null
+        });
+        Hub.commit();
+        Hub.beep(700, 90);
+        Hub.toast("Reading saved for " + Hub.prettyDate(date) + ".", "success");
+      });
+
+      Hub.delegate(el, "[data-delvo2]", function (b) {
+        var id = b.dataset.delvo2;
+        var e = (Hub.state.logs.vo2max || []).filter(function (x) { return x.id === id; })[0];
+        if (!e) return;
+        Hub.confirm({
+          title: "Delete this reading?",
+          body: "The reading from <strong>" + Hub.prettyDate(e.date) + "</strong> will be removed. This can't be undone.",
+          confirmLabel: "Delete",
+          onConfirm: function () {
+            Hub.state.logs.vo2max = Hub.state.logs.vo2max.filter(function (x) { return x.id !== id; });
+            Hub.commit();
+            Hub.toast("Reading deleted.", "info", 2000);
+          }
+        });
+      });
+    }
+  };
 
   /* ======================================================================
      LAB RESULTS
@@ -1444,6 +1800,16 @@
           }).join("; ") + "</li>";
       });
 
+    /* Most recent first, capped at three. Each one names how it was obtained —
+       handing a clinician a bare number would imply a precision that a watch
+       estimate doesn't have. */
+    var vo2List = (s.logs.vo2max || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; })
+      .slice(0, 3).map(function (v) {
+        return "<li><b>" + esc(v.value) + " ml/kg/min</b> — " + esc(Hub.prettyDate(v.date)) +
+          " (" + esc(vo2SourceLabel(v.source).toLowerCase()) + ")" +
+          (v.note ? " — " + esc(v.note) : "") + "</li>";
+      });
+
     var checkupList = (s.logs.checkups || []).map(function (c) {
       var st = Hub.gamify.checkupStatus(c);
       return "<li>" + esc(c.name) + " — " +
@@ -1490,6 +1856,7 @@
         section("Current medication &amp; supplements", ul(medsList) || "<p>None recorded.</p>") +
         section("Recent measurements", latest ? "<ul>" + latest + "</ul>" : "<p>None recorded.</p>") +
         section("Recent lab results", ul(labList)) +
+        section("VO2 max", ul(vo2List)) +
         section("Vaccinations", ul(vaccList)) +
         section("Check-ups", ul(checkupList)) +
         (avgSleep ? section("Context", "<ul><li>Sleep averaged <b>" + avgSleep +
@@ -1525,7 +1892,7 @@
   /* ======================================================================
      VIEW
      ====================================================================== */
-  var SECTIONS = { vitals: vitals, labs: labs, checkups: checkups, meds: meds, profile: profile };
+  var SECTIONS = { vitals: vitals, vo2max: vo2max, labs: labs, checkups: checkups, meds: meds, profile: profile };
 
   function render(el) {
     var pill = currentPill();

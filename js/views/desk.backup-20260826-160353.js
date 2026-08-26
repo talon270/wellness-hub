@@ -692,11 +692,6 @@
   Hub.desk = {
     logStand: logStand,
     startSitting: function () { sit.start(); },
-    /* No `stood` claim from the global toggle — it knows you turned the
-       clock off, not that you actually got up. The Desk tab's own "Stood
-       up" button is the one place that awards a stand-break credit, so
-       clicking this everywhere-button never silently inflates that count. */
-    stopSitting: function () { return sit.stop(false); },
     sittingMinutes: function () { return sit.minutes(); },
     isSitting: function () { return !!sit.open(); },
     quickBreak: function () {

@@ -10,18 +10,10 @@
         persistent, which exempts it from automatic eviction under pressure.
         One call, permanent effect, no downside.
 
-     2. LINKED FOLDER — with the File System Access API you pick a folder on
-        disk once. The app keeps wellness-hub.json in it, rewritten as you log
-        things, plus rolling backups in backups/. The grant survives restarts
-        in IndexedDB; Chrome re-confirms once per browsing session.
-
-        A folder rather than a file, because a file picker hands back the file
-        with no way to reach its parent — which left the backups nowhere to go.
-
-     2b. SYNC — that file is a sync source, not a one-way backup. Put the
-        folder in a Syncthing share and three machines stay in step: the app
-        reads and MERGES on startup and whenever the tab regains focus. The
-        merge rules live in js/syncmerge.js; the plumbing in vendor/sync.js.
+     2. LINKED BACKUP FILE — with the File System Access API you can pick a real
+        file on disk once. From then on the app rewrites it automatically as you
+        log things, debounced. The handle survives restarts in IndexedDB, so
+        this keeps working with no further prompts.
 
      3. RESTORE — if storage ever does get cleared, the app notices it's empty,
         finds the linked file still there, and offers to restore from it.
@@ -54,6 +46,7 @@
   var WRITE_DEBOUNCE_MS = 4000;
 
   var writeTimer = null;
+  var handle = null;          // FileSystemFileHandle, once linked
   var lastWrite = null;       // ISO of the last successful write
   var lastError = null;
 
@@ -267,169 +260,106 @@
   }
 
   function fsSupported() {
-    return typeof window.showDirectoryPicker === "function";
+    return typeof window.showSaveFilePicker === "function";
   }
 
   /* ======================================================================
-     4. LINKING A FOLDER, OR GOOGLE DRIVE
-     ----------------------------------------------------------------------
-     The file used to be a one-way backup: Helth wrote to it and only ever
-     read it back through an explicit, full-replace restore. That is safe on
-     one machine and destructive on two — the second machine to write wins
-     outright, and the morning you logged on the first is simply gone.
-
-     It is now a sync source, with a choice of two transports — one per
-     machine, never both (PLAN-drive-sync.md §Q6):
-
-       · FOLDER  a Syncthing-shared directory via the File System Access API.
-         Handles, permissions, writes, rolling backups live in vendor/sync.js.
-       · DRIVE   the Google Drive REST API, no daemon required on any
-         machine. Same job, done in js/syncdrive.js.
-
-     Either way the merge rules are the same and live in js/syncmerge.js,
-     because only this app knows that a desk session must not travel and
-     that "last done" is a maximum — the transport underneath never touches
-     that logic.
-
-     A folder rather than a single file: a file picker hands back the file
-     with no way to reach its parent, so the rolling backups had nowhere to
-     go. Drive's folder-plus-file pairing solves the same problem its own way.
+     4. LINKING A FILE
      ====================================================================== */
-
-  var TRANSPORT_KEY = "syncTransport";   // "folder" | "drive", via Hub.uiGet/uiSet
-
-  var folderSync = window.Sync.create({
-    appId: "wellness-hub",
-    fileName: "wellness-hub.json",
-    dbName: "wellness-hub-sync",
-    backupPrefix: "helth.backup-",
-    merge: function (fileP, localP) { return Hub.syncMerge.mergePayload(fileP, localP); },
-    onStatus: function () { try { Hub.refresh(); } catch (e) {} }
-  });
-
-  var driveSync = window.SyncDrive.create({
-    appId: "wellness-hub",
-    fileName: "wellness-hub.json",
-    folderName: "Helth Sync",
-    dbName: "wellness-hub-drive",
-    backupPrefix: "helth.backup-",
-    merge: function (fileP, localP) { return Hub.syncMerge.mergePayload(fileP, localP); },
-    onStatus: function () { try { Hub.refresh(); } catch (e) {} }
-  });
-
-  /* Defaults to "folder" so a machine that linked before Drive existed keeps
-     behaving exactly as it did — the preference is only ever set to "drive"
-     by an explicit click on "Connect Google Drive". */
-  function transport() { return Hub.uiGet(TRANSPORT_KEY, "folder"); }
-  function activeSync() { return transport() === "drive" ? driveSync : folderSync; }
-
   function link() {
     if (!fsSupported()) return Promise.resolve(false);
-    var swap = transport() === "drive" && driveSync.hasFile()
-      ? driveSync.forget().then(function () {
-          Hub.toast("Google Drive unlinked — switching this machine to a linked folder instead.", "info", 5000);
-        })
-      : Promise.resolve();
-    return swap.then(function () {
-      return folderSync.connect({ create: true })
-        .then(function () {
-          Hub.uiSet(TRANSPORT_KEY, "folder");
-          startWatch(folderSync);
-          return writeNow();
-        })
-        .then(function () {
-          Hub.toast("Folder linked. It'll keep itself up to date from now on.", "success", 5000);
-          Hub.refresh();
-          return true;
-        });
+    return window.showSaveFilePicker({
+      suggestedName: "wellness-hub-backup.json",
+      types: [{ description: "Wellness Hub backup", accept: { "application/json": [".json"] } }]
+    }).then(function (h) {
+      handle = h;
+      return idbSet(HANDLE_KEY, h);
+    }).then(function () {
+      return writeNow();
+    }).then(function () {
+      Hub.toast("Backup file linked. It'll keep itself up to date from now on.", "success", 5000);
+      Hub.refresh();
+      return true;
     }).catch(function (err) {
       /* AbortError just means they closed the picker. */
       if (err && err.name === "AbortError") return false;
       lastError = String(err && err.message || err);
-      Hub.toast("Couldn't link that folder: " + lastError, "danger", 6000);
+      Hub.toast("Couldn't link that file: " + lastError, "danger", 6000);
       return false;
     });
   }
 
   function unlink() {
+    handle = null;
     lastWrite = null;
-    return folderSync.forget().then(function () {
-      Hub.toast("Folder unlinked. Nothing on disk was deleted.", "info", 4000);
+    return idbDel(HANDLE_KEY).then(function () {
+      Hub.toast("Backup file unlinked. Nothing was deleted.", "info", 4000);
       Hub.refresh();
     });
   }
 
-  function linkDrive() {
-    if (!driveSync.configured()) {
-      Hub.toast("Google Drive isn't set up yet — see PLAN-drive-sync.md §B5.", "warn", 6000);
-      return Promise.resolve(false);
-    }
-    var swap = transport() === "folder" && folderSync.hasFile()
-      ? folderSync.forget().then(function () {
-          Hub.toast("Linked folder unlinked — switching this machine to Google Drive instead.", "info", 5000);
-        })
-      : Promise.resolve();
-    return swap.then(function () {
-      return driveSync.connect()
-        .then(function () {
-          Hub.uiSet(TRANSPORT_KEY, "drive");
-          startWatch(driveSync);
-          return writeNow();
-        })
-        .then(function () {
-          Hub.toast("Google Drive linked. It'll keep itself up to date from now on.", "success", 5000);
-          Hub.refresh();
-          return true;
-        });
-    }).catch(function (err) {
-      lastError = String(err && err.message || err);
-      Hub.toast("Couldn't connect Google Drive: " + lastError, "danger", 6000);
-      return false;
-    });
+  /* Restore the handle at boot. Permission may need re-granting after a
+     browser restart — we check without prompting, and only prompt on demand. */
+  function restoreHandle() {
+    if (!fsSupported()) return Promise.resolve(null);
+    return idbGet(HANDLE_KEY).then(function (h) {
+      if (!h) return null;
+      handle = h;
+      return h;
+    }).catch(function () { return null; });
   }
 
-  function unlinkDrive() {
-    lastWrite = null;
-    return driveSync.forget().then(function () {
-      Hub.toast("Google Drive unlinked. Nothing in Drive was deleted.", "info", 4000);
-      Hub.refresh();
-    });
+  function permission(mode) {
+    if (!handle || !handle.queryPermission) return Promise.resolve("granted");
+    return handle.queryPermission({ mode: mode || "readwrite" });
   }
 
-  function ensurePermission() {
-    /* Must be called from a user gesture, which is why the UI has an explicit
-       "reconnect" button rather than trying this on a timer. */
-    return activeSync().reconnect().then(function (s) { return s === "synced"; });
+  function ensurePermission(mode) {
+    if (!handle) return Promise.resolve(false);
+    return permission(mode).then(function (state) {
+      if (state === "granted") return true;
+      if (!handle.requestPermission) return false;
+      /* Must be called from a user gesture, which is why the UI has an
+         explicit "reconnect" button rather than trying this on a timer. */
+      return handle.requestPermission({ mode: mode || "readwrite" })
+        .then(function (s) { return s === "granted"; });
+    }).catch(function () { return false; });
   }
 
   /* ======================================================================
      5. WRITING
      ====================================================================== */
-  /* The debounce stays on this side rather than inside sync.js: the payload
-     is assembled asynchronously (the photo bytes live in IndexedDB), so there
-     is nothing to hand a synchronous debounce until fullPayload resolves. */
   function writeNow() {
-    var sync = activeSync();
-    if (!sync.hasFile()) return Promise.resolve(false);
-    return fullPayload()
-      .then(function (data) { return sync.writeNow(data); })
-      .then(function (ok) {
-        if (!ok) { lastError = sync.info().lastError; return false; }
-        lastWrite = new Date().toISOString();
-        lastError = null;
-        try { Hub.uiSet("lastFileBackup", lastWrite); } catch (e) {}
-        return true;
-      })
-      .catch(function (err) {
-        lastError = String(err && err.message || err);
+    if (!handle) return Promise.resolve(false);
+    return permission("readwrite").then(function (state) {
+      if (state !== "granted") {
+        /* Silent failure here is correct: we can't prompt without a gesture,
+           and the Settings card surfaces the reconnect button. */
+        lastError = "permission-needed";
         return false;
-      });
+      }
+      return fullPayload()
+        .then(function (data) {
+          return handle.createWritable().then(function (w) {
+            return w.write(JSON.stringify(data, null, 2)).then(function () { return w.close(); });
+          });
+        })
+        .then(function () {
+          lastWrite = new Date().toISOString();
+          lastError = null;
+          try { Hub.uiSet("lastFileBackup", lastWrite); } catch (e) {}
+          return true;
+        });
+    }).catch(function (err) {
+      lastError = String(err && err.message || err);
+      return false;
+    });
   }
 
   /* Called by Hub.commit on every change. Debounced so a burst of taps is one
      write, and quiet when nothing is linked. */
   function scheduleWrite() {
-    if (!activeSync().hasFile()) return;
+    if (!handle) return;
     if (writeTimer) clearTimeout(writeTimer);
     writeTimer = setTimeout(function () {
       writeTimer = null;
@@ -447,7 +377,13 @@
      6. RESTORING
      ====================================================================== */
   function readLinkedFile() {
-    return activeSync().readFile().catch(function () { return null; });
+    if (!handle) return Promise.resolve(null);
+    return ensurePermission("read").then(function (ok) {
+      if (!ok) return null;
+      return handle.getFile().then(function (f) { return f.text(); }).then(function (text) {
+        try { return JSON.parse(text); } catch (e) { return null; }
+      });
+    }).catch(function () { return null; });
   }
 
   function restoreFromFile() {
@@ -485,7 +421,7 @@
      certainly cleared site data rather than a genuine first run. Offer the
      rescue instead of silently starting from zero. */
   function offerRescueIfEmpty() {
-    if (!activeSync().hasFile()) return;
+    if (!handle) return;
     var looksEmpty = Hub.dayKeys().length === 0 &&
                      (Hub.state.logs.sleep || []).length === 0 &&
                      Object.keys(Hub.state.badges).length === 0;
@@ -684,7 +620,7 @@
 
   /* Nag, gently, if it's been a while and nothing is linked. */
   function checkBackupAge() {
-    if (activeSync().hasFile()) return;        // a linked transport keeps itself current
+    if (handle) return;                       // linked file keeps itself current
     var last = Hub.uiGet("lastDownloadBackup", null);
     var days = last ? Hub.daysBetween(Hub.ymd(new Date(last)), Hub.today()) : null;
     if (Hub.dayKeys().length < 7) return;     // nothing worth losing yet
@@ -702,22 +638,14 @@
      8. STATUS + BOOT
      ====================================================================== */
   function status() {
-    var sync = activeSync();
     return {
       fsSupported: fsSupported(),
-      linked: sync.hasFile(),
-      fileName: sync.hasFile() ? "wellness-hub.json" : null,
-      deviceId: sync.deviceId(),
-      syncStatus: sync.status(),
-      transport: transport(),
+      linked: !!handle,
+      fileName: handle ? handle.name : null,
       lastWrite: lastWrite || Hub.uiGet("lastFileBackup", null),
       lastDownload: Hub.uiGet("lastDownloadBackup", null),
       lastError: lastError,
-      canPersist: canPersist(),
-      /* Per-transport, so Settings can render two independent cards rather
-         than guessing which one a single flat status belongs to. */
-      folder: { fsSupported: fsSupported(), linked: folderSync.hasFile(), syncStatus: folderSync.status() },
-      drive: { configured: driveSync.configured(), linked: driveSync.hasFile(), syncStatus: driveSync.status() }
+      canPersist: canPersist()
     };
   }
 
@@ -729,32 +657,10 @@
       return requestPersist();
     });
 
-    /* Read the linked transport, merge it into what this machine already has,
-       and write the result back. This is the step that turns the file from a
-       backup into a sync source — before it, the second machine to write
-       simply won and the first machine's morning was gone. */
-    var sync = activeSync();
-    sync.init(function () { return payload(); }).then(function (r) {
-      if (r.status === "corrupt") {
-        /* Never write over it. A file that will not parse is the only
-           evidence of what went wrong, and overwriting it destroys that. */
-        Hub.toast("The linked file won't parse — running on this browser's copy and leaving the file alone.", "danger", 9000);
-        return;
-      }
-      if (!sync.hasFile()) { checkBackupAge(); return; }
-      if (r.merged && r.data && r.data.wellnessHub) applyMerged(r.data, r.from);
+    restoreHandle().then(function () {
+      if (!handle) { checkBackupAge(); return; }
       offerRescueIfEmpty();
-      writeNow();
-    }).catch(function () { checkBackupAge(); });
-
-    /* Another machine may have written while this tab was in the background.
-       Without this the next commit writes stale state over fresh — the exact
-       failure the merge exists to prevent, and one that only ran at startup
-       until now.
-
-       Held off while a dialog is open: a view rearranging under the form you
-       are filling in is its own kind of surprise. */
-    startWatch(sync);
+    });
 
     /* Don't lose the last few taps when the tab closes or is backgrounded.
        visibilitychange is the reliable one on mobile; pagehide covers the rest. */
@@ -762,49 +668,6 @@
       if (document.visibilityState === "hidden") flush();
     });
     window.addEventListener("pagehide", flush);
-  }
-
-  /* Each transport's own watch() call is idempotent (it no-ops after the
-     first call — see vendor/sync.js / js/syncdrive.js), so calling this again
-     after a mid-session transport switch (link() / linkDrive()) is safe and
-     is what starts the newly-connected transport's own focus-refresh. */
-  function startWatch(sync) {
-    sync.watch(
-      function () { return payload(); },
-      function (merged) { applyMerged(merged, null); },
-      function () { return !!document.querySelector(".modal:not([hidden]), dialog[open]"); }
-    );
-  }
-
-  /* Apply a merged payload to the running app. Photos come back through the
-     same path a restore uses, and streaks are recomputed rather than trusted:
-     gamify.js:9 says that field is a cache, so a merged one would be two
-     possibly-wrong answers combined instead of the right one recalculated. */
-  function applyMerged(merged, fromDevice) {
-    try {
-      Hub.setState(merged.wellnessHub);
-      if (merged.ironframe) {
-        try { localStorage.setItem(IRONFRAME_KEY, JSON.stringify(merged.ironframe)); } catch (e) {}
-        /* BASALT (fitness/basalt.js) boots from its own DOMContentLoaded
-           handler and reads this key into its own in-memory state before
-           this merge has any chance to run — writing localStorage alone
-           left the fitness tab showing whatever it booted with, even though
-           the merged data was sitting right there. Tell it to reload. */
-        try { if (window.App && window.App.reloadFromRemote) window.App.reloadFromRemote(); } catch (e) {}
-      }
-      if (merged.photoData && Object.keys(merged.photoData).length) {
-        restorePhotoData(merged.photoData);
-      }
-      if (Hub.gamify) Hub.gamify.recompute();
-      Hub.save();
-      Hub.refresh();
-      Hub.toast(
-        fromDevice ? "Updated from " + fromDevice + "." : "Updated from another device.",
-        "info", 5000
-      );
-    } catch (e) {
-      console.warn("Wellness Hub: merge could not be applied", e);
-    }
   }
 
   Hub.storage = {
@@ -829,18 +692,10 @@
     requestPersist: requestPersist,
     link: link,
     unlink: unlink,
-    linkDrive: linkDrive,
-    unlinkDrive: unlinkDrive,
     writeNow: writeNow,
     scheduleWrite: scheduleWrite,
     flush: flush,
     ensurePermission: ensurePermission,
-    deviceId: function () { return activeSync().deviceId(); },
-    /* Drive has no equivalent of a Syncthing conflict file — see
-       PLAN-drive-sync.md §A3, it merges on write instead — so this is only
-       ever non-empty for the folder transport. */
-    listConflicts: function () { return folderSync.listConflicts(); },
-    syncInfo: function () { return activeSync().info(); },
     restoreFromFile: restoreFromFile,
     downloadBackup: downloadBackup,
     fsSupported: fsSupported

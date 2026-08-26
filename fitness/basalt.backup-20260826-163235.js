@@ -44,7 +44,7 @@
     }
   ];
   var UI_KEY        = "ironframe.ui";        // tiny, non-schema UI prefs
-  var SCHEMA_VERSION = 3;                    // v2: prefs.sessionLength · v3: repaired progression targets
+  var SCHEMA_VERSION = 2;                    // v2: prefs.sessionLength
 
   /* ----------------------------------------------------------------------
      STATIC PROGRAM DATA — Level 1–6 progressions per movement pattern.
@@ -213,57 +213,12 @@
          below IS the migration: every pre-v2 save keeps the session shape it
          already had and nobody's program silently gets longer on upgrade. */
       state = deepMerge(defaultState(), state);
-      if (state.version < 3) repairTargets(state);   // v2 -> v3, see below
       state.version = SCHEMA_VERSION;
     } else {
-      // Same version: still backfill keys added during default development.
+      // Same version: still backfill keys added during development.
       state = deepMerge(defaultState(), state);
     }
     return state;
-  }
-
-  /* v2 -> v3 · REPAIR TARGETS LEFT BY THE OLD PROGRESSION CODE
-     ----------------------------------------------------------------------
-     Two defects wrote real, wrong numbers into saved state, so fixing the
-     algorithm alone would leave existing users on the damage:
-
-       1. BASE_REPS.core was 30 — a SECONDS value — and levelling core from
-          L4 (L-Sit, hold) to L5 (Dragon Flag Negative, reps) copied it
-          straight across as a REP target. Anyone who made that jump is
-          carrying "30 reps of dragon flag negatives".
-       2. Hold targets could climb past the point their own progression says
-          to advance at, one second per session, with nothing to stop them.
-
-     Targets are only ever moved DOWN here, and only when they are impossible
-     for the movement actually prescribed — a target you legitimately earned
-     is never touched.
-
-     This runs in the FIRST IIFE, where the exercise DB and the engine's
-     tables do not exist as locals — they are defined in later blocks. It
-     therefore reads them off the globals they publish (window.DB,
-     App.engine), and no-ops if it is somehow called before they exist rather
-     than throwing on every legacy load. */
-  function repairTargets(state) {
-    var tiers = state.tiers; if (!tiers) return;
-    var db = window.DB;
-    var eng = window.App && window.App.engine;
-    if (!db || !db.byLevel || !eng) return;
-    var caps = eng.HOLD_ADVANCE_AT || {};
-    var baseReps = { push: 12, pull: 8, squat: 14, hinge: 14, core: 5, shoulder: 8, dip: 8 };
-
-    Object.keys(tiers).forEach(function (p) {
-      var t = tiers[p]; if (!t || typeof t.repsTarget !== "number") return;
-      var ex = db.byLevel(p, t.level || 1);
-      if (!ex) return;
-      if (ex.mode === "hold") {
-        var cap = caps[ex.id];
-        if (cap && t.repsTarget > cap) t.repsTarget = cap;
-      } else if (t.repsTarget > 25) {
-        /* No reps-mode movement in this library is a 25+ rep prescription;
-           a number that high against a reps movement is leaked seconds. */
-        t.repsTarget = baseReps[p] || 8;
-      }
-    });
   }
 
   /* Deep-merge `source` onto a fresh `base` so newly-added schema keys are
@@ -1850,68 +1805,9 @@
     focused: { label: "Focused", desc: "3-4 movements — the core of the day" },
     full:    { label: "Full",    desc: "+1 antagonist movement, doesn't affect your ladders" }
   };
-  /* Reps-mode starting targets. `core: 30` USED to live here too and was the
-     source of a real bug: core's ladder switches from holds (L1-L4) to reps
-     (L5 Dragon Flag Negative), and levelling into L5 read this table and
-     prescribed 30 REPS of dragon flag negatives. A seconds value cannot
-     double as a reps value; holds get HOLD_START below instead. */
-  var BASE_REPS    = { push: 12, pull: 8, squat: 14, hinge: 14, core: 5, shoulder: 8, dip: 8 };
+  var BASE_REPS    = { push: 12, pull: 8, squat: 14, hinge: 14, core: 30, shoulder: 8, dip: 8 };
   var TARGET_SETS  = 3;
   var DAYS_PER_WEEK = 4;
-
-  /* ------------------------------------------------------------------------
-     PROGRESSION CALIBRATION
-     ------------------------------------------------------------------------
-     A flat ±1 was applied to every target regardless of unit, so a 30-second
-     plank progressed to 31 seconds — a 3% step — while a 5-rep pull-up
-     progressed to 6, a 20% step. Same code, opposite meanings.
-
-     Steps are BANDED by the current value, so a number that is already large
-     moves in proportionally larger jumps instead of crawling.
-     ------------------------------------------------------------------------ */
-  var STEP_BANDS = {
-    /* seconds: a hold under 45s is still short enough that 5s is a real
-       increase; past 90s, 5s is noise. */
-    hold: [{ under: 45, step: 5 }, { under: 90, step: 10 }, { under: Infinity, step: 15 }],
-    /* reps: +1 is genuinely standard calisthenics programming at low counts.
-       Past a dozen it stops being a meaningful week-to-week change. */
-    reps: [{ under: 12, step: 1 }, { under: Infinity, step: 2 }]
-  };
-
-  function stepFor(value, isHold) {
-    var bands = isHold ? STEP_BANDS.hold : STEP_BANDS.reps;
-    for (var i = 0; i < bands.length; i++) {
-      if (value < bands[i].under) return bands[i].step;
-    }
-    return bands[bands.length - 1].step;
-  }
-
-  /* Where each ladder hold stops being worth extending, promoted from the
-     `readiness` prose that already shipped in the exercise DB — the text and
-     the algorithm were previously free to disagree, and did.
-
-     These are NOT uniform on purpose: 60s is a respectable plank and 20s is a
-     respectable full L-sit. A flat cap would prescribe a 60-second L-sit,
-     which is an elite hold, and simultaneously let a plank crawl past the
-     point where a harder variation is the better use of the time. */
-  var HOLD_ADVANCE_AT = {
-    core_1: 60,        // Plank
-    core_2: 30,        // Hollow Body Hold
-    core_3: 30,        // Tuck L-Sit
-    core_4: 20,        // L-Sit
-    pull_1: 45,        // Dead Hang
-    shoulder_3: 45     // Wall Handstand Hold
-  };
-
-  /* Opening target for a hold, as a fraction of its own advance point rather
-     than a flat 30s. Levelling into the L-Sit used to prescribe 30s when its
-     advance point is 20s — arriving at a new progression already past the
-     threshold that means "you have mastered this". */
-  function holdStart(exId) {
-    var cap = HOLD_ADVANCE_AT[exId];
-    if (!cap) return 30;
-    return Math.max(10, Math.round((cap * 0.5) / 5) * 5);
-  }
 
   /* Volume modes — applied on top of phase volumeFactor and session adaptation.
      sets:    bonus sets added to the adapted count
@@ -1930,8 +1826,6 @@
     VOLUME_MODES: VOLUME_MODES,
     DAY_ACCESSORY: DAY_ACCESSORY, LENGTH_MODES: LENGTH_MODES,
     patternsFor: patternsFor,
-    STEP_BANDS: STEP_BANDS, stepFor: stepFor,
-    HOLD_ADVANCE_AT: HOLD_ADVANCE_AT, holdStart: holdStart,
 
     completedSessions: function () {
       return App.getState().sessions.filter(function (s) { return s.completed; });
@@ -2067,27 +1961,18 @@
 
     /* -----------------------------------------------------------------------
        Adaptive target — reads the last 2 sessions containing this pattern,
-       compares what was logged to the prescribed target, and moves the target
-       for the next session.
-
-       Steps are BANDED by the current value and by unit (see STEP_BANDS), not
-       a flat ±1. A flat step meant a 30-second plank advanced to 31 seconds
-       while a 5-rep pull-up advanced to 6 — 3% against 20%, from one line of
-       code that could not tell seconds from reps.
+       compares logged reps to the prescribed target, and nudges the rep target
+       up or down for the next session.
 
        Rules (applied in order, first match wins):
-         • Any set rated "failed" last session       → −1 band step
-         • Avg < 80% of target last session          → −1 band step
-         • Avg ≥ 125% of target                      → +2 band steps (badly under-set)
-         • Avg ≥ target AND rated "easy"             → +1 band step
-         • Avg ≥ 110% of target                      → +1 band step
-         • Hit target in both of last 2 sessions     → +1 band step
-         • Otherwise                                 → hold
+         • Any set rated "failed" last session             → −1 rep
+         • Avg reps < 80% of target last session           → −1 rep
+         • Avg reps ≥ target AND rated "easy" last session → +1 rep
+         • Avg reps ≥ 110% of target last session          → +1 rep (over-performing)
+         • Hit target in both of last 2 sessions           → +1 rep (consistent)
+         • Otherwise                                       → 0 (hold)
 
-       Holds additionally stop at their own advance point (HOLD_ADVANCE_AT),
-       because past it a harder progression is better training than a longer
-       hold — `capped` is returned so the caller can act on that rather than
-       silently flat-lining the number.
+       Target is always clamped between (baseTarget / 2) and (baseTarget + 4).
        ----------------------------------------------------------------------- */
     _adaptTarget: function (s, pattern, baseTarget) {
       var sessions = (s.sessions || [])
@@ -2115,41 +2000,22 @@
       var avgReps = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
       var ratio = avgReps / baseTarget;
       var lastDiff = last.difficulty || "moderate";
-
-      /* The unit decides everything below, so it is read from the movement
-         actually prescribed rather than assumed from the pattern — core's
-         ladder is holds at L1-L4 and reps at L5-L6, so "core" alone does not
-         answer the question. */
-      var cur = engine.movementFor(pattern);
-      var isHold = !!(cur && cur.mode === "hold");
-      var step = stepFor(baseTarget, isHold);
-
-      /* 3 seconds of plank is not a floor, it is a typo waiting to happen.
-         The deload path already used `isHold ? 20 : 6`; this now agrees with
-         it instead of contradicting it two functions away. */
-      var floor = isHold ? Math.max(15, Math.round(baseTarget * 0.5 / 5) * 5)
-                         : Math.max(3, Math.round(baseTarget * 0.5));
-      var advanceAt = isHold && cur ? HOLD_ADVANCE_AT[cur.id] : null;
+      var floor = Math.max(3, Math.round(baseTarget * 0.5));
+      var cap   = baseTarget + 4;
 
       var delta = 0, reason = "";
 
       if (lastDiff === "failed" || (last.sets || []).some(function (st) { return st.reps === 0; })) {
-        delta = -step;
+        delta = -1;
         reason = "failed last session";
       } else if (ratio < 0.8) {
-        delta = -step;
+        delta = -1;
         reason = "below target last session";
-      } else if (ratio >= 1.25) {
-        /* Two steps: the target was not merely beaten, it was wrong. Creeping
-           up one band at a time from a target you already exceed by a quarter
-           just spends sessions catching up to where you already are. */
-        delta = +step * 2;
-        reason = "well past target — catching the target up";
       } else if ((lastDiff === "easy") && ratio >= 1.0) {
-        delta = +step;
+        delta = +1;
         reason = "felt easy and hit target";
       } else if (ratio >= 1.1) {
-        delta = +step;
+        delta = +1;
         reason = "exceeded target";
       } else if (relevant.length >= 2) {
         /* check 2nd-last session too */
@@ -2157,30 +2023,15 @@
         var prevVals = (prev.sets || []).map(function (st) { return Number(st.reps) || 0; }).filter(Boolean);
         var prevAvg  = prevVals.length ? prevVals.reduce(function (a, b) { return a + b; }, 0) / prevVals.length : 0;
         if (ratio >= 1.0 && prevAvg >= baseTarget) {
-          delta = +step;
+          delta = +1;
           reason = "hit target consistently";
         }
       }
 
-      var raw = baseTarget + delta;
-      var newTarget = Math.max(floor, raw);
-      var capped = false;
-      if (advanceAt && newTarget >= advanceAt) {
-        newTarget = advanceAt;
-        /* Only "capped" once you are actually AT the ceiling and trying to go
-           past it — arriving exactly on it for the first time is a normal
-           step, not a stall. */
-        capped = baseTarget >= advanceAt;
-      }
-
+      var newTarget = lib.clamp(baseTarget + delta, floor, cap);
+      /* if the clamp absorbed the delta, report 0 change to avoid misleading UI */
       var actualDelta = newTarget - baseTarget;
-      return {
-        target: newTarget,
-        delta: actualDelta,
-        reason: actualDelta !== 0 ? reason : (capped ? "at the advance point for this movement" : ""),
-        capped: capped,
-        advanceAt: advanceAt || null
-      };
+      return { target: newTarget, delta: actualDelta, reason: actualDelta !== 0 ? reason : "" };
     },
 
     /* -----------------------------------------------------------------------
@@ -2329,62 +2180,17 @@
       return 0;
     },
 
-    /* Rest-day gate — the day immediately after a session, and only that one
-       day, is a mandatory rest day. Derived from the last COMPLETED session's
-       actual date, never a fixed weekday: train Tuesday and Wednesday is
-       rest, whatever calendar day that lands on. That is the "relative to
-       your last session" schedule, as opposed to fixed weekdays you'd have
-       to set up and keep in sync with how you actually train.
-
-       Deliberately a single fixed rest day, not a DAYS_PER_WEEK-derived
-       cadence — spacing sessions to average exactly 4/week needs an uneven
-       rest pattern (1-1-2), which is a schedule you'd have to be told about
-       to make sense of. One day is the same rule every time. */
-    restDayInfo: function (s) {
-      var done = engine.completedSessions();
-      if (!done.length) return { isRest: false };
-      var lastKey = lib.dayKey(done[done.length - 1].dateISO);
-      var gap = lib.daysBetween(lastKey, lib.today());
-      /* gap 0: trained today already — that state is handled elsewhere
-         (resume/already-done), not this gate.
-         gap 1: today is the mandatory rest day.
-         gap 2+: clear to train — a longer break is your call, not a debt. */
-      if (gap !== 1) return { isRest: false };
-      return {
-        isRest: true, lastKey: lastKey,
-        lastType: done[done.length - 1].type,
-        nextKey: lib.dayKey(lib.addDays(lastKey, 2))
-      };
-    },
-
     _progress: function (s, ex) {
       var t = s.tiers[ex.pattern]; if (!t) return null;
       var hit = ex.sets.filter(function (st) { return (Number(st.value) || 0) >= ex.target; }).length;
       var ratio = ex.sets.length ? hit / ex.sets.length : 0;
       var base = { easy: 40, moderate: 26, hard: 12, failed: 0 }[ex.difficulty || "moderate"];
       var inc = Math.round(base * (0.5 + 0.5 * ratio));
-
-      /* A hold sitting at its advance point has nowhere left to go on
-         duration, so grinding out more sessions at the same number is wasted.
-         Clean sessions there accelerate the tier instead, which is the
-         "cap it and push a level-up" half of the cap: the ceiling is not a
-         dead end, it is the on-ramp to the next progression. */
-      var cap = HOLD_ADVANCE_AT[ex.id];
-      if (cap && ex.mode === "hold" && (Number(ex.target) || 0) >= cap && ratio >= 0.5 && inc > 0) {
-        inc = Math.round(inc * 1.75);
-      }
-
       t.progress = lib.clamp((t.progress || 0) + inc, 0, 100);
       if (t.progress >= 100 && t.level < 6) {
         t.level += 1; t.progress = 0;
         var nx = DB.byLevel(ex.pattern, t.level);
-        /* Each hold opens at half its OWN advance point, not a flat 30s.
-           Levelling into the L-Sit used to prescribe 30s against an advance
-           point of 20s — arriving at a new progression already past the
-           number that means you have finished with it. */
-        t.repsTarget = (nx && nx.mode === "hold")
-          ? holdStart(nx.id)
-          : BASE_REPS[ex.pattern];
+        t.repsTarget = (nx && nx.mode === "hold") ? 30 : BASE_REPS[ex.pattern];
         return { pattern: ex.pattern, level: t.level, name: nx ? nx.name : "" };
       }
       return null;
@@ -2828,51 +2634,7 @@
       '</div></div>';
   }
 
-  /* Overriding "train anyway" is remembered for today only — a decision made
-     once this morning shouldn't have to be repeated on every render, but it
-     also shouldn't quietly carry into tomorrow, which is a real training day
-     regardless. */
-  function restOverrideKey() { return "restOverride:" + lib.today(); }
-
-  /* The rest-day view. Deliberately much smaller than renderReady's — no
-     picker, no intensity/length controls, nothing to configure for a session
-     you're not supposed to start. "Train anyway" is one click away rather
-     than hidden, because a genuinely flexible schedule beats a rigid one
-     that argues with you (PLAN discussion, 2026-08-26): this only ever
-     blocks the single day right after a session, and you can always say no. */
-  function renderRestDay(el, s, restInfo) {
-    var done = engine.completedSessions();
-    var last = done[done.length - 1];
-    var tomorrow = lib.daysBetween(lib.today(), restInfo.nextKey) === 1;
-    var whenLabel = tomorrow ? "tomorrow" : lib.fmtDate(restInfo.nextKey);
-
-    el.innerHTML =
-      head("Today", "Session engine", "Resting today") +
-      '<div class="card card--accent card--pad-lg hero stack">' +
-        '<div class="row between wrap"><div><div class="eyebrow">Rest day</div>' +
-        '<h2 class="display h2">Next exercise day is ' + esc(whenLabel) + '</h2>' +
-        '<p class="muted text-sm" style="max-width:46ch">' +
-          'You trained ' + esc(DAY_LABEL[restInfo.lastType] || "") + ' yesterday. One rest day between ' +
-          'sessions is part of the program, not a delay — this is where the adaptation actually happens.' +
-        '</p></div>' +
-        '<span class="badge"><span class="dot"></span>rest</span></div>' +
-        '<button class="btn btn--ghost btn--sm" id="rest-train-anyway" type="button">Train anyway →</button>' +
-      '</div>' +
-      (last ? lastSessionCard(last) : "") +
-      streakStripCard(s);
-
-    var anyway = document.getElementById("rest-train-anyway");
-    if (anyway) anyway.addEventListener("click", function () {
-      App.util.uiSet(restOverrideKey(), true);
-      renderReady(el, s);
-    });
-  }
-
   function renderReady(el, s) {
-    var restInfo = engine.restDayInfo(s);
-    if (restInfo.isRest && !App.util.uiGet(restOverrideKey(), false)) {
-      return renderRestDay(el, s, restInfo);
-    }
     var rec = engine.recommendedDayType();
     var done = engine.completedSessions();
     var last = done[done.length - 1];
@@ -5914,7 +5676,7 @@
   function actionBlurb(s, a) {
     var n = s.currentPhase.number + 1;
     return {
-      advance: "Phase " + n + " nudges targets up a step where you're hitting them — one rep on low counts, five seconds on a short hold, more once the numbers get bigger — and keeps your hard-won levels. Progressive overload, continued.",
+      advance: "Phase " + n + " nudges rep targets up by 1 where you're hitting them and keeps your hard-won levels. Progressive overload, continued.",
       consolidate: "Phase " + n + " repeats your current movements and targets but tightens rest ~20% — more density to bank the adaptation before reaching for the next level.",
       deload: "Phase " + n + " is a back-off block: working sets drop ~40% and rep targets ease, same movements at lighter intent. Recover, then resume."
     }[a];
@@ -5952,18 +5714,10 @@
       var t = s.tiers[p]; if (!t) return;
       var cur = engine.movementFor(p);
       var isHold = cur && cur.mode === "hold";
-      if (action === "advance" && canOverload) {
-        /* Holds used to be excluded here outright (`&& !isHold`), which left
-           the per-session +1s as their ONLY upward path — the four-weekly
-           evaluator bumped every reps pattern and silently stepped over every
-           hold. They advance on their own banded step now, and stop at their
-           own advance point rather than a REF_TARGET-derived number that was
-           never expressed in seconds. */
-        var step = engine.stepFor(t.repsTarget || REF_TARGET[p] || 10, isHold);
-        var bump = wasDeload ? step * 2 : step;   // recover faster out of a deload
-        var capTo = isHold
-          ? (engine.HOLD_ADVANCE_AT[cur && cur.id] || ((t.repsTarget || 30) + step))
-          : (REF_TARGET[p] || 10) + 6;
+      if (action === "advance" && canOverload && !isHold) {
+        /* If we just came out of a deload, give +2 rep target to recover faster */
+        var bump = wasDeload ? 2 : 1;
+        var capTo = (REF_TARGET[p] || 10) + 6;
         t.repsTarget = Math.min((t.repsTarget || REF_TARGET[p] || 10) + bump, capTo);
       } else if (action === "deload") {
         /* Deload: ease rep targets ~30% (was 40%) and only halve progress (not wipe it).

@@ -66,20 +66,14 @@
 
 <header class="wh-topbar">
   <div class="wh-topbar__brand">
-    <button type="button" class="wh-logo wh-logo--btn" id="wh-logo-mobile" title="Go to Dashboard" aria-label="Go to Dashboard">
+    <span class="wh-logo" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
         <path d="M12 20s-6.5-4.3-6.5-9A3.8 3.8 0 0 1 12 8.4 3.8 3.8 0 0 1 18.5 11c0 4.7-6.5 9-6.5 9z"/>
       </svg>
-    </button>
+    </span>
     <span class="wh-topbar__title" id="wh-topbar-title">Dashboard</span>
   </div>
-  <div class="wh-topbar__right">
-    <button type="button" class="wh-atdesk-btn" id="wh-atdesk-mobile" title="Start the sitting clock">
-      <span class="wh-atdesk-btn__ic"></span><span class="wh-atdesk-btn__t">At Desk</span>
-    </button>
-    <button type="button" class="wh-guide-btn" id="wh-guide-btn-mobile" title="Take a guided tour">?</button>
-    <div class="wh-topbar__streak" id="wh-topbar-streak" title="Perfect-day streak"></div>
-  </div>
+  <div class="wh-topbar__streak" id="wh-topbar-streak" title="Perfect-day streak"></div>
 </header>
 
 <!-- Shown only while the logging date isn't today (see Hub.setViewDate). -->
@@ -90,21 +84,15 @@
      source of truth in js/core.js (Hub.NAV) via Hub.buildNav().
      ===================================================================== -->
 <nav class="wh-sidebar" id="wh-sidebar" aria-label="Primary">
-  <button type="button" class="wh-sidebar__brand wh-sidebar__brand--btn" id="wh-logo-sidebar" title="Go to Dashboard" aria-label="Go to Dashboard">
+  <div class="wh-sidebar__brand">
     <span class="wh-logo" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
         <path d="M12 20s-6.5-4.3-6.5-9A3.8 3.8 0 0 1 12 8.4 3.8 3.8 0 0 1 18.5 11c0 4.7-6.5 9-6.5 9z"/>
       </svg>
     </span>
     <span class="wh-sidebar__name">Wellness<span>Hub</span></span>
-  </button>
-  <div class="wh-sidebar__links" id="wh-nav-desktop"><!-- injected --></div>
-  <div class="wh-sidebar__row">
-    <button type="button" class="wh-atdesk-btn wh-atdesk-btn--sidebar" id="wh-atdesk-sidebar" title="Start the sitting clock">
-      <span class="wh-atdesk-btn__ic"></span><span class="wh-atdesk-btn__t">At Desk</span>
-    </button>
-    <button type="button" class="wh-guide-btn" id="wh-guide-btn-sidebar" title="Take a guided tour">?</button>
   </div>
+  <div class="wh-sidebar__links" id="wh-nav-desktop"><!-- injected --></div>
   <div class="wh-sidebar__foot">
     <div class="wh-sidebar__date mono" id="wh-sidebar-date"></div>
     <div class="wh-sidebar__next mono" id="wh-sidebar-next">No reminders on</div>
@@ -299,15 +287,6 @@
             <button class="seg__btn" data-voldefault="max" type="button">Max effort</button>
           </div>
         </div>
-        <div class="field mt-3"><span class="field__label">Default length</span>
-          <div class="seg" id="set-len-mode">
-            <button class="seg__btn" data-lengthdefault="focused" type="button">Focused</button>
-            <button class="seg__btn" data-lengthdefault="full" type="button">Full</button>
-          </div>
-          <p class="faint text-xs" style="margin:6px 0 0">Intensity changes sets, reps and rest on the same movements.
-            Length adds one more movement — an antagonist for the day, kept out of your ladders and rep targets
-            because it is support work, not a session for that pattern.</p>
-        </div>
       </div>
 
       <button class="btn btn--primary btn--block" id="btn-settings-save">Save changes</button>
@@ -375,14 +354,6 @@
       </button>
     </div>
     <div class="guide-modal__body">
-      <!-- What's working, phase by phase -->
-      <div class="guide-section" id="guide-phases-wrap">
-        <div class="guide-section__label">
-          <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v6a6 6 0 0 0 12 0V4"/><path d="M4 4h4M16 4h4M12 16v4"/></svg>
-          What's working
-        </div>
-        <div id="guide-phases"></div>
-      </div>
       <!-- Technique Steps -->
       <div class="guide-section">
         <div class="guide-section__label">
@@ -425,12 +396,7 @@
      SCRIPTS — plain classic scripts (no ES modules) so the app also works
      when opened straight from disk via file://.
      ===================================================================== -->
-<script src="vendor/sync.js"></script>       <!-- shared folder-sync layer -->
-<script src="js/syncdrive.js"></script>     <!-- Google Drive transport, alternative to the folder link -->
 <script src="js/core.js"></script>          <!-- store, router, toasts, reminders -->
-<!-- after core.js: core assigns window.Hub wholesale, so anything hanging off
-     the namespace has to attach afterwards. Nothing reads syncMerge until boot. -->
-<script src="js/syncmerge.js"></script>      <!-- Helth's merge rules -->
 <script src="js/theme.js"></script>         <!-- palette switching -->
 <script src="js/gamify.js"></script>        <!-- streaks + badge engine -->
 <script src="js/insights.js"></script>      <!-- trends, patterns, advice -->
@@ -452,28 +418,9 @@
 <script src="js/views/achievements.js"></script>
 <script src="js/views/settings.js"></script>
 <script src="js/app.js"></script>           <!-- boot -->
-<script src="js/guide.js"></script>         <!-- spotlight tour -->
 <script src="fitness/basalt.js"></script>   <!-- the calisthenics engine -->
 <script src="fitness/muscles.data.js"></script> <!-- exercise -> muscle map -->
-<script src="fitness/phases.data.js"></script>  <!-- per-phase activation + pose rigs -->
-<script src="fitness/phases.js"></script>       <!-- phase visualiser in the guide modal -->
 <script src="fitness/muscles.js"></script>      <!-- muscle coverage + conditioning levels -->
-
-<div id="wh-tour" class="wh-tour" hidden role="dialog" aria-modal="true" aria-label="Guided tour">
-  <div id="wh-tour-spot" class="wh-tour-spot"></div>
-  <div id="wh-tour-card" class="wh-tour-card">
-    <div class="wh-tour-eyebrow" id="wh-tour-step-label">GUIDE 01/08</div>
-    <h2 class="wh-tour-title" id="wh-tour-title"></h2>
-    <p class="wh-tour-body" id="wh-tour-body"></p>
-    <div class="wh-tour-actions">
-      <button type="button" id="wh-tour-skip" class="wh-tour-skip">Skip tour</button>
-      <div class="wh-tour-nav">
-        <button type="button" id="wh-tour-back" class="wh-btn wh-btn--ghost wh-btn--sm">Back</button>
-        <button type="button" id="wh-tour-next" class="wh-btn wh-btn--primary wh-btn--sm">Next</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>

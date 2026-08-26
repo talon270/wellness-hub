@@ -350,6 +350,9 @@
     D.labs.forEach(function (l) {
       lines.push(row("Labs · " + Hub.esc(l.panel || "panel"), (l.values || []).length + " markers"));
     });
+    (D.vo2max || []).forEach(function (v) {
+      lines.push(row("VO2 max", v.value + " ml/kg/min"));
+    });
 
     Hub.modal({
       title: Hub.prettyDate(key),

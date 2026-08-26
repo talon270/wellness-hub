@@ -265,6 +265,7 @@
           '<button type="button" class="wh-btn wh-btn--sm" data-csv="vitals">' + Hub.icon("download") + "Vitals</button>" +
           '<button type="button" class="wh-btn wh-btn--sm" data-csv="sleep">' + Hub.icon("download") + "Sleep</button>" +
           '<button type="button" class="wh-btn wh-btn--sm" data-csv="labs">' + Hub.icon("download") + "Lab results</button>" +
+          '<button type="button" class="wh-btn wh-btn--sm" data-csv="vo2max">' + Hub.icon("download") + "VO2 max</button>" +
           (s.settings.cycleTracking
             ? '<button type="button" class="wh-btn wh-btn--sm" data-csv="cycles">' + Hub.icon("download") +
               "Cycles</button>"
@@ -735,49 +736,74 @@
   /* Storage durability: eviction protection + the linked backup file.
      Rendered synchronously from cached values; the async bits (persisted?,
      quota) fill themselves in via `refreshDurability` once resolved. */
-  function durabilityCard() {
-    var st = Hub.storage ? Hub.storage.status() : { fsSupported: false, linked: false };
+  /* A linked transport's connected block — folder and Drive render an
+     identical shape, just with different ids and copy, since both dispatch
+     through the same Hub.storage.writeNow / restoreFromFile / ensurePermission
+     (PLAN-drive-sync.md §B3 — the swap happens once, in storage.js). */
+  function linkedBlock(prefix, label, st) {
+    return '<div class="wh-row wh-row--between">' +
+        '<div class="wh-grow"><div class="wh-setrow__name">' + Hub.icon("check") +
+          " " + label + "</div>" +
+          '<div class="wh-setrow__desc">Rewritten automatically a few seconds after anything changes. ' +
+            (st.lastWrite
+              ? "Last written " + new Date(st.lastWrite).toLocaleString() + "."
+              : "Not written yet this session.") + "</div></div>" +
+      "</div>" +
+      (st.lastError === "permission-needed" || st.lastError === "disconnected"
+        ? '<div class="wh-disclaimer wh-mt4">' + Hub.icon("alert") +
+          "<span>The browser has dropped access — that happens after a restart, or when a Drive sign-in " +
+          "expires. Click <strong>Reconnect</strong> to grant it again.</span></div>" +
+          '<button type="button" class="wh-btn wh-btn--primary wh-mt4" id="' + prefix + '-reconnect">Reconnect</button>'
+        : "") +
+      '<div class="wh-row wh-mt4">' +
+        '<button type="button" class="wh-btn wh-btn--sm" id="' + prefix + '-writenow">' + Hub.icon("download") + "Write now</button>" +
+        '<button type="button" class="wh-btn wh-btn--sm" id="' + prefix + '-restorefile">' + Hub.icon("upload") + "Restore from it</button>" +
+        '<button type="button" class="wh-btn wh-btn--sm wh-btn--ghost" id="' + prefix + '-unlink">Unlink</button>' +
+      "</div>";
+  }
 
-    var linkBlock;
-    if (!st.fsSupported) {
-      linkBlock =
-        '<div class="wh-disclaimer">' + Hub.icon("info") +
-          "<span>Your browser doesn't support linking a file that updates itself " +
-          "(that's Chrome, Edge and Opera only for now). Use <strong>Export all data</strong> below " +
-          "instead — the app will remind you if it's been a while.</span></div>" +
-        (st.lastDownload
-          ? '<p class="wh-help wh-mt4">Last manual backup: <strong class="mono">' +
-            Hub.relDay(Hub.ymd(new Date(st.lastDownload))) + "</strong></p>"
-          : '<p class="wh-help wh-mt4">No manual backup taken yet.</p>');
-    } else if (st.linked) {
-      linkBlock =
-        '<div class="wh-row wh-row--between">' +
-          '<div class="wh-grow"><div class="wh-setrow__name">' + Hub.icon("check") +
-            " Linked to <span class=\"mono\">" + Hub.esc(st.fileName || "a file") + "</span></div>" +
-            '<div class="wh-setrow__desc">Rewritten automatically a few seconds after anything changes. ' +
-              (st.lastWrite
-                ? "Last written " + new Date(st.lastWrite).toLocaleString() + "."
-                : "Not written yet this session.") + "</div></div>" +
-        "</div>" +
-        (st.lastError === "permission-needed"
-          ? '<div class="wh-disclaimer wh-mt4">' + Hub.icon("alert") +
-            "<span>The browser has dropped write permission for that file — that happens after a restart. " +
-            "Click <strong>Reconnect</strong> to grant it again.</span></div>" +
-            '<button type="button" class="wh-btn wh-btn--primary wh-mt4" id="st-reconnect">Reconnect file</button>'
-          : "") +
-        '<div class="wh-row wh-mt4">' +
-          '<button type="button" class="wh-btn wh-btn--sm" id="st-writenow">' + Hub.icon("download") + "Write now</button>" +
-          '<button type="button" class="wh-btn wh-btn--sm" id="st-restorefile">' + Hub.icon("upload") + "Restore from it</button>" +
-          '<button type="button" class="wh-btn wh-btn--sm wh-btn--ghost" id="st-unlink">Unlink</button>' +
-        "</div>";
+  function durabilityCard() {
+    var st = Hub.storage ? Hub.storage.status() :
+      { fsSupported: false, linked: false, folder: { fsSupported: false, linked: false }, drive: { configured: false, linked: false } };
+
+    var folderBlock;
+    if (!st.folder.fsSupported) {
+      folderBlock =
+        '<p class="wh-sm wh-muted">Your browser doesn\'t support linking a folder that updates itself ' +
+          "(that's Chrome, Edge and Opera only for now).</p>";
+    } else if (st.folder.linked) {
+      folderBlock = linkedBlock("st-folder", "Linked to <span class=\"mono\">" + Hub.esc(st.fileName || "a folder") + "</span>", st);
     } else {
-      linkBlock =
-        '<p class="wh-sm wh-muted">Pick a file once — ideally somewhere already synced or backed up — and ' +
-          "the app keeps it up to date by itself. If this browser's data is ever cleared, it offers to " +
-          "restore from that file automatically.</p>" +
-        '<button type="button" class="wh-btn wh-btn--primary wh-mt4" id="st-link">' +
-          Hub.icon("download") + "Link a backup file</button>";
+      folderBlock =
+        '<p class="wh-sm wh-muted">Pick a folder once — ideally one a tool like Syncthing keeps in step across ' +
+          "your machines — and the app keeps a file in it up to date by itself.</p>" +
+        '<button type="button" class="wh-btn wh-btn--primary wh-mt4" id="st-folder-link">' +
+          Hub.icon("download") + "Link a folder</button>";
     }
+
+    var driveBlock;
+    if (!st.drive.configured) {
+      driveBlock = '<p class="wh-sm wh-muted">Not set up on this build yet — see <span class="mono">PLAN-drive-sync.md §B5</span>.</p>';
+    } else if (st.drive.linked) {
+      driveBlock = linkedBlock("st-drive", "Linked to Google Drive (<span class=\"mono\">Helth Sync/" + Hub.esc(st.fileName || "wellness-hub.json") + "</span>)", st);
+    } else {
+      driveBlock =
+        '<p class="wh-sm wh-muted">Sync through your Google account instead of a shared folder — no background ' +
+          "app has to be running on any machine. You'll see Google's account picker, and an " +
+          "\"unverified app\" warning is expected — click through it, this app is yours.</p>" +
+        '<button type="button" class="wh-btn wh-btn--primary wh-mt4" id="st-drive-link">' +
+          Hub.icon("download") + "Connect Google Drive</button>";
+    }
+
+    var fallback = (!st.folder.fsSupported && !st.drive.configured)
+      ? ('<div class="wh-disclaimer wh-mt4">' + Hub.icon("info") +
+          "<span>Neither sync option is available in this build/browser. Use <strong>Export all data</strong> " +
+          "below instead — the app will remind you if it's been a while." +
+          (st.lastDownload
+            ? " Last manual backup: <strong class=\"mono\">" + Hub.relDay(Hub.ymd(new Date(st.lastDownload))) + "</strong>."
+            : " No manual backup taken yet.") +
+          "</span></div>")
+      : "";
 
     return '<div class="wh-card wh-mb4">' +
       '<div class="wh-card__head">' +
@@ -802,11 +828,19 @@
           '<div class="wh-setrow__desc" id="st-quota">—</div>' +
         "</div>" +
       "</div>" +
-      linkBlock +
+
+      '<div class="wh-setrow__name wh-mt4">Linked folder</div>' + folderBlock +
+      '<div class="wh-setrow__name wh-mt6">Google Drive</div>' + driveBlock +
+      fallback +
+
+      (st.folder.linked || st.drive.linked
+        ? '<p class="wh-help wh-mt4">' + Hub.icon("info") +
+          " Only one of these can be active per machine — connecting the other switches this machine over.</p>"
+        : "") +
 
       '<p class="wh-help wh-mt4">' + Hub.icon("alert") +
         " Neither of these protects against you deliberately clearing site data while nothing is linked. " +
-        "The file is the real safety net.</p>" +
+        "The linked copy is the real safety net.</p>" +
     "</div>";
   }
 
@@ -971,31 +1005,50 @@
         refreshDurability(el);
       });
     });
-    on(el, "#st-link", function () { Hub.storage.link(); });
-    on(el, "#st-unlink", function () {
+    on(el, "#st-folder-link", function () { Hub.storage.link(); });
+    on(el, "#st-drive-link", function () { Hub.storage.linkDrive(); });
+    on(el, "#st-folder-unlink", function () {
       Hub.confirm({
-        title: "Unlink the backup file?",
+        title: "Unlink the folder?",
         body: "The file stays exactly where it is — it just stops being updated.",
         confirmLabel: "Unlink",
         onConfirm: function () { Hub.storage.unlink(); }
       });
     });
-    on(el, "#st-writenow", function () {
-      Hub.storage.writeNow().then(function (ok) {
-        Hub.toast(ok ? "Written." : "Couldn't write — try Reconnect.", ok ? "success" : "warn");
-        Hub.refresh();
+    on(el, "#st-drive-unlink", function () {
+      Hub.confirm({
+        title: "Unlink Google Drive?",
+        body: "The file stays in Drive exactly where it is — it just stops being updated.",
+        confirmLabel: "Unlink",
+        onConfirm: function () { Hub.storage.unlinkDrive(); }
       });
     });
-    on(el, "#st-reconnect", function () {
-      Hub.storage.ensurePermission("readwrite").then(function (ok) {
-        if (ok) return Hub.storage.writeNow().then(function () {
-          Hub.toast("Reconnected and written.", "success");
+    /* Write / reconnect / restore all dispatch through whichever transport is
+       currently active (js/storage.js's activeSync()), so the folder and
+       Drive buttons share one handler each — only one block is ever showing
+       these at a time, since the two are mutually exclusive per machine. */
+    ["#st-folder-writenow", "#st-drive-writenow"].forEach(function (sel) {
+      on(el, sel, function () {
+        Hub.storage.writeNow().then(function (ok) {
+          Hub.toast(ok ? "Written." : "Couldn't write — try Reconnect.", ok ? "success" : "warn");
           Hub.refresh();
         });
-        Hub.toast("Permission not granted.", "warn");
       });
     });
-    on(el, "#st-restorefile", function () { Hub.storage.restoreFromFile(); });
+    ["#st-folder-reconnect", "#st-drive-reconnect"].forEach(function (sel) {
+      on(el, sel, function () {
+        Hub.storage.ensurePermission("readwrite").then(function (ok) {
+          if (ok) return Hub.storage.writeNow().then(function () {
+            Hub.toast("Reconnected and written.", "success");
+            Hub.refresh();
+          });
+          Hub.toast("Permission not granted.", "warn");
+        });
+      });
+    });
+    ["#st-folder-restorefile", "#st-drive-restorefile"].forEach(function (sel) {
+      on(el, sel, function () { Hub.storage.restoreFromFile(); });
+    });
 
     /* --- reminders --- */
     Hub.delegate(el, "[data-rem]", function () { /* label click passthrough */ });
