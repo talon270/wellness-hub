@@ -1933,15 +1933,8 @@
     STEP_BANDS: STEP_BANDS, stepFor: stepFor,
     HOLD_ADVANCE_AT: HOLD_ADVANCE_AT, holdStart: holdStart,
 
-    /* Sorted by date, not by insertion order. Every caller that reads
-       `done[done.length - 1]` means "my most recent session" — but sessions
-       are appended in the order you LOG them, and the app lets you log a past
-       day. Backdate yesterday's session after today's and the unsorted tail
-       is yesterday, which told you to rest on a day you had already trained
-       and advanced the rotation off the wrong session. */
     completedSessions: function () {
-      return App.getState().sessions.filter(function (s) { return s.completed; })
-        .sort(function (a, b) { return new Date(a.dateISO) - new Date(b.dateISO); });
+      return App.getState().sessions.filter(function (s) { return s.completed; });
     },
 
     recommendedDayType: function () {
@@ -2362,57 +2355,6 @@
         lastType: done[done.length - 1].type,
         nextKey: lib.dayKey(lib.addDays(lastKey, 2))
       };
-    },
-
-    /* "Train anyway" / "Train again anyway" is remembered for today only, and
-       both the Today tab and the dashboard hero have to read the same flag or
-       overriding on one leaves the other still saying you're done. Derived
-       here because those two live in different IIFEs and a duplicated key
-       string is how they'd drift apart. */
-    overrideKey: function (kind) { return kind + "Override:" + lib.today(); },
-
-    /* doneTodayInfo — the gap-0 case restDayInfo deliberately leaves alone.
-       Its comment said that state was "handled elsewhere (resume/already-done)";
-       nothing anywhere actually handled it, so after finishing a session the
-       app went on recommending the very session you had just logged while the
-       calendar had already moved on to the day after your rest day. */
-    doneTodayInfo: function (s) {
-      var done = engine.completedSessions();
-      if (!done.length) return { isDone: false };
-      var todayKey = lib.today();
-      var todays = done.filter(function (x) { return lib.dayKey(x.dateISO) === todayKey; });
-      if (!todays.length) return { isDone: false };
-      return {
-        isDone: true,
-        todayType: todays[todays.length - 1].type,
-        count: todays.length,
-        /* Trained today, so tomorrow is the mandatory rest day and the next
-           training day is the one after it. */
-        nextKey: lib.dayKey(lib.addDays(todayKey, 2))
-      };
-    },
-
-    /* nextSession — the one future date the app can honestly stand behind.
-       Past the mandatory rest day, when you train next is your call, not a
-       fixed cadence, so this deliberately returns a single date rather than a
-       projected schedule. Uses the same rule as restDayInfo (day right after
-       your last session is rest) instead of the old Mon/Tue/Thu/Fri guess. */
-    nextSession: function (s) {
-      var done = engine.completedSessions();
-      var todayKey = lib.today();
-      var type = engine.recommendedDayType();
-      if (!done.length) {
-        return { dateISO: lib.parse(todayKey).toISOString(), key: todayKey, type: type, isToday: true };
-      }
-      var doneToday = engine.doneTodayInfo(s);
-      var nextKey;
-      if (doneToday.isDone) {
-        nextKey = doneToday.nextKey;                      // rest tomorrow, train the day after
-      } else {
-        var restInfo = engine.restDayInfo(s);
-        nextKey = restInfo.isRest ? restInfo.nextKey : todayKey;
-      }
-      return { dateISO: lib.parse(nextKey).toISOString(), key: nextKey, type: type, isToday: nextKey === todayKey };
     },
 
     _progress: function (s, ex) {
@@ -2890,7 +2832,7 @@
      once this morning shouldn't have to be repeated on every render, but it
      also shouldn't quietly carry into tomorrow, which is a real training day
      regardless. */
-  function restOverrideKey() { return engine.overrideKey("rest"); }
+  function restOverrideKey() { return "restOverride:" + lib.today(); }
 
   /* The rest-day view. Deliberately much smaller than renderReady's — no
      picker, no intensity/length controls, nothing to configure for a session
@@ -2926,50 +2868,7 @@
     });
   }
 
-  function doneOverrideKey() { return engine.overrideKey("done"); }
-
-  /* You already logged a session today. Same treatment as the rest day —
-     state what you did, say when the next one is, and keep the override one
-     click away — because the alternative (which is what shipped) was the app
-     recommending the exact session you had just finished, with no sign it
-     knew you had trained at all. */
-  function renderDoneToday(el, s, doneInfo) {
-    var done = engine.completedSessions();
-    var last = done[done.length - 1];
-    var rec = engine.recommendedDayType();
-    var nextWhen = lib.fmtDate(doneInfo.nextKey);
-
-    el.innerHTML =
-      head("Today", "Session engine", "Done for today") +
-      '<div class="card card--accent card--pad-lg hero stack">' +
-        '<div class="row between wrap"><div><div class="eyebrow">Done today</div>' +
-        '<h2 class="display h2">You trained ' + esc(DAY_LABEL[doneInfo.todayType] || "") + ' today</h2>' +
-        '<p class="muted text-sm" style="max-width:46ch">' +
-          'Next up is ' + esc(DAY_LABEL[rec] || "") + ' on ' + esc(nextWhen) + ' — tomorrow is your rest day. ' +
-          (doneInfo.count > 1 ? 'You have logged ' + doneInfo.count + ' sessions today. ' : '') +
-          'Nothing more is required of you today.' +
-        '</p></div>' +
-        '<span class="badge badge--primary"><span class="dot"></span>complete</span></div>' +
-        '<button class="btn btn--ghost btn--sm" id="done-train-anyway" type="button">Train again anyway →</button>' +
-      '</div>' +
-      (last ? lastSessionCard(last) : "") +
-      streakStripCard(s);
-
-    var anyway = document.getElementById("done-train-anyway");
-    if (anyway) anyway.addEventListener("click", function () {
-      App.util.uiSet(doneOverrideKey(), true);
-      renderReady(el, s);
-    });
-  }
-
   function renderReady(el, s) {
-    /* Trained today outranks the rest gate: restDayInfo returns isRest:false
-       on a day you have already trained, so this has to be tested first or
-       the state is never reached. */
-    var doneInfo = engine.doneTodayInfo(s);
-    if (doneInfo.isDone && !App.util.uiGet(doneOverrideKey(), false)) {
-      return renderDoneToday(el, s, doneInfo);
-    }
     var restInfo = engine.restDayInfo(s);
     if (restInfo.isRest && !App.util.uiGet(restOverrideKey(), false)) {
       return renderRestDay(el, s, restInfo);
@@ -4260,7 +4159,7 @@
       '</div>' +
 
       /* ---- hero / next-session CTA ---- */
-      heroCard(s, rec, wip, engine.restDayInfo(s), engine.doneTodayInfo(s)) +
+      heroCard(s, rec, wip) +
 
       /* ---- day-one coaching (only before the first session) ----
          Below the hero: on day one the thing to do is start, and the four
@@ -4316,43 +4215,7 @@
   }
 
   /* ---- hero ---- */
-  function heroCard(s, rec, wip, restInfo, doneInfo) {
-    /* Already trained today — checked before rest, since restDayInfo reports
-       isRest:false on a day you have trained. Mirrors the Today tab so the
-       two can't disagree about whether you are done. */
-    if (!wip && doneInfo && doneInfo.isDone && !util.uiGet(engine.overrideKey("done"), false)) {
-      return '<div class="card card--accent card--pad-lg hero stack">' +
-        '<div class="row between wrap">' +
-          '<div><div class="eyebrow">Done today</div>' +
-          '<h2 class="display h2" style="margin-top:var(--sp-1)">You trained ' + esc(engine.DAY_LABEL[doneInfo.todayType] || "") + ' today</h2>' +
-          '<p class="muted text-sm" style="max-width:50ch">Next up is ' + esc(engine.DAY_LABEL[rec] || "") +
-            ' on ' + esc(lib.fmtDate(doneInfo.nextKey)) + ' — tomorrow is your rest day.</p></div>' +
-          '<span class="badge badge--primary"><span class="dot"></span>complete</span>' +
-        '</div>' +
-        '<button class="btn btn--ghost btn--lg btn--block" data-go="today">Open Today →</button>' +
-      '</div>';
-    }
-
-    /* Resting today, per the same gate the Today tab uses (restDayInfo) — a
-       session in progress always wins over rest (you already said "train
-       anyway"), otherwise the hero must not invite you to start the very
-       session Today would refuse. */
-    var resting = !wip && restInfo && restInfo.isRest &&
-                  !util.uiGet(engine.overrideKey("rest"), false);
-    if (resting) {
-      var tomorrow = lib.daysBetween(lib.today(), restInfo.nextKey) === 1;
-      var whenLabel = tomorrow ? "tomorrow" : lib.fmtDate(restInfo.nextKey);
-      return '<div class="card card--accent card--pad-lg hero stack">' +
-        '<div class="row between wrap">' +
-          '<div><div class="eyebrow">Resting today</div>' +
-          '<h2 class="display h2" style="margin-top:var(--sp-1)">Next up: ' + esc(engine.DAY_LABEL[rec]) + ' ' + esc(whenLabel) + '</h2>' +
-          '<p class="muted text-sm" style="max-width:50ch">You trained ' + esc(engine.DAY_LABEL[restInfo.lastType] || "") + ' yesterday. One rest day between sessions is part of the program.</p></div>' +
-          '<span class="badge"><span class="dot"></span>rest</span>' +
-        '</div>' +
-        '<button class="btn btn--ghost btn--lg btn--block" data-go="today">Train anyway →</button>' +
-      '</div>';
-    }
-
+  function heroCard(s, rec, wip) {
     /* A session in progress shows what it actually contains; an upcoming one
        shows what the current length preference would build. */
     var chips = (wip
@@ -5085,17 +4948,44 @@
       '</div>' +
       nextSessionBanner(s) +
       '<div id="cal-inner">' + buildCalendar(s) + '</div>' +
+      upcomingDaysCard(s) +
     '</div>';
   }
 
-  /* Project the next session — just the one. Past the mandatory rest day,
-     when you train next is your call, not a fixed cadence, so this doesn't
-     pretend to forecast a schedule; it defers to engine.nextSession, the same
-     rule the start area's rest-day gate uses. Returns an array of 0 or 1
-     entries so the three call sites below stay simple. */
-  function projectUpcoming(s) {
-    var n = engine.nextSession(s);
-    return n ? [n] : [];
+  /* Project the next training days from the rotation. The program runs 4
+     days/week; we lay the rotation onto a Mon/Tue/Thu/Fri-style cadence,
+     continuing the Push→Pull→Legs→Full cycle.
+
+     TODAY COUNTS. The cursor is tested before it advances, so a training day
+     you haven't logged yet is the next session rather than being skipped.
+     Advancing first — which is what this did — meant that on a Mon/Tue/Thu/Fri
+     cadence, four days in seven opened the calendar to a blank today and a
+     "next session" of tomorrow. */
+  function projectUpcoming(s, count) {
+    var rotation = engine.ROTATION;
+    var done = engine.completedSessions();
+    var last = done.length ? done[done.length - 1] : null;
+    var idx = last ? rotation.indexOf(last.type) : -1;       // next = idx+1
+    // training weekdays (Mon=1,Tue=2,Thu=4,Fri=5) — 4 sessions/week
+    var trainDows = [1, 2, 4, 5];
+    var out = [];
+    var todayKey = lib.today();
+    /* Already trained today? Then today is behind you and the next session is
+       the following training day. */
+    var doneToday = done.some(function (x) { return lib.dayKey(x.dateISO) === todayKey; });
+    var cursor = lib.addDays(lib.parse(todayKey), doneToday ? 1 : 0);
+    var guard = 0;
+    while (out.length < count && guard < 60) {
+      guard++;
+      var dow = cursor.getDay(); // 0=Sun..6=Sat
+      if (trainDows.indexOf(dow) !== -1) {
+        idx = (idx + 1) % rotation.length;
+        var k = lib.dayKey(cursor.toISOString());
+        out.push({ dateISO: cursor.toISOString(), key: k, type: rotation[idx], isToday: k === todayKey });
+      }
+      cursor = lib.addDays(cursor, 1);
+    }
+    return out;
   }
 
   /* "in 3 days" beats "Thu 27 Aug" for the only question this card exists to
@@ -5124,7 +5014,7 @@
   /* The single most-asked question of this page, answered before the grid
      rather than under it. */
   function nextSessionBanner(s) {
-    var up = projectUpcoming(s);
+    var up = projectUpcoming(s, 1);
     if (!up.length) return "";
     var u = up[0];
     var when = whenLabel(u.key);
@@ -5140,6 +5030,23 @@
     '</div>';
   }
 
+  function upcomingDaysCard(s) {
+    var up = projectUpcoming(s, 6);
+    if (!up.length) return "";
+    var rows = up.map(function (u, i) {
+      return '<div class="upcoming__row' + (i === 0 ? " is-next" : "") + '">' +
+        '<span class="upcoming__when">' + esc(whenLabel(u.key)) +
+          '<small>' + esc(shortDate(u.dateISO)) + '</small></span>' +
+        '<span class="upcoming__type ' + typeCls(u.type) + '">' +
+          esc(engine.DAY_LABEL[u.type] || u.type) + '</span>' +
+      '</div>';
+    }).join("");
+    return '<div class="upcoming mt-5">' +
+      '<div class="upcoming__head">Upcoming sessions</div>' +
+      '<p class="faint text-xs" style="margin:0 0 var(--sp-3)">Projected from your Push → Pull → Legs → Full rotation. Actual days adapt as you log sessions.</p>' +
+      rows +
+    '</div>';
+  }
 
   var DAY_TYPE_COLOR = {
     push:     "cal-day--trained",
@@ -5167,7 +5074,7 @@
 
     // Project upcoming planned sessions (only show future ones on this month)
     var planned = {};
-    var upcoming = projectUpcoming(s);
+    var upcoming = projectUpcoming(s, 12);
     upcoming.forEach(function (u) { planned[u.key] = u.type; });
     /* The next one is the only one you act on, so it gets its own treatment
        rather than looking identical to a session three weeks out. */
@@ -5236,11 +5143,8 @@
       '<div class="cal-legend__item"><span class="cal-legend__swatch" style="background:rgba(204,0,0,.22);border-color:rgba(204,0,0,.5)"></span>Full Body</div>' +
       '<div class="cal-legend__item"><span class="cal-legend__swatch cal-legend__swatch--run"></span>Run day</div>' +
       '<div class="cal-legend__item"><span class="cal-legend__swatch" style="background:transparent;border-color:var(--secondary)"></span>Today</div>' +
-      /* No "Planned" swatch: the next session is the only day the app marks
-         ahead of time, so `cal-day--planned` and `cal-day--next` always land
-         on the same cell. A legend key that can never appear on its own is
-         just a thing to look for and not find. */
       '<div class="cal-legend__item"><span class="cal-legend__swatch cal-legend__swatch--next"></span>Next session</div>' +
+      '<div class="cal-legend__item"><span class="cal-legend__swatch cal-legend__swatch--planned"></span>Planned</div>' +
     '</div>';
 
     return '<div class="cal-month">' +
