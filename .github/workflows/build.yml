@@ -1,0 +1,56 @@
+name: build desktop
+
+# Windows .exe is built here, on a real Windows runner — cross-compiling it from
+# Linux is the fragile path (MSVC + WebView2). Linux AppImage is built too so CI
+# stays the single source of both. Run it from the Actions tab (workflow_dispatch)
+# or push a v* tag.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+          - platform: ubuntu-22.04
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux webview deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Generate icons
+        run: |
+          cargo install tauri-cli --version "^2" --locked
+          cargo tauri icon icons/icon-512.png
+
+      - name: Build
+        run: cargo tauri build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wellness-hub-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: ignore

@@ -296,7 +296,7 @@
      go. Drive's folder-plus-file pairing solves the same problem its own way.
      ====================================================================== */
 
-  var TRANSPORT_KEY = "syncTransport";   // "folder" | "drive", via Hub.uiGet/uiSet
+  var TRANSPORT_KEY = "syncTransport";   // "folder" | "drive" | "supabase", via Hub.uiGet/uiSet
 
   var folderSync = window.Sync.create({
     appId: "wellness-hub",
@@ -317,11 +317,24 @@
     onStatus: function () { try { Hub.refresh(); } catch (e) {} }
   });
 
+  /* Supabase: a signed-in row instead of a folder or a Drive file. Same
+     contract, so it slots in beside the other two — the account IS the link
+     (PLAN-desktop-supabase.md §B2). */
+  var supabaseSync = window.SyncSupabase.create({
+    appId: "wellness-hub",
+    dbName: "wellness-hub-supabase",
+    merge: function (fileP, localP) { return Hub.syncMerge.mergePayload(fileP, localP); },
+    onStatus: function () { try { Hub.refresh(); } catch (e) {} }
+  });
+
   /* Defaults to "folder" so a machine that linked before Drive existed keeps
      behaving exactly as it did — the preference is only ever set to "drive"
-     by an explicit click on "Connect Google Drive". */
+     by an explicit click on "Connect Google Drive", or "supabase" by signing in. */
   function transport() { return Hub.uiGet(TRANSPORT_KEY, "folder"); }
-  function activeSync() { return transport() === "drive" ? driveSync : folderSync; }
+  function activeSync() {
+    var t = transport();
+    return t === "drive" ? driveSync : t === "supabase" ? supabaseSync : folderSync;
+  }
 
   function link() {
     if (!fsSupported()) return Promise.resolve(false);
@@ -392,6 +405,51 @@
     lastWrite = null;
     return driveSync.forget().then(function () {
       Hub.toast("Google Drive unlinked. Nothing in Drive was deleted.", "info", 4000);
+      Hub.refresh();
+    });
+  }
+
+  /* Sign in to Supabase and make this machine sync through it. Same swap-out
+     as linkDrive — one transport per machine — but it takes credentials, so
+     the Settings card passes them in rather than opening a picker. */
+  function linkSupabase(email, password) {
+    if (!supabaseSync.configured()) {
+      Hub.toast("Supabase sync isn't set up on this build.", "warn", 6000);
+      return Promise.resolve(false);
+    }
+    var cur = transport();
+    var swap = (cur === "folder" && folderSync.hasFile())
+      ? folderSync.forget().then(function () {
+          Hub.toast("Linked folder unlinked — switching this machine to Supabase instead.", "info", 5000);
+        })
+      : (cur === "drive" && driveSync.hasFile())
+        ? driveSync.forget().then(function () {
+            Hub.toast("Google Drive unlinked — switching this machine to Supabase instead.", "info", 5000);
+          })
+        : Promise.resolve();
+    return swap.then(function () {
+      return supabaseSync.connect({ email: email, password: password })
+        .then(function () {
+          Hub.uiSet(TRANSPORT_KEY, "supabase");
+          startWatch(supabaseSync);
+          return writeNow();
+        })
+        .then(function () {
+          Hub.toast("Signed in. This device now syncs through Supabase.", "success", 5000);
+          Hub.refresh();
+          return true;
+        });
+    }).catch(function (err) {
+      lastError = String(err && err.message || err);
+      Hub.toast("Couldn't sign in: " + lastError, "danger", 6000);
+      return false;
+    });
+  }
+
+  function unlinkSupabase() {
+    lastWrite = null;
+    return supabaseSync.forget().then(function () {
+      Hub.toast("Signed out of Supabase. Nothing in the cloud was deleted.", "info", 4000);
       Hub.refresh();
     });
   }
@@ -717,7 +775,9 @@
       /* Per-transport, so Settings can render two independent cards rather
          than guessing which one a single flat status belongs to. */
       folder: { fsSupported: fsSupported(), linked: folderSync.hasFile(), syncStatus: folderSync.status() },
-      drive: { configured: driveSync.configured(), linked: driveSync.hasFile(), syncStatus: driveSync.status() }
+      drive: { configured: driveSync.configured(), linked: driveSync.hasFile(), syncStatus: driveSync.status() },
+      supabase: { configured: supabaseSync.configured(), linked: supabaseSync.hasFile(),
+                  syncStatus: supabaseSync.status(), account: supabaseSync.account() }
     };
   }
 
@@ -831,6 +891,8 @@
     unlink: unlink,
     linkDrive: linkDrive,
     unlinkDrive: unlinkDrive,
+    linkSupabase: linkSupabase,
+    unlinkSupabase: unlinkSupabase,
     writeNow: writeNow,
     scheduleWrite: scheduleWrite,
     flush: flush,

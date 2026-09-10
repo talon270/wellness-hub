@@ -1,0 +1,13 @@
+# Tauri build output and generated files — never committed.
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/
+src-tauri/dist/
+
+# Local secrets: Supabase URL + anon key live here, out of the repo.
+# The app reads them at build time (PLAN-desktop-supabase.md B2).
+src-tauri/.env
+
+# A stray nested checkout of this same repo — not a deploy target, not a
+# submodule. Never commit it; it'd create a broken gitlink.
+deploy/

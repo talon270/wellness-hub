@@ -1,0 +1,20 @@
+[package]
+name = "wellness-hub"
+version = "1.0.0"
+edition = "2021"
+description = "Wellness Hub desktop shell"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-notification = "2"
+# Second launch focuses the running copy instead of spawning a duplicate.
+tauri-plugin-single-instance = "2"
+# Registers a login item so the app is already resident after a reboot.
+tauri-plugin-autostart = "2"
+
+# ponytail: skeleton shell only — no Rust-side sync/logic. All app behaviour
+# stays in the existing JS. Rust exists here purely to be the native window,
+# the tray, and the notification bridge (PLAN-desktop-supabase.md B3).

@@ -795,6 +795,25 @@
           Hub.icon("download") + "Connect Google Drive</button>";
     }
 
+    var supa = st.supabase || { configured: false, linked: false };
+    var supaBlock;
+    if (!supa.configured) {
+      supaBlock = '<p class="wh-sm wh-muted">Not set up on this build.</p>';
+    } else if (supa.linked) {
+      supaBlock = linkedBlock("st-supabase",
+        "Signed in as <span class=\"mono\">" + Hub.esc(supa.account || "your account") + "</span>", st);
+    } else {
+      supaBlock =
+        '<p class="wh-sm wh-muted">Sign in to sync this device through your Supabase project — works the same ' +
+          "on desktop and phone, with no folder to pick and no background app to run.</p>" +
+        '<div class="wh-row wh-mt4">' +
+          '<input class="wh-input" type="email" id="st-supabase-email" placeholder="email" autocomplete="username" />' +
+          '<input class="wh-input" type="password" id="st-supabase-password" placeholder="password" autocomplete="current-password" />' +
+        "</div>" +
+        '<button type="button" class="wh-btn wh-btn--primary wh-mt4" id="st-supabase-connect">' +
+          Hub.icon("download") + "Sign in</button>";
+    }
+
     var fallback = (!st.folder.fsSupported && !st.drive.configured)
       ? ('<div class="wh-disclaimer wh-mt4">' + Hub.icon("info") +
           "<span>Neither sync option is available in this build/browser. Use <strong>Export all data</strong> " +
@@ -831,11 +850,12 @@
 
       '<div class="wh-setrow__name wh-mt4">Linked folder</div>' + folderBlock +
       '<div class="wh-setrow__name wh-mt6">Google Drive</div>' + driveBlock +
+      '<div class="wh-setrow__name wh-mt6">Supabase (cloud)</div>' + supaBlock +
       fallback +
 
-      (st.folder.linked || st.drive.linked
+      (st.folder.linked || st.drive.linked || supa.linked
         ? '<p class="wh-help wh-mt4">' + Hub.icon("info") +
-          " Only one of these can be active per machine — connecting the other switches this machine over.</p>"
+          " Only one of these can be active per machine — connecting another switches this machine over.</p>"
         : "") +
 
       '<p class="wh-help wh-mt4">' + Hub.icon("alert") +
@@ -1023,11 +1043,27 @@
         onConfirm: function () { Hub.storage.unlinkDrive(); }
       });
     });
+    on(el, "#st-supabase-connect", function () {
+      var email = (el.querySelector("#st-supabase-email") || {}).value || "";
+      var pw = (el.querySelector("#st-supabase-password") || {}).value || "";
+      if (!email.trim() || !pw) { Hub.toast("Enter your email and password.", "warn"); return; }
+      Hub.storage.linkSupabase(email.trim(), pw).then(function () {
+        var pf = el.querySelector("#st-supabase-password"); if (pf) pf.value = "";
+      });
+    });
+    on(el, "#st-supabase-unlink", function () {
+      Hub.confirm({
+        title: "Sign out of Supabase?",
+        body: "Your data stays in the cloud exactly as it is — this device just stops syncing to it.",
+        confirmLabel: "Sign out",
+        onConfirm: function () { Hub.storage.unlinkSupabase(); }
+      });
+    });
     /* Write / reconnect / restore all dispatch through whichever transport is
        currently active (js/storage.js's activeSync()), so the folder and
        Drive buttons share one handler each — only one block is ever showing
        these at a time, since the two are mutually exclusive per machine. */
-    ["#st-folder-writenow", "#st-drive-writenow"].forEach(function (sel) {
+    ["#st-folder-writenow", "#st-drive-writenow", "#st-supabase-writenow"].forEach(function (sel) {
       on(el, sel, function () {
         Hub.storage.writeNow().then(function (ok) {
           Hub.toast(ok ? "Written." : "Couldn't write — try Reconnect.", ok ? "success" : "warn");
@@ -1035,7 +1071,7 @@
         });
       });
     });
-    ["#st-folder-reconnect", "#st-drive-reconnect"].forEach(function (sel) {
+    ["#st-folder-reconnect", "#st-drive-reconnect", "#st-supabase-reconnect"].forEach(function (sel) {
       on(el, sel, function () {
         Hub.storage.ensurePermission("readwrite").then(function (ok) {
           if (ok) return Hub.storage.writeNow().then(function () {
@@ -1046,7 +1082,7 @@
         });
       });
     });
-    ["#st-folder-restorefile", "#st-drive-restorefile"].forEach(function (sel) {
+    ["#st-folder-restorefile", "#st-drive-restorefile", "#st-supabase-restorefile"].forEach(function (sel) {
       on(el, sel, function () { Hub.storage.restoreFromFile(); });
     });
 

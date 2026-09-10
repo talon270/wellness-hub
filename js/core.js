@@ -1449,17 +1449,38 @@
        from them, so trusting isSecureContext alone would show the wrong advice
        and leave the user waiting for notifications that never arrive. */
     availableHere: function () {
+      /* Desktop shell delivers via the native OS plugin, not the web API, so
+         the file://-vs-secure-origin question doesn't apply — it always can. */
+      if (window.__TAURI__) return true;
       if (!this.supported()) return false;
       if (location.protocol === "file:") return false;
       return window.isSecureContext === true || location.protocol === "https:" ||
              location.hostname === "localhost" || location.hostname === "127.0.0.1";
     },
-    permission: function () { return this.supported() ? Notification.permission : "unsupported"; },
+    /* On the Linux/Windows desktop targets the notification plugin grants
+       unconditionally (there is no per-app permission gate), so "granted" is
+       the accurate answer, not an optimistic guess. */
+    permission: function () {
+      if (window.__TAURI__) return "granted";
+      return this.supported() ? Notification.permission : "unsupported";
+    },
 
     /* Explain first, THEN trigger the browser's own prompt — never fire the
        native prompt cold on page load. */
     request: function (cb) {
       var self = this;
+      /* Desktop shell: no browser prompt to raise. Ask the native plugin (a
+         no-op grant on Linux/Windows) and record that we've asked, so Settings
+         and onboarding don't keep offering it. */
+      if (window.__TAURI__) {
+        try { window.__TAURI__.core.invoke("plugin:notification|request_permission"); } catch (e) {}
+        STATE.settings.notificationsAsked = true;
+        save();
+        toast("Reminders enabled.", "success");
+        if (cb) cb(true);
+        refresh();
+        return;
+      }
       if (!this.availableHere()) {
         modal({
           title: "Notifications aren't available here",
@@ -1531,6 +1552,11 @@
          in-session cues (js/core.js "MASTER TICK"/cueChange/cueDone) rather
          than sharing their default gain, which is the "not loud enough" gap. */
       cueReminder();
+      /* Desktop shell: hand the popup to the OS notification daemon. The web
+         Notification API is unreliable inside the WebView — the plugin is the
+         whole reason the native shell exists. Returns here; the web paths below
+         are for the browser/PWA only. */
+      if (window.__TAURI__) { tauriNotify(title, body); return; }
       if (!this.availableHere() || Notification.permission !== "granted") return;
 
       var opts = {
@@ -1599,6 +1625,18 @@
       if (viewId) show(viewId);
       remove();
     });
+  }
+
+  /* Desktop shell path: a real computer-wide OS toast via tauri-plugin-
+     notification. No action buttons or click-to-focus here — the in-app toast
+     (fired first, every time) carries Open/Snooze, and the tray keeps the
+     window reachable. The `icon` name matches the installed hicolor icon. */
+  function tauriNotify(title, body) {
+    try {
+      window.__TAURI__.core.invoke("plugin:notification|notify", {
+        options: { title: title, body: body, icon: "wellness-hub" }
+      });
+    } catch (e) { /* the in-app toast already fired */ }
   }
 
   function legacyNotify(title, opts, viewId) {
