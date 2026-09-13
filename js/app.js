@@ -46,6 +46,22 @@
     watchForFitnessApp();
     wireGlobalKeys();
     wireGlobalNav();
+    checkForDesktopUpdate();
+  }
+
+  /* Desktop shell only: if any source file is newer than the running binary,
+     the installed copy is stale — surface it once at boot with a toast that
+     opens Settings, where the "Check for updates" card runs the rebuild. Silent
+     no-op in the browser, and silent when up to date so it never interrupts a
+     fresh install. */
+  function checkForDesktopUpdate() {
+    if (!window.__TAURI__) return;
+    try {
+      window.__TAURI__.core.invoke("check_update").then(function (newer) {
+        if (!newer) return;
+        Hub.toast("An update is ready to install — open Settings → Desktop app.", "warn", 8000);
+      }, function () { /* never blocks the boot on a check that couldn't run */ });
+    } catch (e) { /* Tauri present but plugin missing — the check is optional */ }
   }
 
   /* ======================================================================

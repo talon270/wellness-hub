@@ -407,4 +407,10 @@
   }
 
   Hub.registerView("eyecare", render);
+
+  /* One place owns the 20-second look-away overlay — this one. The dashboard
+     timer rack (js/timers.js) offers the look-away when the 20-minute eye
+     timer runs out and calls back into it here, so a change to the break
+     UI stays in this file. */
+  Hub.eye = { runBreak: runBreak };
 })();

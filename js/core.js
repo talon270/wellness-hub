@@ -1541,6 +1541,31 @@
       }
     },
 
+    /* OS-only popup — no toast, no cue. Use it when the in-app UX already
+       covers the on-screen half (a countdown finishing, a badge unlocking) and
+       you only need to reach the user when the window is on another workspace
+       or minimised to the tray. Mirrors Study Tracker's cue → tauriNotify
+       path: same plugin, same shape, same silence in the browser fallback if
+       permission was never granted. */
+    os: function (title, body) {
+      if (window.__TAURI__) { tauriNotify(title, body); return; }
+      if (!this.availableHere() || Notification.permission !== "granted") return;
+      var opts = {
+        body: body,
+        tag: "wellness-os",
+        icon: notificationIcon(),
+        badge: notificationIcon(),
+        renotify: true
+      };
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready
+          .then(function (reg) { return reg.showNotification(title, opts); })
+          .catch(function () { legacyNotify(title, opts); });
+        return;
+      }
+      legacyNotify(title, opts);
+    },
+
     /* Show a notification if we're allowed to; always show an in-app toast so
        the reminder is never silently lost. */
     fire: function (title, body, viewId, remKey) {

@@ -133,6 +133,9 @@
       /* ---------- install / offline ---------- */
       appCard() +
 
+      /* ---------- desktop rebuild (Tauri shell only) ---------- */
+      desktopCard() +
+
       /* ---------- reminders when the app is closed ---------- */
       '<div class="wh-card wh-mb4">' +
         '<div class="wh-card__head">' +
@@ -733,6 +736,31 @@
     "</div>";
   }
 
+  /* Desktop shell only: the installed binary is a snapshot of index.html + js/
+     taken at the last `cargo build`, so it goes stale the moment those files
+     change. run_update shells out to copy-assets.sh + cargo build --release +
+     install.sh (see src-tauri/src/main.rs); relaunch swaps the running process
+     for the freshly installed one; check_update compares source mtimes to the
+     running binary and returns true if any source file is newer. Silent no-op
+     in the browser/PWA — window.__TAURI__ is undefined there. */
+  function desktopCard() {
+    if (!window.__TAURI__) return "";
+    return '<div class="wh-card wh-mb4" id="st-desktop-card">' +
+      '<div class="wh-card__head">' +
+        '<div class="wh-card__title">' + Hub.icon("download") + "Desktop app</div>" +
+        '<span class="wh-chip" id="st-update-chip">checking…</span>' +
+      "</div>" +
+      '<p class="wh-sm wh-muted">Rebuilds this window from the current ' +
+        "<code class='mono'>index.html</code> + <code class='mono'>js/</code> tree and reinstalls it. Needs the " +
+        "Rust toolchain that built it in the first place; takes up to a minute.</p>" +
+      '<div class="wh-row wh-mt4">' +
+        '<button type="button" class="wh-btn wh-btn--primary" id="st-update-run">' +
+          Hub.icon("refresh") + "Check for updates</button>" +
+      "</div>" +
+      '<div class="wh-sm wh-mt4" id="st-update-msg" hidden></div>' +
+    "</div>";
+  }
+
   /* Storage durability: eviction protection + the linked backup file.
      Rendered synchronously from cached values; the async bits (persisted?,
      quota) fill themselves in via `refreshDurability` once resolved. */
@@ -997,6 +1025,44 @@
 
     var updateBtn = el.querySelector("#st-update");
     if (updateBtn) updateBtn.addEventListener("click", function () { Hub.pwa.applyUpdate(); });
+
+    /* --- desktop rebuild (Tauri only) --- */
+    var updateChip = el.querySelector("#st-update-chip");
+    var updateMsg = el.querySelector("#st-update-msg");
+    var updateRun = el.querySelector("#st-update-run");
+    if (updateRun && window.__TAURI__) {
+      /* Same call that runs on boot — repaint the chip when Settings opens so
+         a user who just edited a JS file sees "update available" without
+         waiting for the next launch. */
+      window.__TAURI__.core.invoke("check_update").then(function (newer) {
+        if (updateChip) {
+          updateChip.textContent = newer ? "update available" : "up to date";
+          updateChip.className = "wh-chip " + (newer ? "wh-chip--warn" : "wh-chip--good");
+        }
+      }, function () {
+        if (updateChip) { updateChip.textContent = "unknown"; updateChip.className = "wh-chip"; }
+      });
+
+      updateRun.addEventListener("click", function () {
+        updateRun.disabled = true;
+        if (updateMsg) { updateMsg.hidden = false; updateMsg.textContent = "Building — this can take a minute…"; }
+        window.__TAURI__.core.invoke("run_update").then(function () {
+          updateRun.disabled = false;
+          if (updateMsg) { updateMsg.textContent = "Rebuilt and installed. Relaunch to run the new copy."; }
+          if (updateChip) { updateChip.textContent = "up to date"; updateChip.className = "wh-chip wh-chip--good"; }
+          Hub.confirm({
+            title: "Wellness Hub updated",
+            body: "The rebuilt copy is installed. Relaunch now to run it?",
+            confirmLabel: "Relaunch now",
+            variant: "primary",
+            onConfirm: function () { window.__TAURI__.core.invoke("relaunch"); }
+          });
+        }, function (err) {
+          updateRun.disabled = false;
+          if (updateMsg) { updateMsg.textContent = "Update failed: " + err; }
+        });
+      });
+    }
 
     var recacheBtn = el.querySelector("#st-recache");
     if (recacheBtn) recacheBtn.addEventListener("click", function () {

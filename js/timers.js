@@ -63,13 +63,27 @@
       icon: "eye", color: "var(--blue-bright)", view: "eyecare",
       note: "on screen now — 20 min to your next 20-20-20 break",
       log: function () {
-        var d = Hub.editDay();
-        d.eye2020++;
-        Hub.commit();
+        /* Deliberately does NOT increment d.eye2020 here — the 20-minute
+           timer finishing proves the interval elapsed, not that you looked
+           away. The look-away is the actual break, and Hub.eye.runBreak logs
+           on its own completion. Same "conditioning, not strength" rule
+           the rest of the app follows: name the metric for what it measures. */
         Hub.reminders.reset("eye");
-        if (Hub.gamify) Hub.gamify.checkMilestone("eye");
-        Hub.beep(660, 90);
-        Hub.toast("Eye break logged — " + d.eye2020 + " today. Look 20 feet away for 20 seconds.", "success", 5000);
+        Hub.notify.os("Eye break", "Look 20 feet away for 20 seconds.");
+        /* No announcing toast on the offer — the button IS the announcement.
+           If the user declines nothing is counted; if they accept the 20-sec
+           overlay opens and its own completion increments d.eye2020. */
+        if (Hub.eye && Hub.eye.runBreak) {
+          Hub.modal({
+            title: "Time for a 20-second look-away",
+            body: "<p>Twenty minutes of screen time up. Look at something ~6 metres " +
+                  "(20 feet) away for twenty seconds — that's all it takes.</p>",
+            actions: [
+              { label: "Skip", variant: "ghost" },
+              { label: "Look away now", variant: "primary", onClick: function () { Hub.eye.runBreak(); } }
+            ]
+          });
+        }
       }
     },
     {
@@ -80,6 +94,7 @@
         /* Hub.desk.logStand already does the commit, the reminder reset, the
            milestone check, the beep and its own toast — one implementation
            of "a stand break happened," not a second one drifting beside it. */
+        Hub.notify.os("Desk reset", "Time to stand — walk, stretch, look away for a minute.");
         if (Hub.desk && Hub.desk.logStand) {
           Hub.desk.logStand("Time to stand — break logged. Walk, stretch, look away for a minute.");
         } else {
