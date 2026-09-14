@@ -9,6 +9,47 @@ at ~1557-1606). Transport contract and selector confirmed from source, not
 assumed.
 **Nothing below is implemented — this is the plan.**
 
+## Implemented — status and results (2026-09-14)
+
+The plan text below is unchanged. B2, B3 and the B5 Settings card shipped in
+`a3ee5fd` and `b73f25e`. The rest, and one bug the plan didn't foresee:
+
+### A8 · BUG (high): linking wrote before it read, and wiped the cloud row
+Every `link*()` in `js/storage.js` called `writeNow()` straight after
+`connect()`, and no transport's `connect()` reads the remote. Supabase's rev
+guard (`js/syncsupabase.js`) and Drive's (`js/syncdrive.js`) also treated an
+unknown rev (`null`, nothing read yet) as "nothing to merge". So signing in on
+an empty device — exactly the fresh-exe case in A6 — PATCHed the cloud row with
+empty state.
+**Fix:** `adopt(sync)` in `storage.js`, shared by all three `link*()` functions:
+read → merge → apply → write, the same sequence `init()` runs at boot. It writes
+nothing if the read fails. Both transport guards now treat an unknown rev as
+"moved" and merge. Two call-site-level changes, one shared helper — the smallest
+fix that covers all three transports instead of just the one that was caught.
+
+Same Playwright script, mocked PostgREST, 30-day cloud row plus one photo, run
+against `b73f25e` and against the fix:
+
+| Scenario | Cloud after, before → after | This device after, before → after |
+|---|---|---|
+| Sign in on an empty device | 0 days, 0 photos → **30 days, 1 photo** | 0 → **30 days** |
+| First read 500s, then Write now | 0 days, 0 photos → **30 days, 1 photo** | 0 → 0 (arrives on next focus or boot) |
+
+Before the fix, the read-failure case also toasted "Written." over the wipe.
+
+### Status per step
+| Step | Status |
+|---|---|
+| B1 · schema + RLS | Tables exist. Signed out, both read back `[]`, and an anonymous insert gets `42501` (live project, 2026-09-14). **The second-account test has not run** — it needs a second account |
+| B2 · transport | Shipped; A8 fixed |
+| B3 · Tauri shell | Shipped, tray close confirmed in `main.rs` (`CloseRequested` → `hide()` + `prevent_close`). **Deviation:** the plan had auto-update out of scope; `b73f25e` added an in-place rebuild from Settings |
+| B4 · artifacts | Linux binary built and installed locally. Windows `.exe` builds via the `v*` tag workflow — not run from here |
+| B5 · first run | **Deviation:** instead of a backup-import prompt, the first-run note under the desktop shell says the window starts empty and names both routes (sign in to the same sync, or Import from file). A8's fix makes sign-in pull the history down, so the import is the offline fallback, not the main path. Checked in Playwright with a mocked `window.__TAURI__`: the desktop copy shows, and the browser copy is unchanged |
+
+Also fixed: `js/syncsupabase.js` was missing from the service worker's
+`PRECACHE`, so an offline first launch after an update couldn't load it
+(reasoned from the fetch handler, not reproduced). Cache bumped to `v28`.
+
 ---
 
 ## Phase 0 — shape

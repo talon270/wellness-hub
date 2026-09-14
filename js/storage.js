@@ -336,6 +336,27 @@
     return t === "drive" ? driveSync : t === "supabase" ? supabaseSync : folderSync;
   }
 
+  /* Pull before the first push. No transport's connect() reads what is
+     already there, and every link*() used to write straight after it — so
+     signing in on a fresh desktop install (empty storage, PLAN-desktop-
+     supabase.md §A6) PATCHed a 30-day cloud row down to 0 days. This is the
+     same read → merge → apply init() does at boot, then the write. A remote
+     that can't be read is left alone and resolves false, so the caller skips
+     its "linked" toast rather than claiming a sync that didn't happen. */
+  function adopt(sync) {
+    return sync.readFile().then(function (remote) {
+      if (!remote) return;
+      return applyMerged(Hub.syncMerge.mergePayload(remote, payload()), remote.deviceId || null);
+    }).then(function () {
+      return writeNow().then(function () { return true; });
+    }, function (err) {
+      lastError = String(err && err.message || err);
+      Hub.toast("Linked, but the copy already there couldn't be read (" + lastError +
+        ") — nothing was written over it.", "warn", 9000);
+      return false;
+    });
+  }
+
   function link() {
     if (!fsSupported()) return Promise.resolve(false);
     var swap = transport() === "drive" && driveSync.hasFile()
@@ -348,11 +369,12 @@
         .then(function () {
           Hub.uiSet(TRANSPORT_KEY, "folder");
           startWatch(folderSync);
-          return writeNow();
+          return adopt(folderSync);
         })
-        .then(function () {
-          Hub.toast("Folder linked. It'll keep itself up to date from now on.", "success", 5000);
+        .then(function (ok) {
           Hub.refresh();
+          if (!ok) return false;
+          Hub.toast("Folder linked. It'll keep itself up to date from now on.", "success", 5000);
           return true;
         });
     }).catch(function (err) {
@@ -387,11 +409,12 @@
         .then(function () {
           Hub.uiSet(TRANSPORT_KEY, "drive");
           startWatch(driveSync);
-          return writeNow();
+          return adopt(driveSync);
         })
-        .then(function () {
-          Hub.toast("Google Drive linked. It'll keep itself up to date from now on.", "success", 5000);
+        .then(function (ok) {
           Hub.refresh();
+          if (!ok) return false;
+          Hub.toast("Google Drive linked. It'll keep itself up to date from now on.", "success", 5000);
           return true;
         });
     }).catch(function (err) {
@@ -432,11 +455,12 @@
         .then(function () {
           Hub.uiSet(TRANSPORT_KEY, "supabase");
           startWatch(supabaseSync);
-          return writeNow();
+          return adopt(supabaseSync);
         })
-        .then(function () {
-          Hub.toast("Signed in. This device now syncs through Supabase.", "success", 5000);
+        .then(function (ok) {
           Hub.refresh();
+          if (!ok) return false;
+          Hub.toast("Signed in. This device now syncs through Supabase.", "success", 5000);
           return true;
         });
     }).catch(function (err) {
@@ -839,7 +863,9 @@
   /* Apply a merged payload to the running app. Photos come back through the
      same path a restore uses, and streaks are recomputed rather than trusted:
      gamify.js:9 says that field is a cache, so a merged one would be two
-     possibly-wrong answers combined instead of the right one recalculated. */
+     possibly-wrong answers combined instead of the right one recalculated.
+     Resolves once the photo bytes are in IndexedDB, so a caller about to
+     write (adopt) sends them back out rather than racing their restore. */
   function applyMerged(merged, fromDevice) {
     try {
       Hub.setState(merged.wellnessHub);
@@ -852,9 +878,8 @@
            the merged data was sitting right there. Tell it to reload. */
         try { if (window.App && window.App.reloadFromRemote) window.App.reloadFromRemote(); } catch (e) {}
       }
-      if (merged.photoData && Object.keys(merged.photoData).length) {
-        restorePhotoData(merged.photoData);
-      }
+      var photos = merged.photoData && Object.keys(merged.photoData).length
+        ? restorePhotoData(merged.photoData) : Promise.resolve(0);
       if (Hub.gamify) Hub.gamify.recompute();
       Hub.save();
       Hub.refresh();
@@ -862,8 +887,10 @@
         fromDevice ? "Updated from " + fromDevice + "." : "Updated from another device.",
         "info", 5000
       );
+      return photos;
     } catch (e) {
       console.warn("Wellness Hub: merge could not be applied", e);
+      return Promise.resolve(0);
     }
   }
 

@@ -9,8 +9,12 @@ It asks who's using it on first run — six questions, all skippable — and tur
 the answers into suggested reminders, timed around your own day, plus whichever
 modules are actually relevant to you.
 
-Vanilla HTML/CSS/JS. No build step, no npm install, no backend, no accounts.
+Vanilla HTML/CSS/JS. No build step, no npm install, no backend.
 Everything is stored in your browser's `localStorage` and works fully offline.
+Syncing between devices is optional and off until you link something — a
+folder, Google Drive, or a Supabase account. That last one is the only place an
+account enters the picture, and `localStorage` stays the canonical copy either
+way.
 
 **Open `index.html` and it runs.**
 
@@ -181,6 +185,35 @@ Once installed, the app **works with the server stopped** — everything is serv
 from the service worker's cache. The server only matters for picking up code
 changes and for the first install.
 
+### The desktop app
+
+`src-tauri/` wraps the same files in a Tauri v2 window — a real binary on the
+system webview (WebKitGTK on Linux, WebView2 on Windows), not a bundled browser.
+The app code is unchanged; only the final "show a notification" call branches.
+
+| | |
+|---|---|
+| **Closes to the tray** | Closing the window hides it and the reminder scheduler keeps ticking. Quit from the tray menu |
+| **Native notifications** | Reminders go through the OS notification daemon, not the web Notification API |
+| **Single instance** | A second launch focuses the running window instead of opening another |
+| **Autostart** | Registers a login item once; turning it off later sticks |
+
+```sh
+sh src-tauri/copy-assets.sh                  # curated copy of the runtime files into src-tauri/dist
+(cd src-tauri && cargo build --release)      # needs the Rust toolchain
+sh src-tauri/install.sh                      # binary, icons and a .desktop launcher into ~/.local
+```
+
+After that, **Settings → Desktop app → Check for updates** runs the same three
+steps in place whenever a source file is newer than the running binary. Pushing
+a `v*` tag builds the Windows `.exe` and a Linux AppImage in GitHub Actions
+(`.github/workflows/build.yml`).
+
+**The desktop window starts empty.** Its storage is a different origin from your
+browser's, so your history isn't in it yet. Link the same sync in both, or
+import a backup once — the first-run note says so, because "where's my data" is
+the wrong first impression.
+
 ### The one difference between file:// and served
 
 | | `file://` (opened directly) | `http://localhost` (served) |
@@ -244,9 +277,10 @@ Interval reminders (eye breaks every 20 min, sunscreen every 2 h) are
 deliberately excluded — a calendar entry every 20 minutes would be unusable, and
 those only make sense while you're actually sitting at a screen with the app open.
 
-If you want true always-on reminders with no app running at all, the options are
-an OS-level timer (a `systemd` timer calling `notify-send`) or wrapping this in
-Electron/Tauri. Both are outside what a web app can do.
+The desktop app gets one step further: closing its window hides it to the tray,
+so interval reminders keep firing. Quit it from the tray and they stop.
+Reminders that survive a full quit need an OS-level timer (a `systemd` timer
+calling `notify-send`) or a push server, and this app has neither by design.
 
 ---
 
@@ -260,18 +294,50 @@ asks the browser to exempt this origin from the automatic clean-up it performs
 when disk space runs low. Chrome usually grants this silently once the app is
 installed; Firefox asks. The card reports the real answer either way.
 
-**2. A linked backup file.** On Chrome, Edge and Opera you can pick a real file
-on disk once. From then on the app rewrites it automatically a few seconds after
-anything changes — no prompts, no remembering. Put it somewhere already synced
-or backed up and your history lives outside the browser entirely.
+**2. A sync transport.** Link one per machine and the app rewrites it a few
+seconds after anything changes — no prompts, no remembering. Your history then
+lives outside the browser entirely.
+
+| Transport | Where the data lives | Needs |
+|---|---|---|
+| **Linked folder** | `wellness-hub.json` plus rolling backups in a folder you pick — ideally one Syncthing or a backup already covers | Chrome, Edge or Opera (File System Access) |
+| **Google Drive** | `Helth Sync/wellness-hub.json` plus a `backups/` folder in your Drive | A Google sign-in |
+| **Supabase** | One row per account in `wellness_state`; the last 10 snapshots, at most one per 5 minutes, in `wellness_backups` | An email and password on your Supabase project. Works in the desktop app and the browser |
+
+Connecting a second transport on the same machine unlinks the first, with a
+toast saying so — two transports writing the same history would fight.
+
+**Linking pulls before it pushes.** Every transport reads what is already there,
+merges it into this device, and only then writes. The first version of the
+Supabase transport didn't: it wrote straight after sign-in, so signing in from a
+fresh desktop install — empty storage — PATCHed a 30-day cloud row down to 0
+days. The same sign-in now brings all 30 days down to the new device and leaves
+the cloud at 30. If the existing copy can't be read at all (a cold free-tier
+project, a corrupt file), nothing is written over it, and a later write that
+finds a Drive file or Supabase row it has never read merges instead of
+overwriting.
 
 The payoff is the recovery path: if site data is ever cleared, the app notices
 it's empty on next launch, finds the linked file still there, and offers to
-restore from it before you lose anything.
+restore from it before you lose anything. A Drive or Supabase sign-in lives in
+site data too, so it goes with everything else — sign in again and linking
+merges the history back down.
 
-Firefox and Safari don't support that API yet. There, the app falls back to
-manual export and nags you if it's been more than a fortnight — it says so
-plainly rather than pretending the two are equivalent.
+Firefox and Safari can't link a folder. With no transport linked, the app falls
+back to manual export and nags you if it's been more than a fortnight — it says
+so plainly rather than pretending the two are equivalent.
+
+**What's solid and what's assumed about Supabase.** The publishable key ships
+inside every copy of the app, by design; Row Level Security
+(`user_id = auth.uid()`) is the whole security model. It is also the one
+deviation from "no backend, no accounts", and it's contained: sync only,
+`localStorage` stays canonical, and the app opens and works with the network
+unplugged and the account signed out.
+
+| Solid — checked 2026-09-14 | Assumed — not yet tested |
+|---|---|
+| Signed out, both tables read back `[]` and an anonymous insert is refused (`42501 new row violates row-level security policy`) — probed against the live project | A **second signed-in account** reading zero of your rows. That's the real RLS test (`PLAN-desktop-supabase.md` §B1) and it needs a second account |
+| Signing in from an empty device keeps a 30-day cloud row at 30 and brings it down; a failed first read writes nothing, and the next write merges — mocked PostgREST, same script run before and after the fix | Behaviour against a **paused** free-tier project after ~7 idle days — expected to show as disconnected and recover on the next focus, not observed |
 
 The linked file and the manual export contain **everything**: habits, streaks,
 badges, health records, your training data, and your photos. (Photo *bytes* live

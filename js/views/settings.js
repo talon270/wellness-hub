@@ -842,9 +842,9 @@
           Hub.icon("download") + "Sign in</button>";
     }
 
-    var fallback = (!st.folder.fsSupported && !st.drive.configured)
+    var fallback = (!st.folder.fsSupported && !st.drive.configured && !supa.configured)
       ? ('<div class="wh-disclaimer wh-mt4">' + Hub.icon("info") +
-          "<span>Neither sync option is available in this build/browser. Use <strong>Export all data</strong> " +
+          "<span>No sync option is available in this build/browser. Use <strong>Export all data</strong> " +
           "below instead — the app will remind you if it's been a while." +
           (st.lastDownload
             ? " Last manual backup: <strong class=\"mono\">" + Hub.relDay(Hub.ymd(new Date(st.lastDownload))) + "</strong>."

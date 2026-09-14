@@ -247,8 +247,11 @@ window.SyncSupabase = (function () {
             return afterWrite(first);
           });
         }
+        /* An unknown rev (null — nothing read yet this session) counts as
+           "moved": the row holds history this device has never seen, so it
+           is merged, never overwritten. */
         var base = data;
-        if (lastKnownRev != null && row.rev !== lastKnownRev) {
+        if (row.rev !== lastKnownRev) {
           if (attempt >= WRITE_RETRY_LIMIT) { lastError = "another device is writing at the same time"; return false; }
           base = row.doc ? merge(row.doc, data) : data;
           try { onRemoteChange(base, { from: row.doc && row.doc.deviceId, at: row.doc && row.doc.writtenAt }); } catch (e) {}

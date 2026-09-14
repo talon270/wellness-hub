@@ -298,7 +298,10 @@ window.SyncDrive = (function () {
       return ensureToken(false).then(function () {
         return metaRevision();
       }).then(function (rev) {
-        if (lastKnownRevision && rev && rev !== lastKnownRevision) {
+        /* No known revision means nothing has been read yet this session, so
+           the file may hold history this device has never seen — merge it,
+           don't overwrite it. */
+        if (rev && rev !== lastKnownRevision) {
           if (attempt >= WRITE_RETRY_LIMIT) {
             lastError = "another device is writing at the same time";
             return false;
