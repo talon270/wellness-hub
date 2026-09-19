@@ -58,11 +58,23 @@
     delete Hub.state.meta.lastFired[key];
   }
 
-  function enableInterval(key, mins, days) {
+  /* Deliberately does NOT set the interval, only switches the reminder on and
+     narrows the weekdays.
+
+     Every caller used to pass a `mins` equal to that reminder's own schema
+     default (stand 45, eye 20, posture 60), so the argument could never change
+     anything on a fresh profile — its only possible effect was to overwrite an
+     interval the user had already customised. Accept the "stand-up reminders"
+     suggestion after setting your sitting limit to 60 and it silently put the
+     stand reminder back to 45, which also split it from `sitAlertMin` again
+     behind Hub.setSitLimit's back.
+
+     `days` stays: weekdays-only is a real part of what these suggestions are
+     proposing, and it's stated in the suggestion's own reasoning text. */
+  function enableInterval(key, days) {
     var r = rem(key);
     if (!r) return;
     r.enabled = true;
-    if (mins) r.intervalMin = mins;
     if (days) r.days = days;
   }
 
@@ -105,7 +117,7 @@
              ". Unbroken sitting is the part that matters, more than which posture you hold, so the fix is " +
              "frequency: a minute on your feet every 45.",
         done: function () { return rem("stand").enabled; },
-        apply: function () { enableInterval("stand", 45, [1, 2, 3, 4, 5]); }
+        apply: function () { enableInterval("stand", [1, 2, 3, 4, 5]); }
       });
       list.push({
         id: "eye",
@@ -113,14 +125,14 @@
         why: "Screens all day is what causes eye strain — every 20 minutes, look 20 feet away for 20 " +
              "seconds. It's the one intervention with genuinely good evidence behind it.",
         done: function () { return rem("eye").enabled; },
-        apply: function () { enableInterval("eye", 20, [1, 2, 3, 4, 5]); }
+        apply: function () { enableInterval("eye", [1, 2, 3, 4, 5]); }
       });
       list.push({
         id: "posture",
         title: "Posture check-ins every hour",
         why: "A nudge to reset your position and screen height, plus the desk stretches that go with it.",
         done: function () { return rem("posture").enabled; },
-        apply: function () { enableInterval("posture", 60, [1, 2, 3, 4, 5]); }
+        apply: function () { enableInterval("posture", [1, 2, 3, 4, 5]); }
       });
     }
 

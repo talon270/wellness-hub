@@ -53,6 +53,11 @@
 
     start: function (silent) {
       Hub.state.logs.deskSession = { startedAt: new Date().toISOString(), alertedAt: 0 };
+      /* A stop-then-start in the same call never lets the tick below see a
+         closed session, so the alert step has to be cleared here. Without it,
+         restarting the clock after a break would buy silence until twice the
+         limit had passed. */
+      lastAlertMin = 0;
       Hub.save();
       if (!silent) Hub.toast("Sitting clock started.", "info", 2200);
     },
@@ -81,16 +86,31 @@
     }
   };
 
-  /* A stand break with no sitting session running — the common case for
-     someone who never started the clock but does want the count. */
+  /* "I stood up", from anywhere in the app — the dashboard Quick log tile,
+     the timer rack, or this tab's own button when no clock is running.
+
+     If the sitting clock IS running, this ends that stretch and starts a
+     fresh one, because that is what happened: you got up, then sat back
+     down. Before, it credited the break and left the clock climbing, so a
+     50-minute session would carry straight on past a break you had just
+     taken and nudge you for it again. sit.stop(true) already does the
+     credit, the reminder reset and the milestone check — the else branch is
+     the same bookkeeping for someone who never started the clock. */
   function logStand(note) {
-    var d = Hub.editDay();
-    d.stand++;
-    Hub.commit();
-    Hub.reminders.reset("stand");
-    Hub.gamify.checkMilestone("desk");
+    var mins = 0;
+    if (sit.open()) {
+      mins = sit.stop(true);
+      sit.start(true);
+    } else {
+      var d = Hub.editDay();
+      d.stand++;
+      Hub.commit();
+      Hub.reminders.reset("stand");
+      Hub.gamify.checkMilestone("desk");
+    }
     Hub.beep(700, 90);
-    Hub.toast(note || "Stand break logged — " + d.stand + " today.", "success", 2200);
+    Hub.toast(note || "Stand break logged — " + Hub.day().stand + " " + Hub.dayWord() +
+      (mins ? ", " + mins + " min banked and the clock restarted." : "."), "success", 2600);
   }
 
   /* ======================================================================
@@ -306,7 +326,7 @@
     if (sit.open()) sit.stop(false);
     logStandQuiet();
 
-    var d = Hub.editDay();
+    var d = Hub.editToday();
     d.moveMin += Math.round(totalSec / 60 * 10) / 10;
     d.stretch++;              // it counts toward the mobility streak as well
     Hub.commit();
@@ -333,7 +353,7 @@
   /* The bookkeeping half of logStand, without the toast — the completion
      screen is already saying it. */
   function logStandQuiet() {
-    var d = Hub.editDay();
+    var d = Hub.editToday();
     d.stand++;
     Hub.reminders.reset("stand");
     Hub.gamify.checkMilestone("desk");
@@ -444,8 +464,8 @@
         /* ---------- reminder ---------- */
         '<div class="wh-card wh-mb4">' +
           '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("bell") + "Stand-up reminders</div>" +
-            '<span class="wh-chip' + (rem.enabled ? " wh-chip--good" : "") + '">' +
-              (rem.enabled ? "every " + rem.intervalMin + " min" : "off") + "</span></div>" +
+            '<span class="wh-chip' + (rem.enabled ? " wh-chip--good" : "") + '">next in ' +
+              Hub.remDue("stand", "not counting") + "</span></div>" +
           '<label class="wh-switch">' +
             '<input type="checkbox" id="dk-remind"' + (rem.enabled ? " checked" : "") + " />" +
             '<span class="wh-switch__track"></span>' +
@@ -456,9 +476,11 @@
               'value="' + (rem.intervalMin || 45) + '" aria-label="Stand reminder interval in minutes" />' +
             '<span class="wh-help">min · weekdays by default, change the days in Settings</span>' +
           "</div>" +
-          '<p class="wh-help wh-mt4">Two separate things, deliberately: this fires on a fixed interval ' +
-            "whether or not the sitting clock is running, and the sitting clock nudges you based on how " +
-            "long you've actually been down. Use either, or both.</p>" +
+          '<p class="wh-help wh-mt4">Two ways of firing, one interval. This fires on a fixed schedule ' +
+            "whether or not the sitting clock is running; the sitting clock nudges you based on how long " +
+            "you've actually been down. Changing the number here changes both — they were separate " +
+            "settings, which only ever meant the figure on screen could disagree with the one that " +
+            "notified you.</p>" +
         "</div>" +
 
         /* ---------- why ---------- */
@@ -513,7 +535,8 @@
 
       el.querySelector("#dk-interval").addEventListener("change", function (e) {
         var n = Hub.clamp(Math.round(Number(e.target.value) || 45), 10, 180);
-        Hub.state.settings.reminders.stand.intervalMin = n;
+        /* Writes the sitting-clock limit as well: one number, two fields. */
+        Hub.setSitLimit(n);
         Hub.save();
         Hub.reminders.sync();
         Hub.refresh();

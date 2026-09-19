@@ -217,7 +217,7 @@
     stopPlayer();
     Hub.cueDone();
 
-    var d = Hub.editDay();
+    var d = Hub.editToday();
     d.mobility++;
     Hub.commit();
     Hub.gamify.checkMilestone("mobility");
@@ -310,7 +310,7 @@
       },
       onDone: function () {
         Hub.cueDone();
-        var d = Hub.editDay();
+        var d = Hub.editToday();
         d.mobility++;
         Hub.commit();
         Hub.gamify.checkMilestone("mobility");

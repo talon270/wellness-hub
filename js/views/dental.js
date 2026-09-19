@@ -100,7 +100,7 @@
     Hub.cueDone();
 
     /* Fill whichever slot is still open; before 14:00 that's the morning one. */
-    var d = Hub.editDay();
+    var d = Hub.editToday();
     var slot = new Date().getHours() < 14 ? "brushAM" : "brushPM";
     if (d[slot]) slot = slot === "brushAM" ? "brushPM" : "brushAM";   // already logged — take the other
     d[slot] = true;
@@ -120,7 +120,7 @@
     inner.querySelector("#br-close").addEventListener("click", function () { Hub.focus.close(); });
     var flossBtn = inner.querySelector("#br-floss");
     if (flossBtn) flossBtn.addEventListener("click", function () {
-      var day = Hub.editDay();
+      var day = Hub.editToday();
       day.floss = true;
       Hub.commit();
       Hub.gamify.checkMilestone("floss");

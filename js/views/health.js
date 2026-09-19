@@ -1050,7 +1050,7 @@
         c.lastISO = Hub.today();
         Hub.commit();
         Hub.beep(700, 90);
-        Hub.toast(c.name + " logged for today.", "success");
+        Hub.toast(c.name + " logged for " + Hub.dayWord() + ".", "success");
       });
 
       Hub.delegate(el, "[data-editcheck]", function (b) { editDialog(find(b.dataset.editcheck)); });

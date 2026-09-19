@@ -3819,7 +3819,62 @@
      Auto-starts when a set is marked done; adjustable per exercise.
      Default 90s; remembers the last duration the user set in this session.
      ==================================================================== */
-  var RT = { id: null, remaining: 0, total: 90, paused: false, last: 90, label: "Rest", done: false, onDone: null };
+  /* `endAt` is the authority while running; `remaining` is derived from it and
+     is only authoritative while paused. That split is what lets the countdown
+     survive a reload — see rtSave/rtRestore below. */
+  var RT = { id: null, endAt: 0, remaining: 0, total: 90, paused: false, last: 90, label: "Rest", done: false, onDone: null };
+
+  /* ----------------------------------------------------------------------
+     PERSISTENCE
+     ----------------------------------------------------------------------
+     A rest timer used to live only in memory, so reloading — or the browser
+     discarding a backgrounded tab, which is routine on a phone — lost it
+     silently mid-workout. It now keeps an absolute end stamp in the same
+     `ironframe.ui` store the section and workout drafts use.
+
+     An absolute stamp rather than a countdown of seconds, for the same reason
+     `Hub.Timer` in js/core.js and the dashboard rack in js/timers.js both do
+     it: storing "42 seconds left" would silently pause the clock across the
+     reload gap, so you'd come back with time you hadn't actually rested.
+
+     `onDone` is deliberately NOT persisted and cannot be. The hold-timer
+     caller above closes over the live workout object and the DOM nodes it
+     rendered; after a reload those are different objects, so re-running it
+     would write a logged hold into stale references. A restored hold timer
+     therefore still counts down and chimes, but does not auto-log the set.
+     -------------------------------------------------------------------- */
+  var RT_KEY = "rt";
+
+  function rtSave() {
+    if (!App.util || !App.util.uiSet) return;
+    App.util.uiSet(RT_KEY, {
+      endAt: RT.endAt, remaining: RT.remaining, total: RT.total,
+      label: RT.label, paused: RT.paused
+    });
+  }
+
+  function rtClear() {
+    if (App.util && App.util.uiSet) App.util.uiSet(RT_KEY, null);
+  }
+
+  /* Seconds left: from the end stamp while running, from the frozen value
+     while paused. One reader, so paint, tick and save can't disagree. */
+  function rtLeft() {
+    if (RT.paused) return Math.max(0, RT.remaining);
+    return Math.max(0, Math.round((RT.endAt - Date.now()) / 1000));
+  }
+
+  /* One implementation of pause, shared by the bar's button and the Space
+     key — they each had their own copy, which is two places for the button
+     label and the clock to drift apart. */
+  function rtTogglePause() {
+    RT.paused = !RT.paused;
+    if (RT.paused) RT.remaining = Math.max(0, Math.round((RT.endAt - Date.now()) / 1000));
+    else RT.endAt = Date.now() + Math.max(0, RT.remaining) * 1000;
+    var pb = document.getElementById("rt-pause");
+    if (pb) pb.textContent = RT.paused ? "Resume" : "Pause";
+    rtSave();
+  }
 
   function rtBeep() {
     try {
@@ -3887,8 +3942,18 @@
       var a = b.dataset.rt;
       if (a === "skip") rtStop();
       else if (a === "replay") rtStart(RT.last || RT.total || 90, RT.label, RT.onDone);
-      else if (a === "pause") { RT.paused = !RT.paused; var pb = document.getElementById("rt-pause"); if (pb) pb.textContent = RT.paused ? "Resume" : "Pause"; }
-      else { var d = Number(a); RT.remaining = lib.clamp(RT.remaining + d, 0, 1800); RT.total = Math.max(RT.total, RT.remaining); RT.last = RT.remaining || RT.last; RT.done = false; bar.classList.remove("is-done"); rtPaint(); }
+      else if (a === "pause") { rtTogglePause(); }
+      else {
+        var d = Number(a);
+        RT.remaining = lib.clamp(rtLeft() + d, 0, 1800);
+        /* ±15/+30 move the finish line, not just the digits — the end stamp is
+           what the tick reads, so adjusting `remaining` alone would be undone
+           a second later. */
+        if (!RT.paused) RT.endAt = Date.now() + RT.remaining * 1000;
+        RT.total = Math.max(RT.total, RT.remaining);
+        RT.last = RT.remaining || RT.last; RT.done = false;
+        bar.classList.remove("is-done"); rtPaint(); rtSave();
+      }
     });
     return bar;
   }
@@ -3911,13 +3976,18 @@
 
   function rtTick() {
     if (RT.paused) return;
-    RT.remaining -= 1;
+    /* Read from the end stamp rather than decrementing, so the digits are a
+       function of the clock and not of how many times this fired. */
+    RT.remaining = rtLeft();
     if (RT.remaining <= 0) {
       RT.remaining = 0; RT.done = true;
       rtPaint(); rtBeep();
       var bar = document.getElementById("rest-timer");
       if (bar) bar.classList.add("is-done");
       if (RT.id) { clearInterval(RT.id); RT.id = null; }
+      /* A finished timer is an acknowledgement on screen, not state worth
+         restoring — drop it so a later reload doesn't resurrect it. */
+      rtClear();
       if (typeof RT.onDone === "function") { try { RT.onDone(); } catch (e) {} }
       return;
     }
@@ -3930,18 +4000,54 @@
     var bar = rtEnsureBar();
     RT.total = seconds; RT.remaining = seconds; RT.paused = false; RT.last = seconds;
     RT.label = label || "Rest"; RT.done = false; RT.onDone = onDone || null;
+    RT.endAt = Date.now() + seconds * 1000;
     var pb = document.getElementById("rt-pause"); if (pb) pb.textContent = "Pause";
     bar.classList.add("is-on"); bar.classList.remove("is-done");
     rtPaint();
     if (RT.id) clearInterval(RT.id);
     RT.id = setInterval(rtTick, 1000);
+    rtSave();
   }
 
   function rtStop() {
     if (RT.id) { clearInterval(RT.id); RT.id = null; }
-    RT.done = false; RT.onDone = null;
+    RT.done = false; RT.onDone = null; RT.endAt = 0;
     var bar = document.getElementById("rest-timer");
     if (bar) bar.classList.remove("is-on", "is-done", "rt--final");
+    rtClear();
+  }
+
+  /* Rebuild a timer that was running when the page went away.
+
+     A timer whose end stamp has already passed is dropped rather than fired:
+     chiming and flashing "complete" for a rest that ended twenty minutes ago
+     while the tab was shut would be announcing something that isn't news. */
+  function rtRestore() {
+    if (!App.util || !App.util.uiGet) return;
+    var s = App.util.uiGet(RT_KEY, null);
+    if (!s || !s.total) return;
+
+    var left = s.paused ? Math.max(0, Number(s.remaining) || 0)
+                        : Math.round(((Number(s.endAt) || 0) - Date.now()) / 1000);
+    if (!(left > 0)) { rtClear(); return; }
+
+    RT.total = Number(s.total) || left;
+    RT.remaining = left;
+    RT.last = RT.total;
+    RT.label = s.label || "Rest";
+    RT.paused = !!s.paused;
+    RT.done = false;
+    RT.onDone = null;                    // see the note on rtSave above
+    RT.endAt = RT.paused ? 0 : Date.now() + left * 1000;
+
+    var bar = rtEnsureBar();
+    bar.classList.add("is-on");
+    bar.classList.remove("is-done", "rt--final");
+    var pb = document.getElementById("rt-pause");
+    if (pb) pb.textContent = RT.paused ? "Resume" : "Pause";
+    rtPaint();
+    if (RT.id) clearInterval(RT.id);
+    RT.id = setInterval(rtTick, 1000);
   }
   /* expose so discard/complete can clear a running timer + others can start one */
   App.stopRestTimer = rtStop;
@@ -3953,12 +4059,14 @@
     if (!bar || !bar.classList.contains("is-on")) return;
     var tag = (e.target && e.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (e.code === "Space") { e.preventDefault(); RT.paused = !RT.paused; var pb = document.getElementById("rt-pause"); if (pb) pb.textContent = RT.paused ? "Resume" : "Pause"; }
+    if (e.code === "Space") { e.preventDefault(); rtTogglePause(); }
     else if (e.code === "Escape") { rtStop(); }
   });
 
   function mount() {
     App.registerView("today", renderToday);
+    /* Pick a rest timer back up if one was running when the page went away. */
+    rtRestore();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
   else mount();

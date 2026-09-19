@@ -120,7 +120,8 @@
         /* ---------- sunscreen reapply ---------- */
         '<div class="wh-card wh-mb4">' +
           '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("shield") + "Sunscreen re-application</div>" +
-            '<span class="wh-chip wh-chip--accent">' + d.spfReapply + " today</span></div>" +
+            '<span class="wh-chip wh-chip--accent">' + d.spfReapply + " today</span>" +
+            '<span class="wh-chip">next in ' + Hub.remDue("spf", "not counting") + "</span></div>" +
           '<p class="wh-sm wh-muted">Sunscreen breaks down as it absorbs UV. If you\'re outdoors, ' +
             "reapply <strong>every two hours</strong>, and immediately after swimming or heavy sweating. " +
             "Roughly a teaspoon for the face and neck, a shot glass for the whole body — most people " +
@@ -183,7 +184,7 @@
         Hub.commit();
         Hub.reminders.reset("spf");
         Hub.beep(700, 90);
-        Hub.toast("Sunscreen logged — " + d.spfReapply + " today.", "success", 2200);
+        Hub.toast("Sunscreen logged — " + d.spfReapply + " " + Hub.dayWord() + ".", "success", 2200);
       });
       el.querySelector("#bc-spf-remind").addEventListener("change", function (e) {
         toggleReminder("spf", e.target.checked);
@@ -608,7 +609,7 @@
       Hub.state.logs[key] = Hub.today();
       Hub.commit();
       Hub.beep(700, 90);
-      Hub.toast("Logged for today.", "success", 2000);
+      Hub.toast("Logged for " + Hub.dayWord() + ".", "success", 2000);
     });
 
     SECTIONS[pill].wire(body);

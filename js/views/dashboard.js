@@ -63,7 +63,7 @@
           Hub.commit();
           Hub.reminders.reset("hydration");
           Hub.gamify.checkMilestone("hydration");
-          Hub.toast("Water logged — " + d.water + "/" + goal + " cups.", "success", 2000);
+          Hub.toast("Water logged — " + d.water + "/" + goal + " cups " + Hub.dayWord() + ".", "success", 2000);
           Hub.beep(720, 90);
         }
       },
@@ -77,7 +77,7 @@
           Hub.commit();
           Hub.reminders.reset("eye");
           Hub.gamify.checkMilestone("eye");
-          Hub.toast("Eye break logged.", "success", 2000);
+          Hub.toast("Eye break logged " + Hub.dayWord() + ".", "success", 2000);
           Hub.beep(660, 90);
         }
       },
@@ -91,7 +91,7 @@
           d[key] = !d[key];
           Hub.commit();
           Hub.gamify.checkMilestone("dental");
-          Hub.toast(d[key] ? "Brushing logged." : "Brushing un-logged.", d[key] ? "success" : "info", 2000);
+          Hub.toast((d[key] ? "Brushing logged " : "Brushing un-logged ") + Hub.dayWord() + ".", d[key] ? "success" : "info", 2000);
           if (d[key]) Hub.beep(700, 90);
         }
       },
@@ -104,7 +104,7 @@
           d.floss = !d.floss;
           Hub.commit();
           Hub.gamify.checkMilestone("floss");
-          Hub.toast(d.floss ? "Flossing logged." : "Flossing un-logged.", d.floss ? "success" : "info", 2000);
+          Hub.toast((d.floss ? "Flossing logged " : "Flossing un-logged ") + Hub.dayWord() + ".", d.floss ? "success" : "info", 2000);
           if (d.floss) Hub.beep(700, 90);
         }
       },
@@ -128,7 +128,7 @@
           d.posture++;
           Hub.commit();
           Hub.reminders.reset("posture");
-          Hub.toast("Sit tall — check-in logged.", "success", 2000);
+          Hub.toast("Sit tall — check-in logged " + Hub.dayWord() + ".", "success", 2000);
           Hub.beep(620, 90);
         }
       },
@@ -153,7 +153,7 @@
           d.spfReapply++;
           Hub.commit();
           Hub.reminders.reset("spf");
-          Hub.toast("Sunscreen logged.", "success", 2000);
+          Hub.toast("Sunscreen logged " + Hub.dayWord() + ".", "success", 2000);
           Hub.beep(700, 90);
         }
       },
@@ -196,7 +196,7 @@
             if (d.custom[h.id]) {
               Hub.beep(700, 90);
               Hub.gamify.checkMilestone("custom:" + h.id);
-              Hub.toast(h.name + " logged.", "success", 2000);
+              Hub.toast(h.name + " logged " + Hub.dayWord() + ".", "success", 2000);
             } else {
               Hub.toast(h.name + " un-logged.", "info", 2000);
             }

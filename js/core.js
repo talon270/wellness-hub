@@ -593,6 +593,26 @@
   /* The year is added only when it isn't the current one. Now that the app can
      browse a year of history, "Thu 14 Aug" on its own is genuinely ambiguous —
      and a heatmap that runs 364 days back will produce exactly that collision. */
+  /* The writable record for the ACTUAL current day, ignoring whatever date the
+     backfill bar is showing.
+
+     Tap-to-log tiles belong on viewDate() — filling in the past is exactly
+     what the date picker is for. A guided flow that just counted down to zero
+     does not: the app watched the clock tick, so the session happened now, and
+     filing it five days back (while the toast says "today") is the quiet
+     mis-filing class. js/views/desk.js's sit.stop() already drew this line for
+     sitting sessions by banking against the session's own start date; this is
+     the same rule for everything driven by Hub.Timer. */
+  function editToday() { return editDay(today()); }
+
+  /* "today", or the day a write actually landed on when that wasn't today.
+     Confirmation messages used to hard-code "today" while writing to the
+     backfilled date, so the toast contradicted the banner directly above it. */
+  function dayWord(key) {
+    key = key || viewDate();
+    return key === today() ? "today" : "on " + prettyDate(key);
+  }
+
   function prettyDate(key) {
     var d = parseYmd(key);
     var opts = { weekday: "short", month: "short", day: "numeric" };
@@ -1312,6 +1332,28 @@
   var focusLayer = {
     open: function (html, onClose) {
       focusEl = focusEl || document.getElementById("wh-focus");
+
+      /* Whatever was on the stage is about to be replaced, so tell it to stop.
+         Every guided flow passes an onClose whose whole job is "I was
+         dismissed — kill my timer"; this used to overwrite that callback
+         without ever calling it, which left the outgoing flow's Hub.Timer
+         running against a DOM that no longer existed. It would then reach its
+         onDone minutes later, log a session the user had abandoned, and
+         reopen its own completion screen over whatever was on screen by then.
+
+         Reachable straight from the app's own UI: start a 60-second eye
+         exercise, accept the eye timer's "Look away now", and the abandoned
+         exercise still counted itself.
+
+         Cleared before the call so a callback that closes the overlay itself
+         can't run it twice, and wrapped so a throwing callback can't stop the
+         incoming flow from opening. Every existing onClose is idempotent
+         (Timer.prototype.stop guards on `_id`; the step players guard on
+         `player`), so a deliberate swap to a completion screen is a no-op. */
+      var outgoing = focusOnClose;
+      focusOnClose = null;
+      if (typeof outgoing === "function") { try { outgoing(); } catch (e) {} }
+
       focusEl.innerHTML = '<div class="wh-focus__inner">' + html + "</div>";
       focusEl.hidden = false;
       document.body.style.overflow = "hidden";
@@ -1792,12 +1834,38 @@
       });
     },
 
-    /* Restart one reminder's countdown from now (used after the user acts on it). */
+    /* Restart one reminder's countdown from now (used after the user acts on it).
+
+       This is the single call every "I just did this habit" path in the app
+       already goes through — quick-log tiles, guided flows, the timer rack,
+       settings edits. That makes it the only place that can keep the app's
+       other, *visible* clock for the same habit from drifting away from this
+       invisible one, so the rack is told here rather than from each of the
+       eighteen call sites (which would leave every future one wrong).
+
+       The rack is notified before the enabled check: a row can be counting
+       down for a habit whose reminder is switched off, and doing the habit
+       still has to restart what you can see. */
     reset: function (key) {
+      if (Hub.timers && Hub.timers.onHabitDone) Hub.timers.onHabitDone(key);
       var cfg = STATE.settings.reminders[key];
       if (!cfg || !cfg.enabled) return;
       var mins = Math.max(1, Number(cfg.intervalMin) || 20);
       nextAt[key] = Date.now() + mins * 60000;
+    },
+
+    /* Seconds until one interval reminder is due, or null when it isn't
+       running. `next()` computes the same figure, but only for the single
+       soonest reminder of the fifteen — a tab that owns one wants its own
+       number, not whichever one happens to be winning. */
+    dueIn: function (key) {
+      var m = REMINDER_META[key];
+      if (!m || m.kind !== "interval") return null;
+      var cfg = STATE.settings.reminders[key];
+      if (!cfg || !cfg.enabled || !nextAt[key]) return null;
+      var nowMs = Date.now();
+      if (snoozed[key] && snoozed[key] > nowMs) return (snoozed[key] - nowMs) / 1000;
+      return Math.max(0, (nextAt[key] - nowMs) / 1000);
     },
 
     /* The soonest upcoming reminder, for the dashboard countdown. */
@@ -1905,6 +1973,53 @@
   var tickSubs = [];
   function onTick(fn) { tickSubs.push(fn); return function () { tickSubs = tickSubs.filter(function (f) { return f !== fn; }); }; }
 
+  /* ----------------------------------------------------------------------
+     LIVE REMINDER COUNTDOWNS
+     ----------------------------------------------------------------------
+     Five tabs own an interval reminder and, until now, all five printed it
+     as a dead "every 60 minutes" while the only live figure in the app was
+     the dashboard's single soonest-reminder card. A view drops `remDue(key)`
+     into its markup and gets a counting number with no wiring of its own —
+     the handler below repaints every one of them each second.
+
+     One implementation rather than five per-view tick handlers, for the same
+     reason `reset()` owns the rack sync above: five copies is five places for
+     it to drift. The initial value is rendered inline so a freshly painted
+     view shows the right number immediately instead of a placeholder for up
+     to a second.
+     -------------------------------------------------------------------- */
+  /* The soonest real nudge for one habit, from whichever clock is actually
+     carrying it: the interval reminder, or the dashboard timer rack's row for
+     the same habit — which can be counting while the reminder is switched
+     off, and for the desk is the sitting clock itself. Null when nothing is
+     counting.
+
+     Asking "when is my next eye break due?" has to have one answer no matter
+     which of the two you started, which is the whole point of this pass. */
+  function dueForHabit(key) {
+    var a = reminders.dueIn(key);
+    var b = (Hub.timers && Hub.timers.dueIn) ? Hub.timers.dueIn(key) : null;
+    if (a == null) return b;
+    if (b == null) return a;
+    return Math.min(a, b);
+  }
+
+  function remDue(key, offLabel) {
+    var sec = dueForHabit(key);
+    return '<span class="mono' + (sec == null ? " wh-faint" : "") + '" data-rem-due="' + key + '" ' +
+      'data-rem-off="' + esc(offLabel || "off") + '">' +
+      (sec == null ? esc(offLabel || "off") : clock(sec)) + "</span>";
+  }
+
+  onTick(function () {
+    document.querySelectorAll("[data-rem-due]").forEach(function (el) {
+      var sec = dueForHabit(el.dataset.remDue);
+      var txt = sec == null ? (el.dataset.remOff || "off") : clock(sec);
+      if (el.textContent !== txt) el.textContent = txt;
+      el.classList.toggle("wh-faint", sec == null);
+    });
+  });
+
   var lastTickDay = today();
   function startTick() {
     setInterval(function () {
@@ -1939,6 +2054,29 @@
     });
   }
   function clamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
+
+  /* ONE SITTING LIMIT, TWO STORED FIELDS.
+     `sitAlertMin` is what the Desk tab's sitting clock counts against;
+     `reminders.stand.intervalMin` is what the fixed-interval stand reminder
+     fires on. They are the same idea, both default to 45, and were editable
+     from three separate inputs on two different screens with nothing saying
+     they were related — so changing one left the number on screen disagreeing
+     with the number that actually notifies you.
+
+     Deliberately still two fields: collapsing them is a SCHEMA_VERSION bump
+     and a migration to save a line of code. Every writer goes through here
+     instead, which is what stops them diverging.
+
+     The mirrored value is clamped rather than written straight across,
+     because the two have different valid ranges — the reminder accepts 10,
+     the sitting clock 15. An out-of-range sitAlertMin is snapped back to 45
+     by normalise() on the next load, which reads as the setting silently
+     refusing to stick. Callers still do their own save/sync/refresh. */
+  function setSitLimit(mins) {
+    var n = Math.round(Number(mins) || 45);
+    STATE.settings.reminders.stand.intervalMin = clamp(n, 10, 180);
+    STATE.settings.sitAlertMin = clamp(n, 15, 180);
+  }
   function pct(a, b) { return b > 0 ? clamp(Math.round(a / b * 100), 0, 100) : 0; }
   function plural(n, one, many) { return n === 1 ? one : (many || one + "s"); }
 
@@ -2018,6 +2156,7 @@
     /* day records */
     day: day,
     editDay: editDay,
+    editToday: editToday, dayWord: dayWord,
     dayKeys: dayKeys,
     defaultCheckups: defaultCheckups,
 
@@ -2049,10 +2188,11 @@
     Timer: Timer, beep: beep, vibrate: vibrate, cueChange: cueChange, cueDone: cueDone,
 
     /* notifications + reminders */
-    notify: notify, reminders: reminders, onTick: onTick, startTick: startTick,
+    notify: notify, reminders: reminders, remDue: remDue, onTick: onTick, startTick: startTick,
 
     /* utils */
-    esc: esc, clamp: clamp, pct: pct, plural: plural, delegate: delegate
+    esc: esc, clamp: clamp, pct: pct, plural: plural, delegate: delegate,
+    setSitLimit: setSitLimit
   };
 
   /* Global overlay dismissal: Escape closes the topmost layer, backdrop clicks

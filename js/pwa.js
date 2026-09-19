@@ -110,8 +110,10 @@
   function markDone(key, view) {
     var fn = DONE_ACTIONS[key];
     if (!fn) { if (view) Hub.show(view); return; }
-    /* Always today, never the backfill date — this came from a live reminder. */
-    var msg = fn(Hub.editDay(Hub.today()));
+    /* Always today, never the backfill date — this came from a live reminder.
+       Hub.editToday() is the same thing under a name, shared with every
+       timer-driven completion (see its comment in js/core.js). */
+    var msg = fn(Hub.editToday());
     Hub.commit();
     Hub.reminders.reset(key);
     Hub.toast(msg, "success", 2500);

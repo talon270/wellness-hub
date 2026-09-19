@@ -101,7 +101,8 @@
             '<div class="wh-mt4">' + weekStrip("hydration") + "</div>" +
           "</div>" +
           '<div class="wh-card">' +
-            '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("bell") + "Reminders</div></div>" +
+            '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("bell") + "Reminders</div>" +
+              '<span class="wh-chip">next in ' + Hub.remDue("hydration", "not counting") + "</span></div>" +
             '<label class="wh-switch">' +
               '<input type="checkbox" id="hy-remind"' + (rem.enabled ? " checked" : "") + " />" +
               '<span class="wh-switch__track"></span>' +
@@ -219,7 +220,8 @@
               "than holding a perfect one.</p>" +
           "</div>" +
           '<div class="wh-card">' +
-            '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("bell") + "Reminders</div></div>" +
+            '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("bell") + "Reminders</div>" +
+              '<span class="wh-chip">next in ' + Hub.remDue("posture", "not counting") + "</span></div>" +
             '<label class="wh-switch">' +
               '<input type="checkbox" id="po-remind"' + (rem.enabled ? " checked" : "") + " />" +
               '<span class="wh-switch__track"></span>' +
@@ -252,7 +254,7 @@
         Hub.commit();
         Hub.reminders.reset("posture");
         Hub.beep(620, 90);
-        Hub.toast("Posture check logged — " + d.posture + " today.", "success", 2200);
+        Hub.toast("Posture check logged — " + d.posture + " " + Hub.dayWord() + ".", "success", 2200);
       });
 
       el.querySelector("#po-remind").addEventListener("change", function (e) {
@@ -302,7 +304,7 @@
       },
       onDone: function () {
         Hub.cueDone();
-        var d = Hub.editDay();
+        var d = Hub.editToday();
         d.stretch++;
         d.posture++;   // a stretch counts as a posture reset too
         Hub.commit();
@@ -946,7 +948,7 @@
   }
 
   function logMindful(type, sec) {
-    var d = Hub.editDay();
+    var d = Hub.editToday();
     d.mindful.push({ type: type, sec: sec, at: new Date().toISOString() });
     Hub.commit();
     Hub.gamify.checkMilestone("mindful");
@@ -1576,7 +1578,7 @@
         d.caffeineMg = Math.max(0, (d.caffeineMg || 0) + dr.mg);
         Hub.commit();
         Hub.beep(640, 80);
-        Hub.toast(dr.name + " logged — " + Math.round(d.caffeineMg) + "mg today.", "success", 2200);
+        Hub.toast(dr.name + " logged — " + Math.round(d.caffeineMg) + "mg " + Hub.dayWord() + ".", "success", 2200);
       });
 
       Hub.delegate(el, "[data-alc]", function (b) {
@@ -1586,7 +1588,7 @@
         d.alcoholUnits = Math.round(Math.max(0, (d.alcoholUnits || 0) + dr.units) * 10) / 10;
         Hub.commit();
         Hub.beep(600, 80);
-        Hub.toast(dr.name + " logged — " + d.alcoholUnits + " units today.", "success", 2200);
+        Hub.toast(dr.name + " logged — " + d.alcoholUnits + " units " + Hub.dayWord() + ".", "success", 2200);
       });
 
       var caffClear = el.querySelector("#in-caff-clear");

@@ -243,7 +243,7 @@
     if (active) { active.timer.stop(); active = null; }
     Hub.cueDone();
 
-    var d = Hub.editDay();
+    var d = Hub.editToday();
     d.eye++;
     /* Per-exercise tally, so each card can show "×2 today". */
     if (!d.eyeBreakdown) d.eyeBreakdown = {};
@@ -291,7 +291,7 @@
       onTick: function (r) { clockEl.textContent = Hub.clock(Math.ceil(r)); },
       onDone: function () {
         Hub.cueDone();
-        var d = Hub.editDay();
+        var d = Hub.editToday();
         d.eye2020++;
         Hub.commit();
         Hub.reminders.reset("eye");
@@ -337,7 +337,12 @@
       '<div class="wh-card wh-card--accent">' +
         '<div class="wh-card__head">' +
           '<div class="wh-card__title">' + Hub.icon("clockIc") + "The 20-20-20 rule</div>" +
-          '<span class="wh-chip wh-chip--accent">every ' + (rem.intervalMin || 20) + " min</span>" +
+          /* A live figure, not the dead "every 20 min" that used to sit here
+             while the dashboard was the only place in the app counting. It
+             reads whichever clock is running — this tab's reminder or the
+             dashboard's Eye break row — so starting one is visible in both. */
+          '<span class="wh-chip wh-chip--accent">next break in ' +
+            Hub.remDue("eye", "not counting") + "</span>" +
         "</div>" +
         '<p class="wh-sm wh-muted">Every <strong>20 minutes</strong>, look at something <strong>20 feet</strong> ' +
           "(about 6 metres) away for <strong>20 seconds</strong>. That's long enough for the ciliary muscle — the one " +

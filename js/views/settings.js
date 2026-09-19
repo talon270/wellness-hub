@@ -591,8 +591,19 @@
       '<div class="wh-setrow">' +
         '<div class="wh-setrow__info">' +
           '<div class="wh-setrow__name">Nudge me after sitting for</div>' +
+          /* The two fields are kept in step from here on, but a save made
+             before that could already have them apart — and claiming they're
+             one number when this user's are 50 and 35 would be the app lying
+             about itself. So the copy says what is actually true right now. */
           '<div class="wh-setrow__desc">How long one unbroken sitting session can run before the sitting ' +
-            "clock says something. Only applies while that clock is actually running.</div>" +
+            "clock says something. This is the same number as the stand-up reminder interval — setting " +
+            "either one sets both." +
+            (Number(s.sitAlertMin) !== Number(s.reminders.stand.intervalMin)
+              ? " <strong>Yours currently differ</strong>: the sitting clock nudges at " +
+                (s.sitAlertMin || 45) + " min and the stand reminder fires every " +
+                s.reminders.stand.intervalMin + " min. Changing either brings them together."
+              : "") +
+          "</div>" +
         "</div>" +
         '<div class="wh-setrow__ctl">' +
           '<input class="wh-input" type="number" id="st-sitalert" min="15" max="180" step="5" value="' +
@@ -1177,7 +1188,11 @@
           Hub.refresh();
           return;
         }
-        Hub.state.settings.reminders[key].intervalMin = v;
+        /* The stand interval and the sitting-clock limit are one number kept
+           in two fields — Hub.setSitLimit writes both so this screen can't
+           disagree with the Desk tab. */
+        if (key === "stand") Hub.setSitLimit(v);
+        else Hub.state.settings.reminders[key].intervalMin = v;
         Hub.save();
         /* Drop the pending countdown so the new interval takes effect now. */
         Hub.reminders.reset(key);
@@ -1299,8 +1314,10 @@
     if (sitAlert) sitAlert.addEventListener("change", function () {
       var v = Math.round(Number(sitAlert.value));
       if (!(v >= 15 && v <= 180)) { Hub.toast("Between 15 and 180 minutes.", "warn"); Hub.refresh(); return; }
-      Hub.state.settings.sitAlertMin = v;
+      Hub.setSitLimit(v);
       Hub.save();
+      Hub.reminders.sync();
+      Hub.toast("Sitting limit and stand reminder both set to " + v + " minutes.", "success", 2800);
       Hub.refresh();
     });
 
