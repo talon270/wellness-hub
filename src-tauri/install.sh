@@ -35,6 +35,15 @@ Categories=Utility;HealthAndFitness;
 StartupWMClass=Wellness Hub
 EOF
 
+# Record where this install came from, so the in-app updater can still find the
+# source tree after the folder is moved. The binary bakes its build-time path,
+# which goes stale the moment you move the project — and the rebuild that would
+# re-bake it is exactly what breaks. This file is the cheap way back: re-run
+# install.sh from the new location and the updater follows, no rebuild needed.
+STATEDIR="$HOME/.local/share/wellness-hub"
+mkdir -p "$STATEDIR"
+printf '%s\n' "$ROOT" > "$STATEDIR/source-root"
+
 # Refresh the menu/icon caches so it appears without a re-login.
 update-desktop-database "$APPS" 2>/dev/null || true
 gtk-update-icon-cache -f -t "$ICONBASE" 2>/dev/null || true

@@ -22,17 +22,86 @@ use tauri::{
 };
 use tauri_plugin_autostart::{ManagerExt, MacosLauncher};
 
-/* The project root, baked in at compile time from where this crate lives.
-   Rebuilding from a different checkout re-bakes the right value, so nothing
-   here is hand-maintained the way install.sh's $HOME lookup is. */
-fn project_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("src-tauri always has a parent directory")
-        .to_path_buf()
+/* Where install.sh records the source tree it installed from, so a moved
+   project can be pointed at again without a rebuild. */
+fn root_hint_file() -> PathBuf {
+    PathBuf::from(std::env::var("HOME").unwrap_or_default())
+        .join(".local/share/wellness-hub/source-root")
+}
+
+/* The project root, resolved at RUNTIME.
+
+   It used to be `env!("CARGO_MANIFEST_DIR")` alone, on the reasoning that
+   rebuilding from a different checkout re-bakes the right value. That is true
+   and useless: the moment the folder moves, the baked path is gone, and the
+   rebuild that would fix it is the very thing that stops working. Moving this
+   project from ~/Claude/Helth to ~/SyncedWork/Claude/Helth turned the Update
+   button into "couldn't start sh: No such file or directory" — because a
+   missing `current_dir` makes Command::output() fail with ENOENT and name the
+   program rather than the directory.
+
+   So: the environment override first (an escape hatch that needs no rebuild),
+   then whatever install.sh recorded, then the compile-time location. A
+   candidate only counts if it actually holds src-tauri/Cargo.toml — an empty
+   or half-moved directory is not the source tree. None means we genuinely
+   cannot find it, which callers report as that rather than as a missing `sh`. */
+fn project_root() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(v) = std::env::var("WELLNESS_HUB_ROOT") {
+        if !v.trim().is_empty() {
+            candidates.push(PathBuf::from(v.trim()));
+        }
+    }
+    if let Ok(v) = std::fs::read_to_string(root_hint_file()) {
+        if !v.trim().is_empty() {
+            candidates.push(PathBuf::from(v.trim()));
+        }
+    }
+    if let Some(baked) = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent() {
+        candidates.push(baked.to_path_buf());
+    }
+
+    pick_root(candidates)
+}
+
+/* The part that got this wrong, split out so it can be tested without an
+   environment: first candidate that actually holds src-tauri/Cargo.toml wins.
+   A path that no longer exists is skipped rather than handed to current_dir,
+   which is the whole bug. */
+fn pick_root(candidates: Vec<PathBuf>) -> Option<PathBuf> {
+    candidates
+        .into_iter()
+        .find(|p| p.join("src-tauri").join("Cargo.toml").is_file())
+}
+
+/* One message for "the source tree has moved", written where the user will
+   actually read it: the Settings card. */
+fn missing_root_error() -> String {
+    format!(
+        "Can't find the project folder this app was built from. It was at {baked}, \
+         which no longer exists — the folder has been moved or renamed.\n\n\
+         Fix it either way:\n\
+         · run src-tauri/install.sh from the new location (records the new path, no rebuild), or\n\
+         · launch with WELLNESS_HUB_ROOT=/path/to/Helth set.",
+        baked = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "?".into()),
+    )
 }
 
 fn run_step(program: &str, args: &[&str], cwd: &PathBuf) -> Result<String, String> {
+    /* Checked before spawning, because Command::output() reports a missing cwd
+       as ENOENT against the PROGRAM — which is how a moved project folder came
+       out as "couldn't start sh: No such file or directory" and sent the blame
+       to the wrong place entirely. */
+    if !cwd.is_dir() {
+        return Err(format!(
+            "working directory {} doesn't exist, so {program} was never started.",
+            cwd.display()
+        ));
+    }
     let output = Command::new(program)
         .args(args)
         .current_dir(cwd)
@@ -66,7 +135,7 @@ async fn check_update() -> Result<bool, String> {
 }
 
 fn check_update_blocking() -> Result<bool, String> {
-    let root = project_root();
+    let root = project_root().ok_or_else(missing_root_error)?;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let output = Command::new("sh")
         .arg("-c")
@@ -105,7 +174,7 @@ async fn run_update() -> Result<String, String> {
 }
 
 fn run_update_blocking() -> Result<String, String> {
-    let root = project_root();
+    let root = project_root().ok_or_else(missing_root_error)?;
     let cargo = if Command::new("cargo").arg("--version").output().is_ok() {
         "cargo".to_string()
     } else {
@@ -192,4 +261,48 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Wellness Hub");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /* The exact failure this replaced: a baked path that no longer exists was
+       passed straight to Command::current_dir, which fails with ENOENT and
+       blames the program ("couldn't start sh"). */
+    #[test]
+    fn skips_a_path_that_no_longer_exists() {
+        let real = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        /* Any path that cannot exist will do. Deliberately not the real old
+           location: hard-coding someone's home directory puts a username in a
+           public repo and makes the test meaningless on any other machine. */
+        let dead = PathBuf::from("/nonexistent/moved-away/project-root");
+        assert!(!dead.exists(), "the test needs a path that genuinely isn't there");
+
+        assert_eq!(pick_root(vec![dead.clone()]), None);
+        assert_eq!(pick_root(vec![dead, real.clone()]), Some(real));
+    }
+
+    /* A directory that exists but isn't the project is not the project. */
+    #[test]
+    fn rejects_a_directory_without_the_crate() {
+        assert_eq!(pick_root(vec![PathBuf::from("/tmp")]), None);
+    }
+
+    /* Earlier candidates win, so WELLNESS_HUB_ROOT overrides the recorded and
+       baked paths rather than merely being consulted. */
+    #[test]
+    fn honours_candidate_order() {
+        let real = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        assert_eq!(
+            pick_root(vec![PathBuf::from("/nonexistent"), real.clone(), PathBuf::from("/tmp")]),
+            Some(real)
+        );
+    }
 }
