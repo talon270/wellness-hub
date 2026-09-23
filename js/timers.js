@@ -77,6 +77,9 @@
       id: "eye20", name: "Eye break", sec: 20 * 60, remKey: "eye",
       icon: "eye", color: "var(--blue-bright)", view: "eyecare",
       note: "on screen now — counting to your next 20-20-20 break",
+      /* The OS alert's text. Android arms it ahead of time (js/native.js), so
+         it can't come from log(), which only runs once the page is awake. */
+      alert: "Look 20 feet away for 20 seconds.",
       log: function () {
         /* Deliberately does NOT increment d.eye2020 here — the timer
            finishing proves the interval elapsed, not that you looked
@@ -84,10 +87,13 @@
            on its own completion. Same "conditioning, not strength" rule
            the rest of the app follows: name the metric for what it measures. */
         Hub.reminders.reset("eye");
-        Hub.notify.os("Eye break", "Look 20 feet away for 20 seconds.");
+        Hub.notify.os("Eye break", this.alert);
         /* No announcing toast on the offer — the button IS the announcement.
            If the user declines nothing is counted; if they accept the 20-sec
            overlay opens and its own completion increments d.eye2020. */
+        /* The face offers the look-away itself (tap to start), so the modal
+           would only pop up behind it. */
+        if (Hub.face && Hub.face.isOpen()) return;
         if (Hub.eye && Hub.eye.runBreak) {
           Hub.modal({
             title: "Time for a 20-second look-away",
@@ -413,7 +419,8 @@
        a second button that would do the identical thing. */
     var stopVerb = t.ext ? "Stop" : "Pause";
 
-    return '<div class="wh-timer' + (running ? " is-running" : live ? " is-paused" : "") + '" ' +
+    return '<div class="wh-timer' + (running ? " is-running" : live ? " is-paused" : "") +
+        (t.ext ? " wh-timer--ext" : "") + '" ' +
         'style="--wh-tm-c:' + t.color + '" data-tm-row="' + t.id + '">' +
       '<span class="wh-timer__ic">' + Hub.icon(t.icon) + "</span>" +
       '<span class="wh-timer__body">' +
@@ -491,6 +498,16 @@
 
   function wireCard(host) {
     if (!host) return;
+    /* Tapping the row body (not its buttons) opens the full-screen face —
+       PLAN-android.md Part C's Entry. `ext` rows are excluded: the desk row
+       has no end time of its own to draw a face around, its face is the Desk
+       tab it's a window onto. A row that isn't running opens the face idle,
+       where a long press starts it (js/face.js). */
+    Hub.delegate(host, ".wh-timer__body", function (el) {
+      var row = el.closest("[data-tm-row]");
+      var t = row && byId(row.dataset.tmRow);
+      if (t && !t.ext && Hub.face) Hub.face.open(t.id);
+    });
     Hub.delegate(host, "[data-tm-toggle]", function (btn) {
       var id = btn.dataset.tmToggle;
       var t = byId(id);
@@ -519,7 +536,7 @@
   Hub.timers = {
     CATALOGUE: CATALOGUE,
     card: card, wire: wireCard, paint: paint,
-    start: start, pause: pause, restart: restart, clear: clear,
+    start: start, pause: pause, restart: restart, clear: clear, durationOf: durationOf,
     startAll: startAll, stopAll: stopAll,
     onHabitDone: onHabitDone,
     /* Seconds left on whichever row is counting for this habit, or null.

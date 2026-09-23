@@ -225,6 +225,11 @@
 <!-- Full-screen focus overlay used by guided timers (breathing, palming, brushing…) -->
 <div class="wh-focus" id="wh-focus" hidden aria-live="polite"></div>
 
+<!-- Countdown face (PLAN-android.md Part C) — its own layer, not wh-focus: a
+     background timer runs whether or not a guided flow is open. Doubles as
+     the app-drawn AOD on Android (js/native.js Hub.native.face). -->
+<div class="wh-face" id="wh-face" role="dialog" aria-modal="true" aria-label="Timer" hidden></div>
+
 <!-- Hub toast host (BASALT keeps its own separate host, below) -->
 <div class="wh-toasts" id="wh-toast-host" aria-live="polite" aria-atomic="false"></div>
 
@@ -441,6 +446,8 @@
 <script src="js/photos.js"></script>        <!-- shared photo log (skin, niggles) -->
 <script src="js/onboarding.js"></script>     <!-- profile wizard + suggestion engine -->
 <script src="js/timers.js"></script>        <!-- the timer rack shown on the dashboard -->
+<script src="js/native.js"></script>        <!-- Android: alarms armed ahead of time -->
+<script src="js/face.js"></script>          <!-- full-screen countdown face, doubles as the Android AOD -->
 <script src="js/views/dashboard.js"></script>
 <script src="js/views/desk.js"></script>
 <script src="js/views/mobility.js"></script>

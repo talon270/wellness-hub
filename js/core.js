@@ -1483,6 +1483,30 @@
      unavailable there — the app detects this and says so in Settings rather
      than silently doing nothing. Everything else works identically.
      ====================================================================== */
+  /* The Android build of the Tauri shell. Desktop Tauri and the browser both
+     read false. On Android the permission is a real runtime prompt, and
+     js/native.js pre-schedules every OS notification with AlarmManager, so
+     the in-page paths below stay out of the OS shade (PLAN-android.md A3/A4). */
+  var ANDROID_SHELL = !!window.__TAURI__ && /Android/i.test(navigator.userAgent);
+  /* Last answer from the plugin. "default" until the first check returns. */
+  var androidPerm = "default";
+  function readAndroidPerm() {
+    if (!ANDROID_SHELL) return;
+    window.__TAURI__.core.invoke("plugin:notification|is_permission_granted").then(function (ok) {
+      var next = ok ? "granted" : "denied";
+      /* Only repaint once boot has; the first answer usually lands before it. */
+      if (next !== androidPerm) { androidPerm = next; if (document.readyState === "complete") refresh(); }
+    }).catch(function () {});
+  }
+  /* Turning notifications off in system settings happens outside the app, so
+     re-read whenever it comes back to the foreground. */
+  if (ANDROID_SHELL) {
+    readAndroidPerm();
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") readAndroidPerm();
+    });
+  }
+
   var notify = {
     supported: function () { return typeof window.Notification !== "undefined"; },
     /* Whether this origin can actually deliver desktop notifications.
@@ -1503,6 +1527,7 @@
        unconditionally (there is no per-app permission gate), so "granted" is
        the accurate answer, not an optimistic guess. */
     permission: function () {
+      if (ANDROID_SHELL) return androidPerm;
       if (window.__TAURI__) return "granted";
       return this.supported() ? Notification.permission : "unsupported";
     },
@@ -1511,6 +1536,24 @@
        native prompt cold on page load. */
     request: function (cb) {
       var self = this;
+      /* Android: POST_NOTIFICATIONS is a real prompt on 13+, and the answer is
+         what gets reported. Already granted is answered from the cache — the
+         plugin's requestPermissions never resolves when there's nothing to ask. */
+      if (ANDROID_SHELL) {
+        STATE.settings.notificationsAsked = true;
+        save();
+        var answer = function (res) {
+          androidPerm = res === "granted" ? "granted" : "denied";
+          if (androidPerm === "granted") toast("Reminders enabled.", "success");
+          else toast("Notifications are off for Wellness Hub — turn them on in Android Settings → Apps → Wellness Hub → Notifications.", "warn", 8000);
+          if (cb) cb(androidPerm === "granted");
+          refresh();
+        };
+        if (androidPerm === "granted") { answer("granted"); return; }
+        window.__TAURI__.core.invoke("plugin:notification|request_permission")
+          .then(answer, function () { answer("denied"); });
+        return;
+      }
       /* Desktop shell: no browser prompt to raise. Ask the native plugin (a
          no-op grant on Linux/Windows) and record that we've asked, so Settings
          and onboarding don't keep offering it. */
@@ -1699,6 +1742,10 @@
      (fired first, every time) carries Open/Snooze, and the tray keeps the
      window reachable. The `icon` name matches the installed hicolor icon. */
   function tauriNotify(title, body) {
+    /* Android: js/native.js already armed this exact notification with
+       AlarmManager, so posting it here too would be a second heads-up a
+       second after the first (A4). Both notify.fire and notify.os land here. */
+    if (ANDROID_SHELL) return;
     try {
       window.__TAURI__.core.invoke("plugin:notification|notify", {
         options: { title: title, body: body, icon: "wellness-hub" }
@@ -1801,6 +1848,27 @@
     inQuietHours: inQuietHours,
     runsOn: runsOn,
 
+    /* PLAN-android.md A7: a reminder's on/off state is asked for at 20 sites
+       across 7 files. `wellnessHub.ui → deviceReminders` is per-device and
+       never synced, so this is the one place that decides "on, here" —
+       the device override when the user has set one, `cfg.enabled`
+       otherwise. Writing the override straight into
+       `STATE.settings.reminders[key].enabled` would sync a phone's choice
+       to every other device, which is exactly the failure A7 exists to stop. */
+    on: function (key) {
+      var ov = Hub.uiGet("deviceReminders", {})[key];
+      if (typeof ov === "boolean") return ov;
+      var cfg = STATE.settings.reminders[key];
+      return !!(cfg && cfg.enabled);
+    },
+    /* `null` clears the override, so the device falls back to the synced
+       setting again rather than being stuck on whatever it last chose. */
+    setOn: function (key, val) {
+      var dev = Hub.uiGet("deviceReminders", {});
+      if (val === null) delete dev[key]; else dev[key] = !!val;
+      Hub.uiSet("deviceReminders", dev);
+    },
+
     /* Push one reminder out by the configured snooze. */
     snooze: function (key, mins) {
       mins = mins || Number(STATE.settings.snoozeMin) || 15;
@@ -1816,6 +1884,8 @@
       updateChrome();
     },
     isSnoozed: function (key) { return !!(snoozed[key] && snoozed[key] > Date.now()); },
+    /* The two in-memory clocks, for js/native.js to project forward. */
+    clocks: function (key) { return { nextAt: nextAt[key] || null, snoozedUntil: snoozed[key] || null }; },
     clearSnooze: function (key) { delete snoozed[key]; },
 
     /* (Re)seed the interval reminders. Called at boot and whenever settings
@@ -1825,7 +1895,7 @@
         var m = REMINDER_META[key];
         var cfg = STATE.settings.reminders[key];
         if (m.kind !== "interval") return;
-        if (!cfg || !cfg.enabled) { delete nextAt[key]; return; }
+        if (!cfg || !reminders.on(key)) { delete nextAt[key]; return; }
         var mins = Math.max(1, Number(cfg.intervalMin) || 20);
         /* Keep an existing countdown if it's still valid for this interval,
            so nudging an unrelated setting doesn't reset the user's timer. */
@@ -1849,7 +1919,7 @@
     reset: function (key) {
       if (Hub.timers && Hub.timers.onHabitDone) Hub.timers.onHabitDone(key);
       var cfg = STATE.settings.reminders[key];
-      if (!cfg || !cfg.enabled) return;
+      if (!cfg || !reminders.on(key)) return;
       var mins = Math.max(1, Number(cfg.intervalMin) || 20);
       nextAt[key] = Date.now() + mins * 60000;
     },
@@ -1862,7 +1932,7 @@
       var m = REMINDER_META[key];
       if (!m || m.kind !== "interval") return null;
       var cfg = STATE.settings.reminders[key];
-      if (!cfg || !cfg.enabled || !nextAt[key]) return null;
+      if (!cfg || !reminders.on(key) || !nextAt[key]) return null;
       var nowMs = Date.now();
       if (snoozed[key] && snoozed[key] > nowMs) return (snoozed[key] - nowMs) / 1000;
       return Math.max(0, (nextAt[key] - nowMs) / 1000);
@@ -1876,7 +1946,7 @@
       Object.keys(REMINDER_META).forEach(function (key) {
         var m = REMINDER_META[key];
         var cfg = STATE.settings.reminders[key];
-        if (!cfg || !cfg.enabled) return;
+        if (!cfg || !reminders.on(key)) return;
 
         var inSec;
         if (m.kind === "interval") {
@@ -1917,7 +1987,7 @@
       Object.keys(REMINDER_META).forEach(function (key) {
         var m = REMINDER_META[key];
         var cfg = STATE.settings.reminders[key];
-        if (!cfg || !cfg.enabled) return;
+        if (!cfg || !reminders.on(key)) return;
 
         /* A snooze that has come due fires regardless of schedule — the user
            asked for it back, and quiet hours are about not being ambushed,
@@ -2189,6 +2259,7 @@
 
     /* notifications + reminders */
     notify: notify, reminders: reminders, remDue: remDue, onTick: onTick, startTick: startTick,
+    androidShell: ANDROID_SHELL,
 
     /* utils */
     esc: esc, clamp: clamp, pct: pct, plural: plural, delegate: delegate,

@@ -270,6 +270,19 @@
   /* ======================================================================
      20-20-20 BREAK TIMER
      ====================================================================== */
+  /* A finished look-away, counted once. Shared with the countdown face
+     (js/face.js), which runs its own 20 seconds inside the AOD screen.
+     Returns today's count. */
+  function logBreak() {
+    Hub.cueDone();
+    var d = Hub.editToday();
+    d.eye2020++;
+    Hub.commit();
+    Hub.reminders.reset("eye");
+    Hub.gamify.checkMilestone("eye");
+    return d.eye2020;
+  }
+
   function runBreak() {
     var DURATION = 20;
     var inner = Hub.focus.open(
@@ -290,14 +303,8 @@
       interval: 200,
       onTick: function (r) { clockEl.textContent = Hub.clock(Math.ceil(r)); },
       onDone: function () {
-        Hub.cueDone();
-        var d = Hub.editToday();
-        d.eye2020++;
-        Hub.commit();
-        Hub.reminders.reset("eye");
-        Hub.gamify.checkMilestone("eye");
         Hub.focus.close();
-        Hub.toast("Eye break done — " + d.eye2020 + " today.", "success");
+        Hub.toast("Eye break done — " + logBreak() + " today.", "success");
       }
     });
     breakTimer.start();
@@ -417,5 +424,5 @@
      timer rack (js/timers.js) offers the look-away when the 20-minute eye
      timer runs out and calls back into it here, so a change to the break
      UI stays in this file. */
-  Hub.eye = { runBreak: runBreak };
+  Hub.eye = { runBreak: runBreak, logBreak: logBreak };
 })();

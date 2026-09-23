@@ -4,17 +4,42 @@ version = "1.0.0"
 edition = "2021"
 description = "Wellness Hub desktop shell"
 
+[lib]
+name = "wellness_hub_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = [] }
 tauri-plugin-notification = "2"
+
+# Desktop-only: no tray, no single-instance guard and no login-item registration
+# on Android/iOS, so these stay off the mobile dependency graph entirely rather
+# than being pulled in and left unused. Cargo's per-target resolver (default
+# since edition 2021) keeps the tray-icon feature off mobile builds of `tauri`
+# too, since it's only requested here.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
 # Second launch focuses the running copy instead of spawning a duplicate.
 tauri-plugin-single-instance = "2"
 # Registers a login item so the app is already resident after a reboot.
 tauri-plugin-autostart = "2"
 
+# Android release builds forward nothing from `console` to logcat, so the only
+# way to see JS errors on the phone is the WebView inspector over adb. Only a
+# machine already paired with the phone can reach it (PLAN-android.md B3).
+# ponytail: devtools stay on through B9's on-device checks; drop after if unwanted.
+[target.'cfg(target_os = "android")'.dependencies]
+tauri = { version = "2", features = ["devtools"] }
+
 # ponytail: skeleton shell only — no Rust-side sync/logic. All app behaviour
 # stays in the existing JS. Rust exists here purely to be the native window,
 # the tray, and the notification bridge (PLAN-desktop-supabase.md B3).
+
+# Vendored fork of the notification plugin: its Android builder gains a live
+# countdown (PLAN-android.md A2). See the WELLNESS HUB PATCH block in
+# plugins/notification/android/src/main/java/TauriNotificationManager.kt.
+[patch.crates-io]
+tauri-plugin-notification = { path = "plugins/notification" }

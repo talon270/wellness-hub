@@ -295,3 +295,22 @@ html[data-theme="tokyo-night"] {
   --wh-c-settings: #8f96bd;           /* neutral */
 }
 
+/* ---------------------------------------------------------------------------
+   COUNTDOWN FACE — light variant (PLAN-android.md Part C)
+   ----------------------------------------------------------------------------
+   Every other "theme" in this file is a colour palette you pick in Settings;
+   the face's light/dark split is a different axis (AOD black vs. daylight
+   desktop use) and this app has no light/dark toggle of its own to key off,
+   so it follows the OS's own `prefers-color-scheme` — the native platform
+   feature that already answers "is this screen in a bright room" without a
+   new setting or a fourth thing to keep in sync. --face-accent is repeated,
+   unchanged, so both branches stay a complete, explicit pair rather than one
+   inheriting a value from :root by accident. */
+@media (prefers-color-scheme: light) {
+  .wh-face:not(.wh-face--aod) {
+    --face-bg: #f2f2f2;
+    --face-ink: #000;
+    --face-accent: #d71921;
+  }
+}
+

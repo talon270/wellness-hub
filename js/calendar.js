@@ -88,7 +88,10 @@
         var m = meta[key];
         var cfg = Hub.state.settings.reminders[key];
         if (m.kind !== "clock") return;                 // interval ones don't belong here
-        if (!cfg || !cfg.enabled) return;
+        /* The device override: this .ics is generated for whichever device
+           downloads it, so it must match what actually reminds you here,
+           not the synced flag another device might have chosen. */
+        if (!cfg || !Hub.reminders.on(key)) return;
 
         count++;
         lines.push(

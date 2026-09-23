@@ -25,8 +25,12 @@
 
   /* Service workers, like notifications, need a secure origin — and Chrome does
      not count file:// as one for this purpose. */
+  /* Not inside the Tauri shell: the assets already ship in the binary, and on
+     Android the tauri.localhost scheme makes registration throw an "unknown
+     error fetching the script" into the console on every launch. */
   function supported() {
-    return "serviceWorker" in navigator && location.protocol !== "file:";
+    return "serviceWorker" in navigator && location.protocol !== "file:" &&
+           !window.__TAURI__;
   }
 
   /* Already running as an installed app? */

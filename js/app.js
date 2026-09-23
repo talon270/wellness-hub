@@ -41,7 +41,26 @@
     if (Hub.pwa) Hub.pwa.handleLaunchUrl();
     Hub.updateChrome();
 
-    if (!Hub.state.meta.firstRunSeen) showFirstRun();
+    if (!Hub.state.meta.firstRunSeen) {
+      showFirstRun();
+      /* The welcome note above is the one modal the app shows unconditionally
+         on a genuinely first-ever boot, and Hub.modal() only holds one dialog
+         at a time — opening a second one right behind it would silently
+         replace the first, so a brand-new account sees the phone card on its
+         NEXT launch instead of stepping on the welcome note this one. In
+         practice this only matters for a phone that is the very first device
+         on the account; installing the Android app onto an existing, synced
+         account (the documented path — PLAN-android.md interview, "Old phone
+         PWA") arrives with `firstRunSeen` already true, so the phone card
+         shows immediately, with nothing to collide with. */
+    } else if (Hub.androidShell && !Hub.uiGet(Hub.phoneFirstRun.SEEN_KEY, false)) {
+      /* Per-device, not per-account: a phone joining an account that's had
+         the app for months still hasn't answered "does this reminder suit a
+         phone" yet. `wellnessHub.ui` is where that flag lives, same as the
+         reminder overrides it sets (PLAN-android.md B6). Revisitable from
+         Settings -> This phone, so "Not now" here isn't a one-way door. */
+      Hub.phoneFirstRun.show();
+    }
 
     watchForFitnessApp();
     wireGlobalKeys();

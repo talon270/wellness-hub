@@ -168,6 +168,9 @@
         "</div>";
       }).join("") +
 
+      /* ---------- this phone (Android only) ---------- */
+      phoneCard() +
+
       /* ---------- how the app counts ---------- */
       countingCard() +
 
@@ -444,7 +447,9 @@
     var meta = Hub.reminders.meta;
     return Object.keys(meta).filter(function (k) {
       var cfg = Hub.state.settings.reminders[k];
-      return meta[k].kind === "clock" && cfg && cfg.enabled;
+      /* Has to agree with js/calendar.js's own filter, which counts the
+         device override rather than the synced flag (PLAN-android.md A7). */
+      return meta[k].kind === "clock" && cfg && Hub.reminders.on(k);
     }).length;
   }
 
@@ -971,6 +976,191 @@
     "</div>";
   }
 
+  /* ---------- this phone (PLAN-android.md A7/A8/B6) ----------
+     Everything above this card edits the SYNCED reminder settings — the
+     same values on every device. This card is the only place that writes
+     `wellnessHub.ui → deviceReminders`, which is per-device and never
+     synced, so it only ever exists when `Hub.androidShell` is true. */
+  function armedUntilText() {
+    var until = Hub.native.armedUntil;
+    if (until == null) return "not armed yet — open Wellness Hub to arm them";
+    var d = new Date(until);
+    var hhmm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    var day = Hub.ymd(d) === Hub.calendarToday() ? "today"
+      : Hub.ymd(d) === Hub.ymd(new Date(Date.now() + 86400000)) ? "tomorrow"
+      : d.toLocaleDateString(undefined, { weekday: "long" });
+    return "armed until " + hhmm + " " + day;
+  }
+
+  /* One status line: a chip that's never a bare tick — it always carries the
+     sentence saying what's actually true — plus a button when there's
+     something to fix. `ok` is true / false / null (can't tell from here). */
+  function phoneStatusRow(id, label, ok, detail, btnLabel) {
+    return '<div class="wh-setrow">' +
+      '<div class="wh-setrow__info">' +
+        '<div class="wh-setrow__name">' + Hub.esc(label) + "</div>" +
+        '<div class="wh-setrow__desc">' + Hub.esc(detail) + "</div>" +
+      "</div>" +
+      '<div class="wh-setrow__ctl" style="align-items:center">' +
+        '<span class="wh-chip ' + (ok === true ? "wh-chip--good" : ok === false ? "wh-chip--bad" : "wh-chip--warn") + '">' +
+          (ok === true ? "ok" : ok === false ? "off" : "unknown") + "</span>" +
+        (ok !== true && btnLabel
+          ? '<button type="button" class="wh-btn wh-btn--sm" data-phone-action="' + id + '">' + Hub.esc(btnLabel) + "</button>"
+          : "") +
+      "</div>" +
+    "</div>";
+  }
+
+  function phoneCard() {
+    if (!Hub.androidShell) return "";
+    var perm = Hub.notify.permission();
+    var exact = Hub.native.exactAlarms();      // true / false / null
+    var batt = Hub.native.batteryExempt();     // true / false / null
+    var maker = String(Hub.native.maker() || "");
+    var isSamsung = maker.toLowerCase() === "samsung";
+    var samsungDone = !!Hub.uiGet("samsungSleepConfirmed", false);
+    var dev = Hub.uiGet("deviceReminders", {});
+
+    var remRows = Object.keys(Hub.reminders.meta).map(function (key) {
+      var m = Hub.reminders.meta[key];
+      var cfg = Hub.state.settings.reminders[key];
+      if (!cfg) return "";
+      var synced = !!cfg.enabled;
+      var hasOverride = typeof dev[key] === "boolean";
+      var effective = Hub.reminders.on(key);
+      return '<div class="wh-setrow">' +
+        '<div class="wh-setrow__info">' +
+          '<div class="wh-setrow__name">' + Hub.esc(m.label) + "</div>" +
+          (hasOverride && dev[key] !== synced
+            ? '<div class="wh-setrow__desc">' + (synced ? "on" : "off") + " for your other devices</div>"
+            : "") +
+        "</div>" +
+        '<div class="wh-setrow__ctl">' +
+          '<label class="wh-switch"><input type="checkbox" data-phone-rem="' + key + '"' +
+            (effective ? " checked" : "") + ' aria-label="' + Hub.esc(m.label) + ' on this phone" />' +
+          '<span class="wh-switch__track"></span></label>' +
+        "</div>" +
+      "</div>";
+    }).join("");
+
+    return '<div class="wh-card wh-mb4">' +
+      '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("bell") + "This phone</div>" +
+        '<button type="button" class="wh-btn wh-btn--ghost wh-btn--sm" id="st-phone-firstrun">Run first-time setup</button>' +
+      "</div>" +
+      '<p class="wh-sm wh-muted">On/off here is per-device, on purpose — turning desk reminders off on this ' +
+        "phone doesn't touch your desktop, and the other way round. Everything else about a reminder " +
+        "(times, intervals, quiet hours) still comes from the settings above and stays the same everywhere.</p>" +
+      '<div class="wh-mt4">' + remRows + "</div>" +
+      '<div class="wh-setrow__name wh-mt6">Can this phone actually reach you?</div>' +
+      phoneStatusRow("notify", "Notifications", perm === "granted" ? true : perm === "denied" ? false : null,
+        perm === "granted" ? "Allowed." : perm === "denied"
+          ? "Blocked in Android Settings — reminders can't show at all."
+          : "Not asked yet.",
+        "Turn on") +
+      phoneStatusRow("exactAlarms", "Exact alarms", exact,
+        exact === true ? "Timers and reminders arrive at the exact second."
+          : exact === false ? "Off — Android may deliver them 5–10 minutes late."
+          : "Can't tell from here yet.",
+        "Open settings") +
+      phoneStatusRow("battery", "Battery exemption", batt,
+        (batt === true ? "Exempt — " : batt === false ? "Not exempt — " : "Can't tell from here yet. ") +
+          Hub.native.batteryLabel(),
+        "Open settings") +
+      '<div class="wh-setrow">' +
+        '<div class="wh-setrow__info">' +
+          '<div class="wh-setrow__name">Armed</div>' +
+          '<div class="wh-setrow__desc">' + Hub.esc(armedUntilText()) +
+            ". Leave the app closed longer than that and reminders stop until you open it again.</div>" +
+        "</div>" +
+      "</div>" +
+      (isSamsung && !samsungDone
+        ? '<div class="wh-disclaimer wh-mt4">' + Hub.icon("alert") +
+          "<span>Samsung puts a rarely-opened app to sleep after about 3 days, which stops its alarms. " +
+            "Add Wellness Hub to <strong>Never sleeping apps</strong> (Settings → Battery → Background " +
+            "usage limits). Android has no way for this app to check that on its own, so this stays here " +
+            "until you confirm it.</span></div>" +
+          '<button type="button" class="wh-btn wh-btn--primary wh-mt4" data-phone-action="samsungConfirm">' +
+            "I've done this</button>"
+        : isSamsung
+          ? '<p class="wh-help wh-mt4">' + Hub.icon("check") + " Confirmed added to Never sleeping apps.</p>"
+          : "") +
+    "</div>";
+  }
+
+  var PHONE_FIRSTRUN_SEEN_KEY = "androidFirstRunSeen";
+
+  /* PLAN-android.md B6 first-run card. Ticked defaults come from
+     Hub.native.reminderAdvice (js/native.js) — a suggestion with its reason
+     shown next to it, never a silent switch, exactly like js/onboarding.js's
+     own suggestion step. Nothing is written until "Apply" is clicked. */
+  function showPhoneFirstRun() {
+    if (!Hub.androidShell) return;
+    var advice = Hub.native.reminderAdvice || {};
+    var checked = {};
+    Object.keys(Hub.reminders.meta).forEach(function (k) {
+      checked[k] = advice[k] ? !!advice[k].on : true;
+    });
+
+    var perm = Hub.notify.permission();
+    var exact = Hub.native.exactAlarms();
+    var batt = Hub.native.batteryExempt();
+    var isSamsung = String(Hub.native.maker() || "").toLowerCase() === "samsung";
+
+    Hub.modal({
+      title: "Set this phone up",
+      body:
+        '<p>Reminders are per-device from here on — nothing below touches your other devices. Each one is ' +
+          "ticked to what usually suits a phone; untick anything you'd rather keep the same everywhere.</p>" +
+        '<div class="wh-stack wh-stack--sm" id="pf-list">' +
+          Object.keys(Hub.reminders.meta).map(function (k) {
+            var m = Hub.reminders.meta[k];
+            var a = advice[k] || { reason: "" };
+            return '<button type="button" class="wh-check' + (checked[k] ? " is-done" : "") + '" data-pf="' + k +
+                '" aria-pressed="' + !!checked[k] + '">' +
+              '<span class="wh-check__box">' + Hub.icon("check") + "</span>" +
+              '<span class="wh-check__text">' + Hub.esc(m.label) +
+                '<span class="wh-check__sub">' + Hub.esc(a.reason) + "</span></span></button>";
+          }).join("") +
+        "</div>" +
+        '<div class="wh-setrow__name wh-mt6">This phone’s permissions</div>' +
+        phoneStatusRow("notify", "Notifications", perm === "granted" ? true : perm === "denied" ? false : null,
+          perm === "granted" ? "Allowed already." : "Android will ask when you apply this.", "") +
+        phoneStatusRow("exactAlarms", "Exact alarms", exact,
+          exact === true ? "Exact — timers and reminders arrive on time."
+            : "Worth checking in Android Settings once this is applied.", "Open settings") +
+        phoneStatusRow("battery", "Battery exemption", batt, Hub.native.batteryLabel(), "Open settings") +
+        (isSamsung
+          ? '<div class="wh-disclaimer wh-mt4">' + Hub.icon("alert") +
+            "<span>Samsung also needs Wellness Hub added to <strong>Never sleeping apps</strong> " +
+              "(Settings → Battery → Background usage limits) — there's no API for this app to " +
+              "check that on its own, so Settings → This phone keeps asking until you confirm it.</span></div>"
+          : ""),
+      actions: [
+        { label: "Not now", variant: "ghost", onClick: function () { Hub.uiSet(PHONE_FIRSTRUN_SEEN_KEY, true); } },
+        { label: "Apply", variant: "primary", onClick: function () {
+            Object.keys(checked).forEach(function (k) { Hub.reminders.setOn(k, checked[k]); });
+            Hub.uiSet(PHONE_FIRSTRUN_SEEN_KEY, true);
+            if (Hub.notify.permission() === "default") Hub.notify.request();
+            Hub.toast("This phone is set up. Change it any time from Settings → This phone.", "success", 4000);
+            Hub.refresh();
+          } }
+      ],
+      onOpen: function (body) {
+        Hub.delegate(body, "[data-pf]", function (btn) {
+          var k = btn.dataset.pf;
+          checked[k] = !checked[k];
+          btn.classList.toggle("is-done", checked[k]);
+          btn.setAttribute("aria-pressed", !!checked[k]);
+        });
+        var eBtn = body.querySelector('[data-phone-action="exactAlarms"]');
+        if (eBtn) eBtn.addEventListener("click", function () { Hub.native.openSettings("exactAlarms"); });
+        var bBtn = body.querySelector('[data-phone-action="battery"]');
+        if (bBtn) bBtn.addEventListener("click", function () { Hub.native.openSettings("battery"); });
+      }
+    });
+  }
+  Hub.phoneFirstRun = { show: showPhoneFirstRun, SEEN_KEY: PHONE_FIRSTRUN_SEEN_KEY };
+
   function miniStat(label, value) {
     return '<div><div class="wh-stat__label">' + label + "</div>" +
       '<div class="mono" style="font-size:19px;color:var(--fg0)">' + value + "</div></div>";
@@ -1236,6 +1426,26 @@
       Hub.reminders.sync();
       Hub.refresh();
     });
+
+    /* --- this phone (Android only) --- */
+    if (Hub.androidShell) {
+      var frBtn = el.querySelector("#st-phone-firstrun");
+      if (frBtn) frBtn.addEventListener("click", function () { Hub.phoneFirstRun.show(); });
+      el.querySelectorAll("[data-phone-rem]").forEach(function (cb) {
+        cb.addEventListener("change", function () {
+          var key = cb.dataset.phoneRem;
+          Hub.reminders.setOn(key, cb.checked);
+          if (cb.checked && Hub.notify.permission() === "default") Hub.notify.request();
+          Hub.refresh();
+        });
+      });
+      Hub.delegate(el, "[data-phone-action]", function (btn) {
+        var what = btn.dataset.phoneAction;
+        if (what === "notify") { Hub.notify.request(function () { Hub.refresh(); }); return; }
+        if (what === "samsungConfirm") { Hub.uiSet("samsungSleepConfirmed", true); Hub.refresh(); return; }
+        Hub.native.openSettings(what);   // "exactAlarms" | "battery"
+      });
+    }
 
     /* --- quiet hours + snooze --- */
     var quiet = el.querySelector("#st-quiet");
@@ -1518,6 +1728,16 @@
       });
     };
     reader.readAsText(file);
+  }
+
+  /* Notification permission, exact-alarm and battery-exemption status all
+     change from outside the app (system Settings), so the only way to catch
+     up is to look again whenever the tab comes back to the foreground —
+     the same seam core.js already uses for the permission cache. */
+  if (Hub.androidShell) {
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible" && Hub.activeView() === "settings") Hub.refresh();
+    });
   }
 
   Hub.registerView("settings", render);

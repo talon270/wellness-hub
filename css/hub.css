@@ -16,6 +16,34 @@
      7. Responsive + accessibility + motion preferences
    ========================================================================== */
 
+/* Doto (SIL OFL, vendor/doto/) — the dot-matrix numeral face uses this and
+   nothing else reads it, so it's declared once here rather than duplicated
+   per stylesheet. Vendored as a single static weight (700) fetched once from
+   fonts.gstatic.com's woff2 URL, not linked at runtime — no CDN, no build
+   step, works offline. */
+@font-face {
+  font-family: "Doto";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../vendor/doto/Doto-Bold.woff2") format("woff2");
+}
+
+/* Nothing's own faces for the countdown: Ndot 57 (Aligned is its fixed-width
+   digit cut) and Lettera Mono, the fonts Nothing OS draws its lock screen in.
+   local() uses the copies already in the phone's /system/fonts, so nothing
+   proprietary is bundled here; every other device falls back to Doto and the
+   mono stack. Both local() names were confirmed loading in the 2a's WebView. */
+@font-face {
+  font-family: "WH Ndot";
+  src: local("Ndot 57 Aligned"), local("Ndot-57-Aligned"),
+       url("../vendor/doto/Doto-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "WH Lettera";
+  src: local("Lettera Mono LL"), local("LetteraMonoLL-Regular");
+}
+
 /* ---------------------------------------------------------------------------
    1. DESIGN TOKENS — the real Gruvbox Dark palette
    ------------------------------------------------------------------------- */
@@ -114,6 +142,24 @@
              "Noto Sans", Arial, sans-serif;
   --wh-mono: ui-monospace, "JetBrains Mono", "Fira Code", "SFMono-Regular",
              "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* Falls back to the mono stack if Doto somehow fails to load — a countdown
+     that can't read is worse than one in the wrong font. */
+  --wh-font-doto: "Doto", var(--wh-mono);
+  --wh-font-face: "WH Ndot", var(--wh-font-doto);
+  --wh-font-face-mono: "WH Lettera", var(--wh-mono);
+
+  /* ---- countdown face (PLAN-android.md Part C) --------------------------
+     Dark is the default because the face doubles as the phone's app-drawn
+     AOD (js/native.js Hub.native.face) — true black costs nothing on OLED
+     and matches the lock screen it's drawn over. The light values below
+     exist for the desktop/daylight case and are picked by the OS's own
+     light/dark preference (this app otherwise only ships dark colour
+     *palettes*, not a light/dark pair, so there's no app toggle to key off
+     — see the media query in css/themes.css). Two tones plus one accent is
+     the whole palette; the accent stays red in both. */
+  --face-bg: #000;
+  --face-ink: #fff;
+  --face-accent: #d71921;
 
   /* ---- spacing / radii / motion ---- */
   --wh-s1: 4px;  --wh-s2: 8px;  --wh-s3: 12px; --wh-s4: 16px;
@@ -708,6 +754,116 @@ svg.wh-i {
 .wh-focus__actions { display: flex; gap: var(--wh-s3); justify-content: center; margin-top: var(--wh-s8); flex-wrap: wrap; }
 .wh-focus__stage { display: grid; place-items: center; margin: var(--wh-s6) auto; }
 
+/* --- countdown face (PLAN-android.md Part C) ---
+   Its own layer, not the focus overlay above: a timer keeps running while no
+   guided flow is open. z-index above .wh-celebrate too — a badge unlock
+   firing while the face is up must not poke through the AOD.
+   Laid out like an always-on display: everything sits in one small block at
+   the top left (clock, a small countdown, the dot row) and the rest of the
+   screen stays black. Hints and PAUSE / RESET sit at the bottom. */
+.wh-face {
+  position: fixed; inset: 0; z-index: 400;
+  background: var(--face-bg);
+  color: var(--face-ink);
+  /* The face is driven by tap and hold (js/face.js): no text selection, no
+     long-press callout, no double-tap zoom eating the first tap. */
+  user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; touch-action: manipulation;
+}
+.wh-face[hidden] { display: none; }
+.wh-face__inner {
+  height: 100%; box-sizing: border-box;
+  display: flex; flex-direction: column;
+  /* The block starts about a tenth of the way down, where Nothing's own
+     lock-screen clock sits, clear of the 2a's top-centre camera hole. */
+  padding: max(10dvh, env(safe-area-inset-top)) 28px
+           max(32px, env(safe-area-inset-bottom));
+  /* The whole block drifts a few px over the course of an hour so the same
+     pixels aren't lit for the twenty-odd minutes an eye-break countdown runs
+     — cheap OLED burn-in protection, moved by js/face.js once a minute. */
+  transition: transform 1s linear;
+}
+.wh-face__close {
+  position: absolute; top: max(24px, env(safe-area-inset-top)); right: 16px;
+  width: 40px; height: 40px; display: grid; place-items: center;
+  background: none; border: 0; color: var(--face-ink); opacity: .5;
+  cursor: pointer;
+}
+.wh-face__close svg { width: 20px; height: 20px; }
+.wh-face__close:hover, .wh-face__close:focus-visible { opacity: 1; }
+.wh-face__clock {
+  font-family: var(--wh-font-face); font-weight: 400;
+  font-size: min(20vw, 11dvh); line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--face-ink);
+}
+.wh-face__label {
+  margin-top: var(--wh-s6);
+  font-family: var(--wh-font-face-mono); font-size: 12px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--face-ink); opacity: .55;
+}
+.wh-face__num {
+  margin-top: var(--wh-s2);
+  font-family: var(--wh-font-face); font-weight: 400;
+  font-size: 36px; line-height: 1.1;
+  font-variant-numeric: tabular-nums; color: var(--face-ink);
+}
+.wh-face__num.is-hot { color: var(--face-accent); }
+/* Idle shows the full duration as what a hold will start, not a count. */
+.wh-face__num.is-idle { opacity: .35; }
+/* Counting, the countdown sits at half brightness until the last minute. */
+.wh-face__num.is-dim { opacity: .5; }
+.wh-face__dots {
+  display: flex; gap: 8px; flex-wrap: wrap; max-width: 300px;
+  margin-top: var(--wh-s4);
+}
+.wh-face__dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; color: var(--face-ink); opacity: .18;
+  transition: opacity .6s var(--wh-ease), background-color .3s var(--wh-ease);
+}
+.wh-face__dot.is-on { opacity: .8; }
+/* Accent only in the last minute and on the done screen. */
+.wh-face__dot.is-hot { color: var(--face-accent); }
+/* The dot that drops next breathes, so the screen shows it is alive without
+   anything else moving. On the done screen every dot pulses together. */
+.wh-face__dot.is-live { animation: wh-face-breathe 2s ease-in-out infinite; }
+.wh-face__dots.is-due .wh-face__dot { opacity: .8; color: var(--face-accent);
+  animation: wh-face-breathe 1.2s ease-in-out infinite; }
+@keyframes wh-face-breathe {
+  0%, 100% { opacity: .8; }
+  50% { opacity: .12; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wh-face__inner { transition: none; }
+  .wh-face__dot { transition: none; animation: none !important; }
+}
+.wh-face__spacer { flex: 1; }
+.wh-face__hint {
+  margin: 0 0 var(--wh-s2);
+  font-family: var(--wh-font-face-mono); font-size: 12px; letter-spacing: .08em;
+  line-height: 1.8; text-transform: uppercase; color: var(--face-ink); opacity: .55;
+}
+.wh-face__acts {
+  display: flex; justify-content: space-between;
+}
+.wh-face__acts[hidden], .wh-face__hint[hidden] { display: none; }
+.wh-face__btn {
+  background: none; border: 0; cursor: pointer;
+  font-family: var(--wh-font-face-mono); font-size: 13px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--face-ink); opacity: .7;
+  padding: var(--wh-s3) 0; min-width: 88px; text-align: left;
+}
+.wh-face__btn + .wh-face__btn { text-align: right; }
+.wh-face__btn:hover, .wh-face__btn:focus-visible { opacity: 1; }
+/* Quiet: after 5s without a touch the close button and PAUSE / RESET go.
+   visibility (not just opacity) so a tap where PAUSE was can't hit a button
+   you can't see; the tap lands on the face and brings them back instead. */
+.wh-face__close, .wh-face__acts {
+  transition: opacity .4s var(--wh-ease), visibility .4s;
+}
+.wh-face.is-quiet .wh-face__close,
+.wh-face.is-quiet .wh-face__acts { opacity: 0; visibility: hidden; }
+
 /* --- badge unlock celebration --- */
 .wh-celebrate { position: fixed; inset: 0; z-index: 320; pointer-events: none; display: grid; place-items: center; }
 .wh-celebrate:empty { display: none; }
@@ -813,6 +969,10 @@ svg.wh-i {
 }
 .wh-timer__ic svg { width: 15px; height: 15px; stroke-width: 2; }
 .wh-timer__body { flex: 1 1 auto; min-width: 0; display: block; }
+/* Only a live row opens the full-screen face — a row you haven't started has
+   no countdown to show, so it shouldn't invite a tap that does nothing. */
+.wh-timer.is-running:not(.wh-timer--ext) .wh-timer__body,
+.wh-timer.is-paused:not(.wh-timer--ext) .wh-timer__body { cursor: pointer; }
 .wh-timer__name { display: block; font-size: 13px; color: var(--fg2); font-weight: 600; }
 .wh-timer__note {
   display: block; font-size: 10.5px; color: var(--wh-text-faint);
