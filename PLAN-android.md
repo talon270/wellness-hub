@@ -365,6 +365,6 @@ Everything else is orchestrated from this session.
 | A "Done" button on notifications | Rust writing into webview storage while the page may be dead is a second write path that bypasses the merge. It's a risk to your history |
 | A foreground service or alarm-clock-style alerts | Kotlin, a permanent notification and extra permissions, for more volume than a 20-minute eye break needs |
 | Nothing's Ndot font | Proprietary. Doto is the open-licence equivalent |
-| Play Store, iOS, an in-app APK updater | Sideload only. Updates are `adb install -r` over Wi-Fi from this machine |
+| Play Store, iOS | Sideload only. *(An in-app APK updater was in this row. It was added on 2026-09-30: see `PLAN-android-updater.md`. `adb install -r` remains the way to install the first build.)* |
 | A12: logging a timer at its end time when the app was dead | Pre-existing behaviour. Worth its own small plan if you want it |
 | Background sync while the app is closed | Sync runs on open and focus, as on desktop. Alarms and countdowns don't need it |

@@ -231,6 +231,7 @@
       "</div>" +
       phoneCard() +
       appCard() +
+      androidCard() +
       desktopCard()
     );
 
@@ -330,6 +331,7 @@
      link or a re-render can always re-open one. */
   var folded = {};
   var paletteOpen = false;
+  var androidOff = null;   // unsubscribes the previous render's Android-card repaint
 
   var GROUPS = [
     ["daily", "Daily use"], ["reminders", "Reminders &amp; devices"],
@@ -837,9 +839,13 @@
      install.sh (see src-tauri/src/main.rs); relaunch swaps the running process
      for the freshly installed one; check_update compares source mtimes to the
      running binary and returns true if any source file is newer. Silent no-op
-     in the browser/PWA — window.__TAURI__ is undefined there. */
+     in the browser/PWA — window.__TAURI__ is undefined there.
+     NOT on Android: withGlobalTauri makes __TAURI__ exist there too, but
+     check_update / run_update / relaunch are #[cfg(desktop)], so the card would
+     render a button whose commands don't exist. window.WHNative is the bridge
+     MainActivity adds and is absent everywhere else (PLAN-android-updater.md A2). */
   function desktopCard() {
-    if (!window.__TAURI__) return "";
+    if (!window.__TAURI__ || window.WHNative) return "";
     return '<div class="wh-card wh-mb4" id="st-desktop-card">' +
       '<div class="wh-card__head">' +
         '<div class="wh-card__title">' + Hub.icon("download") + "Desktop app</div>" +
@@ -854,6 +860,86 @@
       "</div>" +
       '<div class="wh-sm wh-mt4" id="st-update-msg" hidden></div>' +
     "</div>";
+  }
+
+  /* Android app only (window.WHNative): checks GitHub Releases and installs through
+     Android's own installer. Everything it can say comes from Hub.androidUpdate —
+     see js/androidupdate.js for why "up to date" is only ever printed with a time.
+     The frame is rendered here; the body repaints itself in place whenever the
+     module's state changes (a download reports progress twice a second), so this
+     card never needs the whole Settings view re-rendered. */
+  function androidCard() {
+    if (!window.WHNative || !Hub.androidUpdate) return "";
+    return '<div class="wh-card wh-mb4" id="st-android-card">' +
+      '<div class="wh-card__head">' +
+        '<div class="wh-card__title">' + Hub.icon("download") + "Android app</div>" +
+        '<span class="wh-chip" id="st-au-chip">…</span>' +
+      "</div>" +
+      '<div id="st-au-body"></div>' +
+    "</div>";
+  }
+
+  function androidBody(st) {
+    var AU = Hub.androidUpdate, sum = AU.summary(st), i = st.install;
+    var busy = i.phase === "downloading" || i.phase === "verifying" || i.phase === "installing" || i.phase === "confirming";
+    var mbs = function (b) { return (b / 1048576).toFixed(1); };
+    var html =
+      '<p class="wh-sm wh-muted">This copy is <strong>' + Hub.esc(st.installed ? st.installed.name : "unknown") + "</strong>" +
+        (st.installed ? " (build " + st.installed.code + ")" : "") + ". Updates come from GitHub Releases on " +
+        "<code class='mono'>talon270/wellness-hub</code>: one request to api.github.com to check and, if you tap " +
+        "Install, one download of the APK. Android only accepts an update signed with the same key as this copy, so " +
+        "an update from anyone else is refused, and it asks you to confirm every install.</p>" +
+      '<p class="wh-sm wh-mt4">' + Hub.esc(sum.line) + "</p>";
+
+    if (st.available && st.latest.notes) {
+      html += '<p class="wh-sm wh-muted wh-mt4" style="white-space:pre-wrap">' + Hub.esc(st.latest.notes) + "</p>";
+    }
+
+    html += '<div class="wh-row wh-mt4">' +
+      '<button type="button" class="wh-btn' + (st.available ? "" : " wh-btn--primary") + '" data-au="check"' +
+        (st.checking || busy ? " disabled" : "") + ">" + Hub.icon("refresh") + "Check for updates</button>" +
+      (st.available
+        ? '<button type="button" class="wh-btn wh-btn--primary" data-au="install"' + (busy ? " disabled" : "") + ">" +
+            Hub.icon("download") + "Install " + Hub.esc(st.latest.name) + " (" + mbs(st.latest.size) + " MB)</button>"
+        : "") +
+    "</div>";
+
+    if (i.phase === "downloading") {
+      var pct = i.total > 0 ? Math.min(100, Math.round(i.bytes * 100 / i.total)) : 0;
+      html += '<div class="wh-bar wh-mt4"><div class="wh-bar__fill" style="width:' + pct + '%"></div></div>' +
+        '<p class="wh-sm wh-muted wh-mt4">Downloading ' + mbs(i.bytes) + " of " + mbs(i.total) + " MB…</p>";
+    } else if (i.phase === "verifying") {
+      html += '<p class="wh-sm wh-muted wh-mt4">Checking the download against the release\'s SHA-256…</p>';
+    } else if (i.phase === "installing" || i.phase === "confirming") {
+      html += '<p class="wh-sm wh-mt4">' + Hub.icon("info") + " Waiting for Android's installer. Tap <strong>Update</strong> on " +
+        "the screen it shows; Android then closes this app while it replaces it, so open it again from the launcher.</p>" +
+        (i.phase === "confirming"
+          ? '<p class="wh-sm wh-muted wh-mt4">Nothing on screen? Android can refuse to open it while the app is in the background.</p>' +
+            '<button type="button" class="wh-btn wh-btn--sm wh-mt4" data-au="reshow">Show the installer again</button>'
+          : "");
+    } else if (i.phase === "success") {
+      html += '<p class="wh-sm wh-mt4">' + Hub.icon("check") + " Installed. Open the app again from the launcher.</p>";
+    } else if (i.phase === "needs-permission") {
+      /* The button sits INSIDE the body, under the text. As a sibling it shared a row with it, and at 390px the
+         text was squeezed into a column two words wide. */
+      html += '<div class="wh-advice wh-advice--warn wh-mt4"><div class="wh-advice__body">Android needs your permission first: ' +
+        "<strong>Settings → Apps → Wellness Hub → Install unknown apps</strong>. Allow it, come back, and tap Install again." +
+        '<div class="wh-mt4"><button type="button" class="wh-btn wh-btn--sm" data-au="perm">Open that screen</button></div></div></div>';
+    } else if (i.phase === "error") {
+      html += '<div class="wh-advice wh-advice--bad wh-mt4"><div class="wh-advice__body"><strong>Not installed:</strong> ' +
+        Hub.esc(i.error || "unknown error") + ". Nothing was replaced, so this copy and its data are exactly as they were.</div></div>";
+    }
+
+    html += '<div class="wh-setrow wh-mt4">' +
+      '<div class="wh-setrow__info">' +
+        '<div class="wh-setrow__name">Check when the app opens</div>' +
+        '<div class="wh-setrow__desc">At most once a day: one request to GitHub, and nothing about you is sent. ' +
+          "Off, and only the button checks.</div>" +
+      "</div>" +
+      '<div class="wh-setrow__ctl"><label class="wh-switch"><input type="checkbox" id="st-au-auto"' + (st.auto ? " checked" : "") + " />" +
+        '<span class="wh-switch__track"></span></label></div>' +
+    "</div>";
+    return html;
   }
 
   /* Storage durability: eviction protection + the linked backup file.
@@ -1374,6 +1460,37 @@
           updateRun.disabled = false;
           if (updateMsg) { updateMsg.textContent = "Update failed: " + err; }
         });
+      });
+    }
+
+    /* --- Android app update (Android only) --- */
+    var auCard = el.querySelector("#st-android-card");
+    if (auCard && Hub.androidUpdate) {
+      var AU = Hub.androidUpdate, auLast = "";
+      var auPaint = function () {
+        var st = AU.status(), sum = AU.summary(st), html = androidBody(st);
+        var chip = auCard.querySelector("#st-au-chip");
+        chip.textContent = sum.chip;
+        chip.className = "wh-chip" + (sum.kind === "uptodate" ? " wh-chip--good" : (sum.kind === "available" || sum.kind === "failed") ? " wh-chip--warn" : "");
+        /* Skip identical markup: a download repaints twice a second, and rebuilding
+           the DOM under an unchanged card would drop keyboard focus for nothing. */
+        if (html !== auLast) { auLast = html; auCard.querySelector("#st-au-body").innerHTML = html; }
+      };
+      auPaint();
+      if (androidOff) androidOff();
+      androidOff = AU.on(function () {
+        if (auCard.isConnected) auPaint(); else if (androidOff) { androidOff(); androidOff = null; }
+      });
+      auCard.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-au]");
+        if (!b || b.disabled) return;
+        if (b.dataset.au === "check") AU.check();
+        else if (b.dataset.au === "install") AU.install();
+        else if (b.dataset.au === "perm") AU.openInstallSettings();
+        else if (b.dataset.au === "reshow") AU.reshow();
+      });
+      auCard.addEventListener("change", function (e) {
+        if (e.target.id === "st-au-auto") AU.setAuto(e.target.checked);
       });
     }
 

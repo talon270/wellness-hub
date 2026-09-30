@@ -104,7 +104,52 @@ class MainActivity : TauriActivity() {
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
       }
     }
+
+    // ---- app updates (PLAN-android-updater.md B3), read by js/androidupdate.js ----
+    // The check happens in JS; download, verification and install live in Updater.kt.
+
+    // The number the update check compares a release against. Tauri derives it from
+    // tauri.conf.json's version (1.0.0 -> 1000000).
+    @Suppress("DEPRECATION")
+    @JavascriptInterface
+    fun versionCode(): Int {
+      val info = packageManager.getPackageInfo(packageName, 0)
+      return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode.toInt() else info.versionCode
+    }
+
+    @JavascriptInterface
+    fun versionName(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+
+    // Before Android 8 there was one global "unknown sources" switch and no per-app gate.
+    @JavascriptInterface
+    fun canInstall(): Boolean =
+      Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+
+    // The per-app "Install unknown apps" screen, which only the user can switch on.
+    @JavascriptInterface
+    fun openInstallSettings() {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+      runOnUiThread {
+        startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+          android.net.Uri.parse("package:$packageName")))
+      }
+    }
+
+    // "started" | "busy" | "needs-permission" | "bad-url" | "bad-hash".
+    @JavascriptInterface
+    fun install(url: String, sha256: String, size: Long): String = updater.start(url, sha256, size)
+
+    // {"phase","bytes","total","error"}; phase is idle | downloading | verifying |
+    // installing | confirming | success | error.
+    @JavascriptInterface
+    fun installStatus(): String = updater.status()
+
+    // Android can refuse to open its confirmation screen from the background, silently.
+    @JavascriptInterface
+    fun reshow(): Boolean = updater.reshow()
   }
+
+  private val updater by lazy { Updater(applicationContext) }
 
   companion object {
     // 0.05 read as too dim on the 2a (seen 2026-09-23); raised by 5 points.

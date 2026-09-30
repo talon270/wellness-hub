@@ -20,7 +20,7 @@
    BUMP CACHE_VERSION whenever you change any file in PRECACHE.
    ========================================================================== */
 
-const CACHE_VERSION = "v39";
+const CACHE_VERSION = "v40";
 const CACHE_NAME = `wellness-hub-${CACHE_VERSION}`;
 
 /* Relative paths so the app works from any sub-directory. */
@@ -53,6 +53,7 @@ const PRECACHE = [
   "./js/onboarding.js",
   "./js/timers.js",
   "./js/native.js",
+  "./js/androidupdate.js",
   "./js/face.js",
   "./js/app.js",
   "./js/views/dashboard.js",

@@ -214,6 +214,68 @@ browser's, so your history isn't in it yet. Link the same sync in both, or
 import a backup once — the first-run note says so, because "where's my data" is
 the wrong first impression.
 
+### The Android app
+
+The same `src-tauri/` project builds an Android APK (Tauri v2, the system WebView).
+It is **sideloaded only** — no Play Store — and signed with a key that lives in
+`~/.android-keys/`, outside this repo and outside `SyncedWork`. Android will only
+replace an installed copy with an APK signed by the same key, so that folder
+needs a backup somewhere you choose: without it, updating means uninstalling,
+and uninstalling wipes the app's local storage.
+
+```sh
+cargo tauri android build --apk --target aarch64                            # signed release APK, arm64 only (12.4 MB; all four ABIs is 40.7 MB)
+adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+```
+
+**The first build with the updater has to be installed by hand.** An updater
+can't install itself. After that, **Settings → Reminders & devices → Android app**
+checks GitHub Releases and installs new builds through Android's own installer.
+
+| | |
+|---|---|
+| **Where updates come from** | GitHub Releases on `talon270/wellness-hub`, tags named `android-vMAJOR.MINOR.PATCH`. The phone compares that number to its own `versionCode` (`major×1,000,000 + minor×1,000 + patch`, so `1.0.0` is `1000000`) |
+| **When it checks** | Once a day when the app opens, if the switch in the card is on (it is by default; the first check says so in a toast), and whenever you tap the button. One request to `api.github.com`; nothing about you is sent |
+| **What it prints** | *Up to date* only with the time of a check that succeeded. A failed check says why and shows the last good one; it never overwrites it |
+| **What Android asks of you** | Allow **Install unknown apps** for Wellness Hub once, and tap **Update** on the system dialog for every install. Android then closes the app while it replaces it, and can't reopen it — use the launcher or the installer's **Open** |
+
+**What has been run, and what has not.** The card and every state it can be in were
+driven with a mocked bridge and a mocked GitHub; the Kotlin compiles into a signed APK;
+the release script's dry run builds and verifies one (arm64 only: 12.4 MB, against 40.7 MB
+for all four ABIs). **Nothing has run on a phone** — the download, the install permission,
+the confirmation dialog, and whether your history survives an update byte for byte are
+all unchecked, which is why the card does not say "your data stays".
+
+Publishing is one script, dry-run by default:
+
+```sh
+# set "version" in src-tauri/tauri.conf.json and Cargo.toml, commit, push — then:
+sh tools/release-android.sh 1.0.2              # builds, verifies the signature and versionCode, prints size + SHA-256
+sh tools/release-android.sh 1.0.2 --publish    # the same, refusing on any problem, then creates the PUBLIC release
+```
+
+### The things most sideload updaters get wrong
+
+**Trust the signature, not the hash.** The release notes carry a `sha256:` line and
+the phone checks the download against it — but whoever can edit the release can edit
+the hash, so it only catches a truncated or corrupt file. What authenticates an update
+is Android refusing any APK not signed with the installed copy's key
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). That is why the keystore never goes near a
+release or CI, and why the script refuses to publish an unsigned APK.
+
+**A refused install has to say so.** The update goes through `PackageInstaller` and
+not a plain "open this file" intent, because the first reports success or the exact
+refusal and the second reports nothing — a refused update would look like a button that
+does nothing, which is what the desktop Relaunch button did until it was fixed.
+
+**The tag must name what was built.** The script edits nothing. It refuses unless the
+version files already hold the version, everything tracked is committed, and `HEAD` is on
+`origin`; a script that bumped the files itself would build a tree the tag doesn't point at.
+
+**The release is public.** Anyone can download the APK. It contains no data of yours — it
+does contain the app's code and your Supabase project URL, both already in this public
+repo — and they would need your credentials to sync anything.
+
 ### The one difference between file:// and served
 
 | | `file://` (opened directly) | `http://localhost` (served) |
