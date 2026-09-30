@@ -583,8 +583,8 @@ metric buttons. That is why the generator now checks three surfaces.
 **Not covered:** an installed desktop shell (the Update button rebuilds it, and
 whether `startViewTransition` exists in its WebKitGTK is unchecked — the palette
 switch is instant there if not), the Android WebView and any physical device,
-frame rate of the press animation on a low-end phone, hover states (only press
-was driven), the keyboard focus ring (verified in the CSS, not on screen), print
+frame rate of the press animation on a low-end phone, hover on anything but the primary button (that one is driven per palette — it caught the
+white label on arasaka and andromeda falling to 4.31:1 and 4.37:1, now fixed), the keyboard focus ring (verified in the CSS, not on screen), print
 output, Fitness with real training history, and how any of the motion *feels* —
 that needs a person, at 2–5× duration and again the next day.
 

@@ -179,6 +179,10 @@ def build(pid: str, label: str, ground: RGB, text: RGB, accent: RGB, muted: RGB,
 
     accent_text = ensure(accent, surfaces, TEXT_MIN, text)
     on_accent = on_fill(accent)
+    # Hover moves the fill AWAY from the label: black text -> a lighter fill, white text -> a darker one. The first
+    # version mixed toward the page's brightest colour whatever the label was, which lowered white-on-fill to 4.31:1
+    # on arasaka and 4.37:1 on andromeda — both take white text — and nothing had driven a hover to notice.
+    hover = mix(accent, white if on_accent == black else black, 0.12)
 
     st = {k: ensure(parse(v), surfaces, TEXT_MIN, push) for k, v in status.items()}
 
@@ -222,6 +226,7 @@ def build(pid: str, label: str, ground: RGB, text: RGB, accent: RGB, muted: RGB,
     # Read by css/neumorph.css.
     t["wh-accent-fill"] = hexs(accent)
     t["wh-on-accent"] = hexs(on_accent)
+    t["wh-accent-hover"] = hexs(hover)
     t["wh-ctl"] = hexs(ctl)
     t["wh-focus"] = hexs(accent_text)
     hi, lo = NM_DARK if dark else NM_LIGHT
@@ -237,6 +242,7 @@ def build(pid: str, label: str, ground: RGB, text: RGB, accent: RGB, muted: RGB,
         ("label text", min(contrast(fg4, x) for x in surfaces), TEXT_MIN),
         ("accent as text", min(contrast(accent_text, x) for x in surfaces), TEXT_MIN),
         ("text on accent fill", contrast(on_accent, accent), TEXT_MIN),
+        ("text on accent fill, hovered", contrast(on_accent, hover), TEXT_MIN),
         ("control hairline", contrast(ctl, bg), CTL_MIN),
     ] + [(f"{k} as text", min(contrast(v, x) for x in surfaces), TEXT_MIN) for k, v in st.items()]
     bad = [(n, r, f) for n, r, f in checks if r + 1e-9 < f]

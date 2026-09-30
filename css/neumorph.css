@@ -323,8 +323,9 @@ html[data-theme] .wh-fold > summary { color: var(--fg3); }
   html[data-theme] .wh-theme:hover,
   html[data-theme] .wh-group__sum:hover,
   html[data-theme] .wh-datenav__btn:hover { background: var(--nm-hover); }
-  html[data-theme] .wh-btn--primary:hover { background: color-mix(in srgb, var(--wh-accent-fill) 88%, var(--fg0)); }
-  html[data-theme] .wh-btn--danger:hover { background: color-mix(in srgb, var(--red-bright) 12%, var(--bg0)); }
+  /* Generated per palette: the fill moves away from its label, so the label never loses contrast on hover. */
+  html[data-theme] .wh-btn--primary:hover { background: var(--wh-accent-hover); }
+  html[data-theme] .wh-btn--danger:hover { background: color-mix(in srgb, var(--red-bright) 10%, var(--bg0)); }
 }
 
 /* ---------------------------------------------------------------------------
