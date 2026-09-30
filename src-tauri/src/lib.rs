@@ -207,11 +207,45 @@ fn run_update_blocking() -> Result<String, String> {
     Ok(log)
 }
 
+/* install.sh replaces the binary while this process is still running it, and
+   Linux then reports the running executable as "<path> (deleted)". That string
+   is what current_exe() returns, it names no file, and spawning it fails with
+   ENOENT — so after every Update the Relaunch button errored out before
+   reaching app.exit(0): no restart, no quit, and no message either. The real
+   path is the same string without the suffix, and it now holds the new build. */
+#[cfg(desktop)]
+fn relaunch_target(exe: PathBuf) -> PathBuf {
+    match exe.to_string_lossy().strip_suffix(" (deleted)") {
+        Some(live) => PathBuf::from(live),
+        None => exe,
+    }
+}
+
+/* The new copy starts from a shell that first waits for this process to be
+   gone. Spawning it directly would race the single-instance plugin: the new
+   copy asks "is anyone already running?", finds this one still shutting down,
+   hands over its arguments and exits — and this one then quits as well. The
+   wait is capped at 5s (50 × 0.1s) so a launcher that never reaps its child
+   can't leave the helper looping on a zombie. $1 = old pid, $2 = binary. */
+#[cfg(desktop)]
+const RELAUNCH_SH: &str =
+    r#"i=0; while kill -0 "$1" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done; exec "$2""#;
+
 #[cfg(desktop)]
 #[tauri::command]
 async fn relaunch(app: AppHandle) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    Command::new(exe).spawn().map_err(|e| e.to_string())?;
+    let exe = relaunch_target(std::env::current_exe().map_err(|e| e.to_string())?);
+    /* Checked before quitting: if the binary isn't there, staying open with a
+       message beats closing the app and starting nothing. */
+    if !exe.is_file() {
+        return Err(format!("{} no longer exists, so there is nothing to relaunch.", exe.display()));
+    }
+    Command::new("sh")
+        .args(["-c", RELAUNCH_SH, "wellness-hub-relaunch"])
+        .arg(std::process::id().to_string())
+        .arg(&exe)
+        .spawn()
+        .map_err(|e| format!("couldn't start the relaunch helper: {e}"))?;
     app.exit(0);
     Ok(())
 }
@@ -322,6 +356,16 @@ mod tests {
 
         assert_eq!(pick_root(vec![dead.clone()]), None);
         assert_eq!(pick_root(vec![dead, real.clone()]), Some(real));
+    }
+
+    /* The exact string /proc/self/exe produced in the scratchpad repro after
+       `install -m755` replaced a running binary. */
+    #[test]
+    fn relaunch_target_drops_the_deleted_suffix() {
+        let live = PathBuf::from("/home/u/.local/bin/wellness-hub");
+        let stale = PathBuf::from("/home/u/.local/bin/wellness-hub (deleted)");
+        assert_eq!(relaunch_target(stale), live);
+        assert_eq!(relaunch_target(live.clone()), live);
     }
 
     /* A directory that exists but isn't the project is not the project. */

@@ -1360,7 +1360,14 @@
             body: "The rebuilt copy is installed. Relaunch now to run it?",
             confirmLabel: "Relaunch now",
             variant: "primary",
-            onConfirm: function () { window.__TAURI__.core.invoke("relaunch"); }
+            /* A failed relaunch leaves the app open on the old copy, so say so —
+               a rejected invoke() with no handler is indistinguishable from a
+               button that does nothing. */
+            onConfirm: function () {
+              window.__TAURI__.core.invoke("relaunch").catch(function (err) {
+                if (updateMsg) { updateMsg.hidden = false; updateMsg.textContent = "Relaunch failed: " + err + " Quit from the tray icon and open Wellness Hub again."; }
+              });
+            }
           });
         }, function (err) {
           updateRun.disabled = false;
