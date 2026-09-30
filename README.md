@@ -419,7 +419,8 @@ css/
   basalt-gruvbox.css        Re-skins the calisthenics app onto the Gruvbox palette
   basalt-makeover.css       Fixes how that skin is USED: surface ramp, quieter accent
   muscles.css               The Muscles section: coverage table, heat dots, today strip
-  themes.css                The four alternate palettes (see "Palettes" below)
+  themes.css                The six alternate palettes (see "Palettes" below)
+  neobrutal.css             Shape and type for the two Ochre palettes only; every rule is scoped to them
 js/
   core.js                   Store, router, dates, toasts, modals, timers, reminders
   theme.js                  Palette switching: the data-theme attribute and the list
@@ -444,19 +445,21 @@ js/
     health.js               Vitals · labs · check-ups · meds · profile · print summary
     insights.js             Trends · heatmap · patterns · review · day-by-day history
     achievements.js         Trophy case
-    settings.js             Reminders, quiet hours, counting rules, goals, backup, reset
+    settings.js             Four groups: daily use, reminders & devices, appearance, data
 fitness/
   basalt.css                The original calisthenics app's stylesheet
   basalt.js                 The original calisthenics app's logic
   ironframe_original.html   Untouched original, kept for reference only
 vendor/
   chart.umd.min.js          Chart.js, vendored locally so the app stays offline
+  inter/                    Inter (latin subset, 48 KB) and its OFL licence — used by the Ochre palettes only
 ```
 
 ### Palettes
 
-Five, switchable from **Settings → Palette**: Gruvbox Dark (the default),
-Gruvbox Material, Everforest, Rosé Pine Moon and Tokyo Night.
+Seven, switchable from **Settings → Appearance → Palette**: Gruvbox Dark (the
+default), Gruvbox Material, Everforest, Rosé Pine Moon, Tokyo Night, and the
+two Ochre palettes below.
 
 The mechanism is one attribute. `css/hub.css` declares the Gruvbox ramp on
 `:root`; `css/themes.css` re-points the same token names under
@@ -480,6 +483,39 @@ Two details worth knowing before you add one:
   near the target hue and generating the rest at that palette's mean OKLCH
   lightness and chroma. The default theme is left exactly as it was.
 
+**The Ochre pair is a shape, not just a colour.** *Paper Ochre* (light) and
+*Charcoal Ochre* (dark) share square 4px corners, a 2px outline on main
+surfaces, one hard offset shadow on the primary button and on one featured panel
+per screen, and a single ochre `#D7B95E` accent used everywhere. Sections are
+told apart by label and icon, not by hue. `css/themes.css` holds their colours;
+`css/neobrutal.css` holds the geometry, and every rule in it is scoped to
+`html[data-theme$="-ochre"]`, so no selector in it can match the other five
+palettes. Against a reconstructed pre-change copy, 36 of 55 captures of those
+five palettes (11 views × 5) were pixel-identical; the other 19 were the
+Dashboard and Settings reorder, Health's accent going from red to blue, and
+chart animation caught mid-frame.
+
+**Ochre is a fill, never text, on paper.** On the paper card it is 1.83:1 — so
+the filled button carries ink on ochre (8.54:1) and every place the accent sets
+text or an icon uses a deeper ochre (6.85:1). Status colours are text-safe on
+their own ground, and every place one appears has a word beside it (*overdue*,
+*Low — typical of trained people*, *2 left*); colour alone is never the message.
+Faded "off" states (locked trophies, empty metrics) use a dashed edge and a
+quieter text colour instead of `opacity`, which a measured audit showed taking
+trophy text to 2.26:1.
+
+**What was measured, and what wasn't.** A script walked every visible text
+element on the eleven hub views (1440 and 390 px) and seven of the eight
+Fitness tabs and composed each one's real background: 0 elements below 4.5:1
+(3:1 for large text) in either palette after fixes. At 1440 px the first run
+found 163 (paper) and 168 (charcoal), nearly all from `opacity` dimming. 247
+outlined controls per palette measured at or above 3:1; disabled controls are
+exempt and were skipped. **Not** covered: text inside SVGs
+and over gradients (2 elements on Phase review), hover and pressed states,
+overlays such as the wizard and tour beyond a visual pass, and any physical
+device — the Android countdown face and alarm behaviour need checking on a
+phone, and this pass did not do that.
+
 The choice lives in `wellnessHub.ui`, outside the versioned schema: it isn't in
 a backup and a data reset won't clear it. An inline script in `<head>` stamps it
 before the first paint.
@@ -495,6 +531,58 @@ view in `index.html`.
 
 It is **not** an iframe. It runs in the same document, shares the page, and its
 data feeds the hub's fitness streak directly.
+
+### How Fitness navigation works
+
+**Eight destinations, one registry, two layouts.** `App.SECTIONS` in
+`fitness/basalt.js` holds every destination — id, label, group, order, one-line
+description — and both the full bar and the compact picker are generated from it,
+so Muscles (registered by `fitness/muscles.js`) appears in both without either
+being edited. **Ids never change, labels do:** `today` reads *Workout*,
+`evaluation` reads *Phase review*, `dashboard` reads *Overview*, `skills` reads
+*Skills & mobility*; the stored section (`ironframe.ui.section`), the workout
+draft (`today.workout`), the Progress subview (`progTab`) and every `data-go`
+link are untouched, so nothing saved before this change points at a name that
+moved.
+
+**The layout is chosen by the width the bar has, not the width of the window.** A
+container query on the app bar (`css/basalt-gruvbox.css` §5) shows the full bar
+at 720px of content or more and the picker below it. That distinction matters:
+the hub's 232px sidebar, the phone layout and 200% zoom each change the room
+independently. Measured on this machine, where the system font
+resolves to a monospace face and so runs wide: the full bar plus *Training setup*
+fits one row at 1440px in the two Ochre palettes and at 1920px in all seven; at
+1440px in the five original palettes, and at 1280px in all of them, *Training
+setup* wraps to a second row instead of scrolling. The picker is what you get at
+360, 390, 412, 768 and 1024. Only one layout is ever
+displayed, so only one is ever in the tab order. Where container queries are
+unsupported the full bar simply stays, as it was.
+
+**The picker is a disclosure, not a menu.** A labelled toggle shows where you are
+(`Progress ▾`), a shortcut beside it reads *Workout* and becomes *Resume* while a
+session draft exists, and the panel lists every destination by group with
+*Training setup* at the end. Escape closes it and returns focus to the toggle —
+and is handled there, because the rest timer listens for Escape on the whole
+document and closing a menu used to be able to cancel a rest. **Resume reopens
+the draft that exists; it never builds a replacement** (checked: the stored draft
+is byte-identical before and after).
+
+**Four defects the plan confirmed, each reproduced on the pre-change copy first:**
+
+| | Before | After |
+|---|---|---|
+| Setup boundary (F2) | On a fresh profile `#appbar` was `display:flex` and `#app` `display:block` while onboarding was open — the whole shell live above the wizard | both `none` until setup finishes |
+| Complete session (F1) | Button at y 759–828 on a 390 × 844 phone; the hub's navigation began at y 782; a hit test at the button's centre reached the *Daily* tab | y 718–766, hit test reaches the button at every scroll position; the rest timer and toasts sit above the bar |
+| Phase review (F4) | `grid-template-columns:1fr 1.1fr` inline; document 504px wide at 390 | a class with one column below 1000px; 390 wide |
+| Progress focus (F3) | Enter on a subview tab rebuilt the whole view; focus fell to `<body>` | the control stays mounted; focus stays on the tab (or the phone select) |
+
+Progress also puts its subview control directly under the heading and moves the
+four headline figures into *Overview*, two-up on a phone. Its five subviews are
+real tabs (roving tabindex, arrows, Home/End, Enter and Space) at desktop widths
+and a native *Progress view* select below 560px. **What this did not attempt:**
+the active-workout screen still lists warm-up before the main sets — putting sets
+first means deciding whether warm-up folds away by default, which changes how a
+session is done and is not a layout decision.
 
 ---
 

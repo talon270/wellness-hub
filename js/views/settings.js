@@ -1,6 +1,8 @@
 /* ============================================================================
    WELLNESS HUB · SETTINGS
    ----------------------------------------------------------------------------
+   · Four groups — daily use, reminders & devices, appearance, data — with a row
+     of section links; each is a native <details>, open until folded
    · Reminder switches, intervals and times (per category)
    · Hydration goal and cup size
    · Notification permission, with an honest explanation of what it can and
@@ -89,95 +91,25 @@
     var perm = Hub.notify.permission();
     var canNotify = Hub.notify.availableHere();
 
-    el.innerHTML =
+    /* THE FOUR GROUPS (PLAN-neobrutal-ui.md A2). This page grew to 21 cards and
+       8,800px, and the only way to find a setting again was to scroll for it.
+       Every card is still here, unchanged and in the same relative order — they
+       are gathered under four headings a person would actually look for, each
+       heading carries the one status that matters to it, and the row of links
+       under the title jumps to (and opens) a group. Groups are open by default:
+       nothing is hidden until you fold it, and folding is remembered only until
+       the page is left. */
+    var head =
       '<div class="wh-head">' +
         '<div class="wh-head__eyebrow">Settings</div>' +
         "<h1>Preferences &amp; data</h1>" +
         "<p>Everything is stored in this browser only. No account, no server, nothing leaves your machine.</p>" +
-      "</div>" +
+      "</div>";
 
-      /* ---------- who's using this ---------- */
+    var daily = (
       profileCard() +
-
-      /* ---------- palette ---------- */
-      themeCard() +
-
-      /* ---------- how reminders work ---------- */
-      '<div class="wh-card wh-mb4">' +
-        '<div class="wh-card__head">' +
-          '<div class="wh-card__title">' + Hub.icon("bell") + "How reminders work</div>" +
-          '<span class="wh-chip ' + permChipClass(perm, canNotify) + '">' + permLabel(perm, canNotify) + "</span>" +
-        "</div>" +
-        '<p class="wh-sm wh-muted"><strong>Reminders only fire while this tab is open.</strong> The tab can be ' +
-          "in the background, and the window can be minimised — but if you close the tab or quit the browser, " +
-          "reminders stop until you open the page again. This is a static page with no server behind it, so " +
-          "there's nothing to push notifications from when it isn't running.</p>" +
-        (canNotify
-          ? (perm === "granted"
-              ? '<p class="wh-sm wh-mt4" style="color:var(--green-bright)">' + Hub.icon("check") +
-                " Desktop notifications are allowed. You'll also see an in-app toast for every reminder.</p>"
-              : '<div class="wh-row wh-mt4">' +
-                '<button type="button" class="wh-btn wh-btn--primary" id="st-perm">' + Hub.icon("bell") +
-                  "Enable desktop notifications</button>" +
-                '<span class="wh-help">' + (perm === "denied"
-                  ? "Currently blocked — you'll need to re-allow it from the padlock icon in the address bar."
-                  : "We'll explain what happens before your browser asks.") + "</span></div>")
-          : '<div class="wh-disclaimer wh-mt4">' + Hub.icon("alert") +
-            "<span>This page is open directly from disk (<code class='mono'>file://</code>), and browsers only " +
-            "permit desktop notifications on secure origins. <strong>In-app reminders still work</strong> — you'll " +
-            "get a toast in the corner instead. To get real desktop notifications, serve the folder locally: " +
-            "<code class='mono'>python3 -m http.server</code> then open <code class='mono'>http://localhost:8000</code>." +
-            "</span></div>") +
-      "</div>" +
-
-      /* ---------- install / offline ---------- */
-      appCard() +
-
-      /* ---------- desktop rebuild (Tauri shell only) ---------- */
-      desktopCard() +
-
-      /* ---------- reminders when the app is closed ---------- */
-      '<div class="wh-card wh-mb4">' +
-        '<div class="wh-card__head">' +
-          '<div class="wh-card__title">' + Hub.icon("calendar") + "Reminders when the app is closed</div>" +
-        "</div>" +
-        '<p class="wh-sm wh-muted">No web app can notify you while it isn\'t running — there\'s no reliable ' +
-          "scheduled-notification API. The practical fix is to hand your <strong>daily, clock-based</strong> " +
-          "reminders to the calendar your system already nags you through.</p>" +
-        '<p class="wh-sm wh-muted wh-mt4">This exports them as a standard <code class="mono">.ics</code> file. ' +
-          "Import it once and those reminders fire whether or not this app is open. Upcoming check-ups come " +
-          "along too, with a day's warning.</p>" +
-        '<div class="wh-row wh-mt4">' +
-          '<button type="button" class="wh-btn wh-btn--primary" id="st-ics">' +
-            Hub.icon("download") + "Export reminders (.ics)</button>" +
-          '<span class="wh-help">' + clockReminderCount() + " daily " +
-            Hub.plural(clockReminderCount(), "reminder") + " enabled</span>" +
-        "</div>" +
-        '<p class="wh-help wh-mt4">Interval reminders (eye breaks, sunscreen) aren\'t exported — a calendar ' +
-          "entry every 20 minutes would be unusable, and those only make sense while you're actually at a screen.</p>" +
-      "</div>" +
-
-      /* ---------- quiet hours ---------- */
-      quietCard() +
-
-      /* ---------- reminder switches ---------- */
-      REMINDER_GROUPS.map(function (g) {
-        return '<div class="wh-card wh-mb4">' +
-          '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon(g.icon) + Hub.esc(g.title) + "</div></div>" +
-          g.items.map(function (item) { return reminderRow(item, s.settings.reminders[item.key]); }).join("") +
-        "</div>";
-      }).join("") +
-
-      /* ---------- this phone (Android only) ---------- */
-      phoneCard() +
-
-      /* ---------- how the app counts ---------- */
       countingCard() +
-
-      /* ---------- your own habits ---------- */
       habitsCard() +
-
-      /* ---------- goals ---------- */
       '<div class="wh-card wh-mb4">' +
         '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("water") + "Daily goals</div></div>" +
 
@@ -241,12 +173,71 @@
             '<span class="wh-switch__track"></span></label>' +
           "</div>" +
         "</div>" +
+      "</div>"
+    );
+
+    var reminders = (
+      '<div class="wh-card wh-mb4">' +
+        '<div class="wh-card__head">' +
+          '<div class="wh-card__title">' + Hub.icon("bell") + "How reminders work</div>" +
+          '<span class="wh-chip ' + permChipClass(perm, canNotify) + '">' + permLabel(perm, canNotify) + "</span>" +
+        "</div>" +
+        '<p class="wh-sm wh-muted"><strong>Reminders only fire while this tab is open.</strong> The tab can be ' +
+          "in the background, and the window can be minimised — but if you close the tab or quit the browser, " +
+          "reminders stop until you open the page again. This is a static page with no server behind it, so " +
+          "there's nothing to push notifications from when it isn't running.</p>" +
+        (canNotify
+          ? (perm === "granted"
+              ? '<p class="wh-sm wh-mt4" style="color:var(--green-bright)">' + Hub.icon("check") +
+                " Desktop notifications are allowed. You'll also see an in-app toast for every reminder.</p>"
+              : '<div class="wh-row wh-mt4">' +
+                '<button type="button" class="wh-btn wh-btn--primary" id="st-perm">' + Hub.icon("bell") +
+                  "Enable desktop notifications</button>" +
+                '<span class="wh-help">' + (perm === "denied"
+                  ? "Currently blocked — you'll need to re-allow it from the padlock icon in the address bar."
+                  : "We'll explain what happens before your browser asks.") + "</span></div>")
+          : '<div class="wh-disclaimer wh-mt4">' + Hub.icon("alert") +
+            "<span>This page is open directly from disk (<code class='mono'>file://</code>), and browsers only " +
+            "permit desktop notifications on secure origins. <strong>In-app reminders still work</strong> — you'll " +
+            "get a toast in the corner instead. To get real desktop notifications, serve the folder locally: " +
+            "<code class='mono'>python3 -m http.server</code> then open <code class='mono'>http://localhost:8000</code>." +
+            "</span></div>") +
       "</div>" +
+      quietCard() +
+      REMINDER_GROUPS.map(function (g) {
+        return '<div class="wh-card wh-mb4">' +
+          '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon(g.icon) + Hub.esc(g.title) + "</div></div>" +
+          g.items.map(function (item) { return reminderRow(item, s.settings.reminders[item.key]); }).join("") +
+        "</div>";
+      }).join("") +
+      '<div class="wh-card wh-mb4">' +
+        '<div class="wh-card__head">' +
+          '<div class="wh-card__title">' + Hub.icon("calendar") + "Reminders when the app is closed</div>" +
+        "</div>" +
+        '<p class="wh-sm wh-muted">No web app can notify you while it isn\'t running — there\'s no reliable ' +
+          "scheduled-notification API. The practical fix is to hand your <strong>daily, clock-based</strong> " +
+          "reminders to the calendar your system already nags you through.</p>" +
+        '<p class="wh-sm wh-muted wh-mt4">This exports them as a standard <code class="mono">.ics</code> file. ' +
+          "Import it once and those reminders fire whether or not this app is open. Upcoming check-ups come " +
+          "along too, with a day's warning.</p>" +
+        '<div class="wh-row wh-mt4">' +
+          '<button type="button" class="wh-btn wh-btn--primary" id="st-ics">' +
+            Hub.icon("download") + "Export reminders (.ics)</button>" +
+          '<span class="wh-help">' + clockReminderCount() + " daily " +
+            Hub.plural(clockReminderCount(), "reminder") + " enabled</span>" +
+        "</div>" +
+        '<p class="wh-help wh-mt4">Interval reminders (eye breaks, sunscreen) aren\'t exported — a calendar ' +
+          "entry every 20 minutes would be unusable, and those only make sense while you're actually at a screen.</p>" +
+      "</div>" +
+      phoneCard() +
+      appCard() +
+      desktopCard()
+    );
 
-      /* ---------- durable storage ---------- */
+    var look =       themeCard();
+
+    var data = (
       durabilityCard() +
-
-      /* ---------- backup ---------- */
       '<div class="wh-card wh-mb4">' +
         '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("download") + "Manual backup</div></div>" +
         '<p class="wh-sm wh-muted">A one-off snapshot file containing <strong>everything</strong>: habits, ' +
@@ -259,8 +250,6 @@
         '<p class="wh-help wh-mt4">Importing replaces everything currently stored. Export first if you\'re unsure. ' +
           "Photos are included in the export and restored with it.</p>" +
       "</div>" +
-
-      /* ---------- spreadsheet export ---------- */
       '<div class="wh-card wh-mb4">' +
         '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("grid") + "Export as a spreadsheet</div></div>" +
         '<p class="wh-sm wh-muted">JSON is the honest backup format, but nobody opens JSON. These are ' +
@@ -281,8 +270,6 @@
           Hub.units.massLabel() + " · " + Hub.units.lenLabel() + " · " + Hub.units.tempLabel() +
           "), with the unit named in each column header.</p>" +
       "</div>" +
-
-      /* ---------- storage snapshot ---------- */
       '<div class="wh-card wh-mb4">' +
         '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("info") + "Your data</div></div>" +
         '<div class="wh-grid wh-grid--4" style="gap:var(--wh-s3)">' +
@@ -297,8 +284,6 @@
         "</div>" +
         '<p class="wh-help wh-mt4 mono">Keys: ' + Hub.STORAGE_KEY + " · " + IRONFRAME_KEY + "</p>" +
       "</div>" +
-
-      /* ---------- danger zone ---------- */
       '<div class="wh-card wh-danger-zone">' +
         '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("alert") + "Reset</div></div>" +
         '<div class="wh-setrow">' +
@@ -321,11 +306,88 @@
             '<button type="button" class="wh-btn wh-btn--danger wh-btn--sm" id="st-reset-all">Reset everything</button>' +
           "</div>" +
         "</div>" +
-      "</div>" +
+      "</div>"
+    );
 
+    var sum = groupSummaries(s, perm, canNotify);
+    el.innerHTML =
+      head +
+      setNav() +
+      group("daily", "idCard", "Daily use", sum.daily, daily) +
+      group("reminders", "bell", "Reminders &amp; devices", sum.reminders, reminders) +
+      group("look", "sun", "Appearance", sum.look, look) +
+      group("data", "shield", "Data", sum.data, data) +
       '<p class="wh-help wh-mt6 mono">Wellness Hub · schema v' + Hub.SCHEMA_VERSION + "</p>";
 
     wire(el);
+  }
+
+  /* ---------- groups ---------- */
+
+  /* Fold state is remembered here and nowhere else (PLAN-neobrutal-ui.md A2:
+     "expansion state can stay in memory"). A group is open unless the person
+     folded it, so a first visit hides nothing, and the guided tour, a section
+     link or a re-render can always re-open one. */
+  var folded = {};
+  var paletteOpen = false;
+
+  var GROUPS = [
+    ["daily", "Daily use"], ["reminders", "Reminders &amp; devices"],
+    ["look", "Appearance"], ["data", "Data"]
+  ];
+
+  function setNav() {
+    return '<nav class="wh-pills wh-setnav" aria-label="Settings sections">' +
+      GROUPS.map(function (g) {
+        return '<button type="button" class="wh-pill" data-setgroup="' + g[0] + '">' + g[1] + "</button>";
+      }).join("") +
+    "</nav>";
+  }
+
+  function group(id, icon, title, summary, body) {
+    return '<details class="wh-group" id="st-g-' + id + '" data-group="' + id + '"' + (folded[id] ? "" : " open") + ">" +
+      '<summary class="wh-group__sum">' +
+        '<span class="wh-group__ic">' + Hub.icon(icon) + "</span>" +
+        '<span class="wh-group__t"><strong>' + title + "</strong>" +
+          '<span class="wh-group__s">' + summary + "</span></span>" +
+      "</summary>" +
+      '<div class="wh-group__body">' + body + "</div>" +
+    "</details>";
+  }
+
+  /* One line per group, and only facts that are known when the page renders.
+     Permission state stays where the person will see it even with the group
+     folded — a blocked notification is not something to discover by unfolding. */
+  function groupSummaries(s, perm, canNotify) {
+    var rem = s.settings.reminders || {};
+    var keys = Object.keys(rem);
+    var on = keys.filter(function (k) { return rem[k] && rem[k].enabled; }).length;
+    var st = Hub.storage ? Hub.storage.status() : null;
+    var links = [];
+    if (st) {
+      if (st.folder && st.folder.linked) links.push("a folder");
+      if (st.drive && st.drive.linked) links.push("Google Drive");
+      if (st.supabase && st.supabase.linked) links.push("Supabase");
+    }
+    return {
+      daily: s.settings.hydrationGoalCups + " cups a day · sleep target " + (s.settings.sleepTargetHours || 8) +
+        " h · profile, habits, how the app counts",
+      reminders: on + " of " + keys.length + " reminders on · notifications " +
+        '<span class="wh-chip ' + permChipClass(perm, canNotify) + '">' + permLabel(perm, canNotify) + "</span>",
+      look: "Palette: " + Hub.esc(Hub.theme ? Hub.theme.label(Hub.theme.active()) : "Gruvbox Dark"),
+      data: (links.length ? "Synced to " + links.join(" + ") : "No sync linked") + " · " +
+        Hub.dayKeys().length + " days logged"
+    };
+  }
+
+  function openGroup(id, root) {
+    var d = (root || document).querySelector("#st-g-" + id);
+    folded[id] = false;
+    if (!d) return;
+    d.open = true;
+    d.scrollIntoView({ block: "start" });
+    var sm = d.querySelector("summary");
+    if (sm) sm.focus({ preventScroll: true });
   }
 
   /* ---------- fragments ---------- */
@@ -333,41 +395,57 @@
   /* ---------- the palette ----------------------------------------------
      Swatches are drawn from the values in js/theme.js rather than from CSS,
      because a custom property only ever reports the theme currently applied —
-     four of the five previews would otherwise all paint the active palette. */
+     most of the previews would otherwise all paint the active palette.
+     The gallery is folded behind the current choice: seven tiles of prose were
+     most of the card, and nobody needs the other six until they want to change. */
+  function paletteSwatch(t) {
+    return '<span class="wh-theme__prev" style="background:' + t.bg + '" aria-hidden="true">' +
+      '<span class="wh-theme__surface" style="background:' + t.surface + '">' +
+        '<span class="wh-theme__dots">' +
+          t.dots.map(function (d) { return '<i style="background:' + d + '"></i>'; }).join("") +
+        "</span>" +
+        '<span class="wh-theme__rule" style="background:' + t.text + '"></span>' +
+        '<span class="wh-theme__rule wh-theme__rule--short" style="background:' + t.text + '"></span>' +
+      "</span>" +
+    "</span>";
+  }
+
   function themeCard() {
     if (!Hub.theme) return "";
     var cur = Hub.theme.active();
+    var list = Hub.theme.list();
+    var now = list.filter(function (t) { return t.id === cur; })[0] || list[0];
 
     return '<div class="wh-card wh-mb4">' +
       '<div class="wh-card__head">' +
         '<div class="wh-card__title">' + Hub.icon("sun") + "Palette</div>" +
-        '<span class="wh-chip">' + Hub.esc(Hub.theme.label(cur)) + "</span>" +
       "</div>" +
-      '<p class="wh-sm wh-muted">Applies straight away, across every tab including Fitness. Kept in this ' +
-        "browser only — it isn't part of your records, so a backup won't carry it and a reset won't clear it.</p>" +
-      '<div class="wh-themes wh-mt4" role="radiogroup" aria-label="Colour palette">' +
-        Hub.theme.list().map(function (t) {
-          var on = t.id === cur;
-          return '<button type="button" class="wh-theme' + (on ? " is-active" : "") + '" ' +
-              'data-theme-pick="' + t.id + '" role="radio" aria-checked="' + on + '">' +
-            '<span class="wh-theme__prev" style="background:' + t.bg + '" aria-hidden="true">' +
-              '<span class="wh-theme__surface" style="background:' + t.surface + '">' +
-                '<span class="wh-theme__dots">' +
-                  t.dots.map(function (d) { return '<i style="background:' + d + '"></i>'; }).join("") +
-                "</span>" +
-                '<span class="wh-theme__rule" style="background:' + t.text + '"></span>' +
-                '<span class="wh-theme__rule wh-theme__rule--short" style="background:' + t.text + '"></span>' +
-              "</span>" +
-            "</span>" +
-            '<span class="wh-theme__name">' + Hub.esc(t.label) + "</span>" +
-            '<span class="wh-theme__note">' + Hub.esc(t.note) + "</span>" +
-          "</button>";
-        }).join("") +
-      "</div>" +
-      '<p class="wh-help wh-mt4">' + Hub.icon("info") +
-        " Each palette assigns its own colour to every section, spaced far enough apart that no two tabs " +
-        "read as the same. Charts and the muscle heat map follow along." +
-      "</p>" +
+      '<details class="wh-palette"' + (paletteOpen ? " open" : "") + ">" +
+        '<summary class="wh-palette__sum">' +
+          '<span class="wh-palette__cur">' + paletteSwatch(now) + "</span>" +
+          '<span class="wh-grow"><strong class="wh-theme__name" data-palette-name>' + Hub.esc(now.label) + "</strong>" +
+            '<span class="wh-theme__note">' + Hub.esc(now.note) + "</span></span>" +
+          '<span class="wh-palette__cta">' + list.length + " palettes</span>" +
+        "</summary>" +
+        '<p class="wh-sm wh-muted wh-mt4">Applies straight away, across every tab including Fitness. Kept in this ' +
+          "browser only — it isn't part of your records, so a backup won't carry it and a reset won't clear it.</p>" +
+        '<div class="wh-themes wh-mt4" role="radiogroup" aria-label="Colour palette">' +
+          list.map(function (t) {
+            var on = t.id === cur;
+            return '<button type="button" class="wh-theme' + (on ? " is-active" : "") + '" ' +
+                'data-theme-pick="' + t.id + '" role="radio" aria-checked="' + on + '">' +
+              paletteSwatch(t) +
+              '<span class="wh-theme__name">' + Hub.esc(t.label) + "</span>" +
+              '<span class="wh-theme__note">' + Hub.esc(t.note) + "</span>" +
+            "</button>";
+          }).join("") +
+        "</div>" +
+        '<p class="wh-help wh-mt4">' + Hub.icon("info") +
+          " The five original palettes give each section its own colour, spaced far enough apart that no two " +
+          "tabs read as the same. The two Ochre palettes use one accent everywhere and tell sections apart by " +
+          "label and icon instead. Charts and the muscle heat map follow either way." +
+        "</p>" +
+      "</details>" +
     "</div>";
   }
 
@@ -919,6 +997,15 @@
       if (!chip) return;
       chip.textContent = yes ? "protected" : "not protected";
       chip.className = "wh-chip " + (yes ? "wh-chip--good" : "wh-chip--warn");
+      /* The one warning here is repeated in the group heading, so folding
+         "Data" cannot hide that the browser may clear it. */
+      var gs = el.querySelector('[data-group="data"] .wh-group__s');
+      if (gs) {
+        var warn = gs.querySelector("[data-persist-warn]");
+        if (!yes && !warn) gs.insertAdjacentHTML("beforeend",
+          ' <span class="wh-chip wh-chip--warn" data-persist-warn>storage not protected</span>');
+        if (yes && warn) warn.remove();
+      }
       if (desc) {
         desc.textContent = yes
           ? "Granted. The browser won't evict this data to reclaim space."
@@ -1201,9 +1288,19 @@
     var permBtn = el.querySelector("#st-perm");
     if (permBtn) permBtn.addEventListener("click", function () { Hub.notify.request(); });
 
+    /* --- section links + fold memory --- */
+    el.querySelectorAll("details[data-group]").forEach(function (d) {
+      d.addEventListener("toggle", function () { folded[d.dataset.group] = !d.open; });
+    });
+    el.querySelectorAll("[data-setgroup]").forEach(function (b) {
+      b.addEventListener("click", function () { openGroup(b.dataset.setgroup, el); });
+    });
+
     /* --- palette ---
        Repaint the picker in place rather than re-rendering the view: a full
        refresh would scroll the user back to the top of Settings mid-choice. */
+    var pal = el.querySelector(".wh-palette");
+    if (pal) pal.addEventListener("toggle", function () { paletteOpen = pal.open; });
     el.querySelectorAll("[data-theme-pick]").forEach(function (b) {
       b.addEventListener("click", function () {
         var id = b.dataset.themePick;
@@ -1214,8 +1311,15 @@
           x.classList.toggle("is-active", on);
           x.setAttribute("aria-checked", on);
         });
-        var chip = el.querySelector(".wh-themes").closest(".wh-card").querySelector(".wh-chip");
-        if (chip) chip.textContent = Hub.theme.label(id);
+        var t = Hub.theme.list().filter(function (x) { return x.id === id; })[0];
+        var cur = el.querySelector(".wh-palette__cur");
+        if (cur && t) cur.innerHTML = paletteSwatch(t);
+        var nm = el.querySelector("[data-palette-name]");
+        if (nm) nm.textContent = Hub.theme.label(id);
+        var note = el.querySelector(".wh-palette__sum .wh-theme__note");
+        if (note && t) note.textContent = t.note;
+        var gs = el.querySelector('[data-group="look"] .wh-group__s');
+        if (gs) gs.textContent = "Palette: " + Hub.theme.label(id);
         Hub.toast(Hub.theme.label(id), "success", 2200);
       });
     });
@@ -1739,6 +1843,16 @@
       if (document.visibilityState === "visible" && Hub.activeView() === "settings") Hub.refresh();
     });
   }
+
+  /* The guided tour points at a control inside "Data"; a folded group has no
+     box to spotlight, so the tour unfolds it first. */
+  Hub.settingsView = {
+    unfold: function (id) {
+      folded[id] = false;
+      var d = document.querySelector("#st-g-" + id);
+      if (d) d.open = true;
+    }
+  };
 
   Hub.registerView("settings", render);
 })();

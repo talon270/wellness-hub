@@ -61,16 +61,26 @@
     dip:      { label: "Dip",      levels: ["Bench Dip","Straight Bar Dip","Parallel Bar Dip","Korean Dip","Ring Dip","Weighted Dip"], era2: [] }
   };
 
-  /* Ordered nav / section metadata — single source of truth for the router. */
+  /* Ordered nav / section metadata — the single source of truth for the router AND
+     for both navigation layouts: the full bar and the compact picker are generated
+     from this array, so a section registered later (Muscles, by fitness/muscles.js)
+     appears in both without either being edited.
+       id     stored in ironframe.ui.section, used by data-go links and App.showSection —
+              never renamed
+       label  what a person reads (PLAN-neobrutal-ui.md, "Fitness navigation")
+       group  which heading it sits under in the picker
+       rank   left-to-right order in the full bar: the four everyday destinations first
+       blurb  one line under the name in the picker */
   var SECTIONS = [
-    { id: "dashboard",  label: "Dashboard",  icon: "grid" },
-    { id: "today",      label: "Today",      icon: "flame" },
-    { id: "program",    label: "Program",    icon: "list" },
-    { id: "skills",     label: "Skills",     icon: "skill" },
-    { id: "running",    label: "Running",    icon: "run" },
-    { id: "progress",   label: "Progress",   icon: "chart" },
-    { id: "evaluation", label: "Evaluation", icon: "award" }
+    { id: "dashboard",  label: "Overview",          icon: "grid",  group: "Start",  rank: 1, blurb: "Summary and your next action" },
+    { id: "today",      label: "Workout",           icon: "flame", group: "Train",  rank: 2, blurb: "Prepare or resume the current session" },
+    { id: "program",    label: "Program",           icon: "list",  group: "Plan",   rank: 3, blurb: "Rotation, targets and progression" },
+    { id: "skills",     label: "Skills & mobility", icon: "skill", group: "Train",  rank: 6, blurb: "Practice and movement library" },
+    { id: "running",    label: "Running",           icon: "run",   group: "Train",  rank: 5, blurb: "Run plan and logging" },
+    { id: "progress",   label: "Progress",          icon: "chart", group: "Review", rank: 4, blurb: "Trends, calendar and session history" },
+    { id: "evaluation", label: "Phase review",      icon: "award", group: "Review", rank: 8, blurb: "Phase score and report cards" }
   ];
+  var SECTION_GROUPS = ["Start", "Train", "Plan", "Review"];
 
   var ICONS = {
     grid:  '<path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>',
@@ -408,6 +418,9 @@
   function uiSet(key, val) {
     try { var o = JSON.parse(localStorage.getItem(UI_KEY) || "{}"); o[key] = val; localStorage.setItem(UI_KEY, JSON.stringify(o)); }
     catch (e) {}
+    /* The compact picker's shortcut reads "Resume" while a draft exists. Every
+       write to the draft goes through here, so this is the one place to hear it. */
+    if (key === "today.workout") updateNavState();
   }
 
   /* ----------------------------------------------------------------------
@@ -441,8 +454,27 @@
     }
   }
 
-  function showSection(name) {
+  /* Focus only follows a deliberate change. If focus is already inside Fitness (a nav
+     click, a data-go button, the picker) the person did this, and the new heading is
+     where they are now; at startup, after a saved-section restore or a background
+     refresh focus is on <body>, and nothing here may take it. */
+  function focusIsInFitness() {
+    var host = document.getElementById("wh-view-fitness"), a = document.activeElement;
+    return !!(host && a && a !== document.body && host.contains(a));
+  }
+  function focusHeading(name) {
+    var h = document.querySelector("#view-" + name + " h1");
+    if (!h) return;
+    h.setAttribute("tabindex", "-1");
+    h.focus({ preventScroll: true });
+  }
+  function reducedMotion() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
+  function showSection(name, opts) {
     if (!SECTIONS.some(function (s) { return s.id === name; })) name = "dashboard";
+    var followFocus = !!(opts && opts.focus) || focusIsInFitness();
     activeSection = name;
     uiSet("section", name);
 
@@ -460,9 +492,12 @@
       if (active) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
     });
+    closePicker();
+    updateNavState();
 
     renderInto(name);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" });
+    if (followFocus) focusHeading(name);
   }
 
   function refresh() {
@@ -513,16 +548,130 @@
   /* ----------------------------------------------------------------------
      NAVBAR BUILDER
      -------------------------------------------------------------------- */
+  function navIcon(sec) {
+    return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round">' + ICONS[sec.icon] + '</svg>';
+  }
+  function navOrder() {
+    return SECTIONS.slice().sort(function (a, b) { return (a.rank || 99) - (b.rank || 99); });
+  }
+
   function buildNav() {
     var nav = document.getElementById("nav");
-    nav.innerHTML = SECTIONS.map(function (s) {
-      return '<button class="nav__btn" data-section="' + s.id + '" type="button">' +
-        '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICONS[s.icon] + '</svg>' +
+    var ordered = navOrder();
+    nav.innerHTML = ordered.map(function (s) {
+      return '<button class="nav__btn" data-section="' + s.id + '" type="button">' + navIcon(s) +
         '<span>' + s.label + '</span></button>';
     }).join("");
     nav.querySelectorAll(".nav__btn").forEach(function (b) {
-      b.addEventListener("click", function () { showSection(b.dataset.section); });
+      b.addEventListener("click", function () { showSection(b.dataset.section, { focus: true }); });
     });
+    buildPicker(ordered);
+    updateNavState();
+  }
+
+  /* ----------------------------------------------------------------------
+     COMPACT SECTION PICKER (PLAN-neobrutal-ui.md F5)
+     Eight destinations in a 332px strip meant only two were ever fully visible,
+     and the horizontal scrollbar was hidden. Below the width the full bar needs
+     (a container query on .appbar, so the hub's sidebar and browser zoom count),
+     CSS swaps it for this: a labelled toggle showing where you are, a
+     Workout/Resume shortcut, and a panel listing every destination by group with
+     Training setup at the end. A disclosure with ordinary buttons, not a menu:
+     Tab walks the items, Escape closes and returns to the toggle, choosing one
+     closes it and focuses the new page's heading.
+     -------------------------------------------------------------------- */
+  var pickerWired = false;
+
+  function buildPicker(ordered) {
+    var panel = document.getElementById("fit-panel");
+    if (!panel) return;
+    var gear = document.querySelector("#btn-settings svg");
+    panel.innerHTML = SECTION_GROUPS.map(function (g) {
+      var items = ordered.filter(function (s) { return (s.group || "Train") === g; });
+      if (!items.length) return "";
+      return '<div class="fitbar__group"><p class="fitbar__gt">' + g + '</p>' + items.map(function (s) {
+        return '<button type="button" class="fitbar__item" data-section="' + s.id + '">' + navIcon(s) +
+          '<span class="fitbar__name">' + s.label + '</span>' +
+          '<span class="fitbar__blurb">' + (s.blurb || "") + '</span>' +
+          '<span class="fitbar__mark"></span></button>';
+      }).join("") + '</div>';
+    }).join("") +
+      '<div class="fitbar__group"><button type="button" class="fitbar__item" data-fitsetup>' +
+        (gear ? gear.outerHTML : "") +
+        '<span class="fitbar__name">Training setup</span>' +
+        '<span class="fitbar__blurb">Goal, kit, session length and backup</span></button></div>';
+    if (!pickerWired) { wirePicker(); pickerWired = true; }
+  }
+
+  function closePicker() {
+    var panel = document.getElementById("fit-panel"), toggle = document.getElementById("fit-toggle");
+    var picker = document.getElementById("fit-picker");
+    if (panel) panel.hidden = true;
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
+    if (picker) picker.classList.remove("is-open");
+  }
+
+  function wirePicker() {
+    var picker = document.getElementById("fit-picker"), toggle = document.getElementById("fit-toggle");
+    var panel = document.getElementById("fit-panel"), go = document.getElementById("fit-go");
+    if (!picker || !toggle || !panel || !go) return;
+
+    toggle.addEventListener("click", function () {
+      var open = panel.hidden;
+      panel.hidden = !open;
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      picker.classList.toggle("is-open", open);
+      /* A tall list on a short phone scrolls; open it with the current row in view
+         rather than leaving "you are here" below the fold of the panel. */
+      var here = open && panel.querySelector('[aria-current="page"]');
+      if (here) panel.scrollTop = Math.max(0, here.offsetTop - (panel.clientHeight - here.offsetHeight) / 2);
+    });
+    /* Workout opens preparation (or the draft, as Resume). It never starts a
+       session and never builds a replacement: Today renders whichever exists. */
+    go.addEventListener("click", function () { closePicker(); showSection("today", { focus: true }); });
+
+    panel.addEventListener("click", function (e) {
+      var item = e.target.closest(".fitbar__item");
+      if (!item) return;
+      closePicker();
+      if (item.hasAttribute("data-fitsetup")) { document.getElementById("btn-settings").click(); return; }
+      var id = item.dataset.section;
+      /* The current destination: close and land on its heading, without re-rendering
+         a form the person may be in the middle of. */
+      if (id === activeSection) focusHeading(id);
+      else showSection(id, { focus: true });
+    });
+
+    picker.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || panel.hidden) return;
+      /* Handled here and stopped here: the rest timer listens for Escape on the
+         document and would otherwise be cancelled by closing a menu. */
+      e.stopPropagation(); e.preventDefault();
+      closePicker(); toggle.focus();
+    });
+    picker.addEventListener("focusout", function (e) {
+      if (!panel.hidden && e.relatedTarget && !picker.contains(e.relatedTarget)) closePicker();
+    });
+    document.addEventListener("click", function (e) {
+      if (!panel.hidden && !picker.contains(e.target)) closePicker();
+    });
+  }
+
+  /* Everything the two layouts show about "where am I" and "what is the shortcut". */
+  function updateNavState() {
+    var meta = SECTIONS.filter(function (s) { return s.id === activeSection; })[0] || SECTIONS[0];
+    var cur = document.getElementById("fit-cur");
+    if (cur) cur.textContent = meta.label;
+    document.querySelectorAll(".fitbar__item[data-section]").forEach(function (b) {
+      if (b.dataset.section === activeSection) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+    var go = document.getElementById("fit-go");
+    if (go) {
+      var w = uiGet("today.workout", null);
+      go.textContent = (w && w.dayType) ? "Resume" : "Workout";
+    }
   }
 
   /* ----------------------------------------------------------------------
@@ -2905,7 +3054,7 @@
     var whenLabel = tomorrow ? "tomorrow" : lib.fmtDate(restInfo.nextKey);
 
     el.innerHTML =
-      head("Today", "Session engine", "Resting today") +
+      head("Workout", "Session engine", "Resting today") +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Rest day</div>' +
         '<h2 class="display h2">Next exercise day is ' + esc(whenLabel) + '</h2>' +
@@ -2940,7 +3089,7 @@
     var nextWhen = lib.fmtDate(doneInfo.nextKey);
 
     el.innerHTML =
-      head("Today", "Session engine", "Done for today") +
+      head("Workout", "Session engine", "Done for today") +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Done today</div>' +
         '<h2 class="display h2">You trained ' + esc(DAY_LABEL[doneInfo.todayType] || "") + ' today</h2>' +
@@ -2982,7 +3131,7 @@
     }).join("");
 
     el.innerHTML =
-      head("Today", "Session engine", rec ? DAY_LABEL[rec] + " is up next" : "Let's train") +
+      head("Workout", "Session engine", rec ? DAY_LABEL[rec] + " is up next" : "Let's train") +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Recommended</div>' +
         '<h2 class="display h2" id="today-title">' + DAY_LABEL[rec] + '</h2>' +
@@ -3264,7 +3413,7 @@
       : "";
 
     el.innerHTML =
-      head("Today", DAY_LABEL[w.dayType], "Log every set — the OS adapts from this") +
+      head("Workout", DAY_LABEL[w.dayType], "Log every set — the OS adapts from this") +
       adaptBanner +
       /* warmup */
       section("Warm-up", warm.length + " drills", checklist(warm, w.warmup, "warm")) +
@@ -4059,7 +4208,11 @@
     if (!bar || !bar.classList.contains("is-on")) return;
     var tag = (e.target && e.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (e.code === "Space") { e.preventDefault(); rtTogglePause(); }
+    /* Space on a focused button, link, select or tab is that control's own
+       activation; taking it here paused the timer instead of, and sometimes as
+       well as, doing what the control says. Escape still dismisses from anywhere. */
+    var owns = /^(BUTTON|SELECT|A|SUMMARY)$/.test(tag) || (e.target.getAttribute && e.target.getAttribute("role") === "tab");
+    if (e.code === "Space") { if (owns) return; e.preventDefault(); rtTogglePause(); }
     else if (e.code === "Escape") { rtStop(); }
   });
 
@@ -4325,26 +4478,25 @@
   function firstRunBanner(s) {
     var hasBar = s.equipment && s.equipment.pullupBar;
     var tips = [
-      'Hit <b>Today</b> and tap <b>Begin session</b> — the plan auto-builds from your starting levels.',
+      'Open <b>Workout</b> and tap <b>Begin session</b> — the plan auto-builds from your starting levels.',
       'Log every set honestly. The OS reads your reps and difficulty to decide when to make things harder.',
       (hasBar ? 'Anything you can\'t do? Use <b>Swap exercise</b> to pick an alternative for the same muscle group.'
               : 'No pull-up bar yet? When you swap a pull or dip, bar-free options like rows and chair dips show as <b>ready</b>.'),
       'Weigh in weekly and log sleep — both feed your monthly Phase Report Card.'
     ];
-    /* Day-one guidance sits BELOW the real call to action, and its button is a
-       ghost — the "Up next" card owns the one primary action on this screen.
-       Two full-width orange buttons meaning the same thing made neither read
-       as the thing to press. */
-    return '<div class="card stack">' +
-      '<div class="row between wrap"><div><div class="eyebrow">Day one</div>' +
-      '<h2 class="display h3">Welcome to the frame</h2></div>' +
-      '<span class="badge badge--era1"><span class="dot"></span>Era I begins</span></div>' +
-      '<p class="muted text-sm" style="max-width:60ch">You\'re set up and ready. Here\'s how to get the most out of your first few weeks:</p>' +
-      '<ol class="frun-list">' + tips.map(function (t) { return '<li>' + t + '</li>'; }).join("") + '</ol>' +
-      '<button class="btn btn--ghost btn--block" data-go="today">' +
-        '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"/></svg>' +
-        'Start your first session</button>' +
-    '</div>';
+    /* Day-one guidance sits BELOW the real call to action, and is folded: the "Up next"
+       card owns the one action on this screen, and a second "Start your first session"
+       button under a paragraph of tips said the same thing twice (PLAN-neobrutal-ui.md,
+       Fitness content hierarchy). The tips are still one tap away. */
+    return '<details class="card fit-fold">' +
+      '<summary class="fit-fold__sum"><span><span class="eyebrow">Day one</span> ' +
+        '<strong class="fit-fold__t">Welcome to the frame — four tips for your first weeks</strong></span>' +
+        '<span class="badge badge--era1"><span class="dot"></span>Era I begins</span></summary>' +
+      '<div class="stack mt-4">' +
+        '<p class="muted text-sm" style="max-width:60ch">You\'re set up and ready. Here\'s how to get the most out of your first few weeks:</p>' +
+        '<ol class="frun-list">' + tips.map(function (t) { return '<li>' + t + '</li>'; }).join("") + '</ol>' +
+      '</div>' +
+    '</details>';
   }
 
   function renderDashboard(el, s) {
@@ -4437,7 +4589,7 @@
             ' on ' + esc(lib.fmtDate(doneInfo.nextKey)) + ' — tomorrow is your rest day.</p></div>' +
           '<span class="badge badge--primary"><span class="dot"></span>complete</span>' +
         '</div>' +
-        '<button class="btn btn--ghost btn--lg btn--block" data-go="today">Open Today →</button>' +
+        '<button class="btn btn--ghost btn--lg btn--block" data-go="today">Open Workout →</button>' +
       '</div>';
     }
 
@@ -4988,7 +5140,7 @@
           ? '<span class="dash-delta dash-delta--up">this week ' + thisWk + ' \u00b7 \u2265 avg</span>'
           : '<span class="dash-delta dash-delta--down">this week ' + thisWk + ' \u00b7 < avg ' + avg + '</span>');
     var body = (total > 0) ? chartBox("vol-chart", 240)
-      : chartEmpty(240, "Finish sessions in Today to build your weekly volume history.");
+      : chartEmpty(240, "Finish sessions in Workout to build your weekly volume history.");
     return '<div class="card">' +
       '<div class="card__head"><div class="card__title">Training volume \u00b7 last 8 weeks</div>' + pill + '</div>' +
       body +
@@ -5055,7 +5207,7 @@
               '<div class="pr-row__s">' + kindL + ' \u00b7 ' + lib.relTime(p.dateISO) + ' \u00b7 ' + lib.fmtShort(p.dateISO) + '</div></div>' +
             '<div class="pr-row__v">' + val + '</div></div>';
         }).join("")
-      : '<p class="empty-mini">No personal records yet. Finish a session in Today and the OS captures your best set or hold per movement.</p>';
+      : '<p class="empty-mini">No personal records yet. Finish a session in Workout and the OS captures your best set or hold per movement.</p>';
     return '<div class="card">' +
       '<div class="card__head"><div class="card__title">PR timeline</div>' +
         '<span class="badge">' + prs.length + ' record' + (prs.length === 1 ? "" : "s") + '</span></div>' +
@@ -5409,7 +5561,7 @@
     var done = engine.completedSessions().slice().reverse().slice(0, 12);
     var body;
     if (!done.length) {
-      body = '<div class="empty-mini">No sessions logged yet. Finish a workout in Today and it\'ll appear here to review, edit or remove.</div>';
+      body = '<div class="empty-mini">No sessions logged yet. Finish a workout in Workout and it\'ll appear here to review, edit or remove.</div>';
     } else {
       body = '<div class="sess-log">' + done.map(function (x) {
         var dayLabel = ({ push: "Push", pull: "Pull", legs: "Legs", fullbody: "Full Body" })[x.type] || cap(x.type || "session");
@@ -5541,18 +5693,38 @@
   /* Progress used to be one 6,000px scroll: the seven tier ladders alone ate
      the first three screens, and the session log sat at 5,000px. Splitting it
      the way the rest of the app already splits dense views turns "scroll past
-     everything you didn't want" into one tap. The stat tiles stay above the
-     tabs so the headline numbers survive every switch. */
+     everything you didn't want" into one tap. (The headline tiles used to stay
+     above the tabs on every subview; they now open Overview only — F6.) Display
+     names describe contents; the ids are what is stored in progTab and never change. */
   var PROG_TABS = [
     { id: "overview",     label: "Overview" },
-    { id: "ladders",      label: "Ladders" },
+    { id: "ladders",      label: "Strength levels" },
     { id: "calendar",     label: "Calendar" },
-    { id: "log",          label: "Log" },
-    { id: "body",         label: "Body" }
+    { id: "log",          label: "Session history" },
+    { id: "body",         label: "Measurements & sleep" }
   ];
   function progTab() {
     var t = util.uiGet("progTab", "overview");
     return PROG_TABS.some(function (x) { return x.id === t; }) ? t : "overview";
+  }
+
+  /* The four headline figures. They used to sit above the subview strip on every
+     subview, which pushed the strip to y=766 on a 390 x 844 phone — reaching Session
+     history meant scrolling past four unrelated tiles (PLAN-neobrutal-ui.md F6).
+     They now open the Overview subview and nothing else; two columns on a phone. */
+  function progSummary(s) {
+    var bw = latestBodyweight(s);
+    var ph = phaseDelta(s);
+    var v = weeklyVolume(s, 8);
+    var totalVol = lib.sum(v.data);
+    var sleep = s.sleepLog || [];
+    var sleepAvg = sleep.length ? lib.round(lib.sum(lib.lastN(sleep, 7), function (x) { return x.hours; }) / Math.min(sleep.length, 7), 1) : 0;
+    return '<div class="grid grid-4 prog-stats">' +
+      util.statTile("Bodyweight", lib.round(bw, 1) + '<small>kg</small>', ph == null ? "log to track phase" : ("phase " + (ph > 0 ? "+" + ph : ph) + " kg")) +
+      util.statTile("Total volume", String(totalVol), "rep-units \u00b7 last 8 wks") +
+      util.statTile("Records", String((s.prs || []).length), "PRs captured") +
+      util.statTile("Sleep avg", sleep.length ? (sleepAvg + '<small>h</small>') : "\u2014", sleep.length ? "last 7 nights" : "not logged yet") +
+    '</div>';
   }
 
   function progTabBody(tab, s) {
@@ -5562,19 +5734,39 @@
                                    '<div class="mt-4">' + notesArchiveCard(s) + '</div>';
     if (tab === "body")     return measurementsCard(s) +
                                    '<div class="mt-4">' + sleepCard(s) + '</div>';
-    return '<div class="grid grid-2 grid-bias">' +
+    return progSummary(s) +
+           '<div class="grid grid-2 grid-bias mt-4">' +
              bodyweightCard(s) + volumeCard(s) +
            '</div>' +
            '<div class="mt-4">' + prTimelineCard(s) + '</div>';
   }
 
+  /* One control, two presentations, both driven by the same stored progTab:
+     five real tabs where they fit, and a native <select> labelled "Progress view"
+     where they don't (css/basalt-gruvbox.css shows exactly one, so the other adds
+     nothing to the tab order). Both stay mounted while the panel below them is
+     swapped — the old code rebuilt the whole view on every click, which dropped
+     keyboard focus to <body> (F3). */
+  function progNav(tab) {
+    return '<div class="prog-nav mt-4">' +
+      '<div class="seg prog-tabs" role="tablist" aria-label="Progress views">' +
+        PROG_TABS.map(function (t) {
+          var on = t.id === tab;
+          return '<button class="seg__btn' + (on ? " is-active" : "") + '" role="tab" id="progtab-' + t.id + '" ' +
+            'aria-selected="' + on + '" aria-controls="prog-body" tabindex="' + (on ? "0" : "-1") + '" ' +
+            'data-progtab="' + t.id + '" type="button">' + esc(t.label) + '</button>';
+        }).join("") +
+      '</div>' +
+      '<label class="field prog-select"><span class="field__label">Progress view</span>' +
+        '<select class="select" id="prog-select">' +
+          PROG_TABS.map(function (t) {
+            return '<option value="' + t.id + '"' + (t.id === tab ? " selected" : "") + '>' + esc(t.label) + '</option>';
+          }).join("") +
+        '</select></label>' +
+    '</div>';
+  }
+
   function renderProgress(el, s) {
-    var bw = latestBodyweight(s);
-    var ph = phaseDelta(s);
-    var v = weeklyVolume(s, 8);
-    var totalVol = lib.sum(v.data);
-    var sleep = s.sleepLog || [];
-    var sleepAvg = sleep.length ? lib.round(lib.sum(lib.lastN(sleep, 7), function (x) { return x.hours; }) / Math.min(sleep.length, 7), 1) : 0;
     var tab = progTab();
 
     el.innerHTML =
@@ -5583,37 +5775,55 @@
         ui.eraBadge(s) +
       '</div>' +
 
-      '<div class="grid grid-4">' +
-        util.statTile("Bodyweight", lib.round(bw, 1) + '<small>kg</small>', ph == null ? "log to track phase" : ("phase " + (ph > 0 ? "+" + ph : ph) + " kg")) +
-        util.statTile("Total volume", String(totalVol), "rep-units \u00b7 last 8 wks") +
-        util.statTile("Records", String((s.prs || []).length), "PRs captured") +
-        util.statTile("Sleep avg", sleep.length ? (sleepAvg + '<small>h</small>') : "\u2014", sleep.length ? "last 7 nights" : "not logged yet") +
-      '</div>' +
+      progNav(tab) +
 
-      '<div class="seg mt-4" role="tablist" aria-label="Progress sections">' +
-        PROG_TABS.map(function (t) {
-          return '<button class="seg__btn' + (t.id === tab ? " is-active" : "") + '" role="tab" ' +
-            'aria-selected="' + (t.id === tab) + '" data-progtab="' + t.id + '" type="button">' +
-            esc(t.label) + '</button>';
-        }).join("") +
-      '</div>' +
-
-      '<div class="mt-4" id="prog-body">' + progTabBody(tab, s) + '</div>' +
+      '<div class="mt-4" id="prog-body" role="tabpanel" aria-labelledby="progtab-' + tab + '">' + progTabBody(tab, s) + '</div>' +
 
       '<p class="faint text-xs mt-6 mono">PROGRESS ONLINE \u00b7 ' + (s.bodyweightLog || []).length + ' weigh-ins \u00b7 ' +
         (s.measurements || []).length + ' measurement sets \u00b7 ' + engine.completedSessions().length + ' sessions \u00b7 stored locally.</p>';
 
-    el.querySelectorAll("[data-progtab]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        util.uiSet("progTab", b.dataset.progtab);
-        renderProgress(el, s);
-        /* Jump to the tab strip, not the top \u2014 switching tabs shouldn't cost
-           you the scroll position you already chose. */
-        var strip = el.querySelector(".seg");
-        if (strip) strip.scrollIntoView({ block: "nearest" });
+    var tabs = el.querySelectorAll("[data-progtab]");
+    tabs.forEach(function (b) {
+      b.addEventListener("click", function () { showProgTab(el, s, b.dataset.progtab); });
+      /* Arrow keys move between tabs (one tab stop for the group); Enter and
+         Space activate through the button's own click. */
+      b.addEventListener("keydown", function (e) {
+        var i = Array.prototype.indexOf.call(tabs, b), to = -1;
+        if (e.key === "ArrowRight") to = (i + 1) % tabs.length;
+        else if (e.key === "ArrowLeft") to = (i - 1 + tabs.length) % tabs.length;
+        else if (e.key === "Home") to = 0;
+        else if (e.key === "End") to = tabs.length - 1;
+        if (to < 0) return;
+        e.preventDefault();
+        tabs.forEach(function (x) { x.tabIndex = -1; });
+        tabs[to].tabIndex = 0;
+        tabs[to].focus();
       });
     });
+    var sel = el.querySelector("#prog-select");
+    if (sel) sel.addEventListener("change", function () { showProgTab(el, s, sel.value); });
 
+    wireProgBody(el, s);
+  }
+
+  /* Swap the panel; leave the control — and whatever has focus in it — alone. */
+  function showProgTab(el, s, tab) {
+    util.uiSet("progTab", tab);
+    el.querySelectorAll("[data-progtab]").forEach(function (b) {
+      var on = b.dataset.progtab === tab;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;
+    });
+    var sel = el.querySelector("#prog-select");
+    if (sel) sel.value = tab;
+    var body = el.querySelector("#prog-body");
+    body.setAttribute("aria-labelledby", "progtab-" + tab);
+    body.innerHTML = progTabBody(tab, s);
+    wireProgBody(el, s);
+  }
+
+  function wireProgBody(el, s) {
     wireProgress(el, s);
     wireCalendar(el, s);
     drawProgressCharts(el, s);
@@ -6385,7 +6595,7 @@
 
     el.innerHTML =
       '<div class="page-head row between wrap">' +
-        '<div><div class="eyebrow">Phase intelligence</div><h1 class="display h2">Evaluation</h1></div>' +
+        '<div><div class="eyebrow">Phase intelligence</div><h1 class="display h2">Phase review</h1></div>' +
         ui.eraBadge(s) +
       '</div>' +
 
@@ -6407,21 +6617,7 @@
           (phaseDone ? "Open Phase Report Card" : "Preview Phase Report Card") + '</button>' +
       '</div>' +
 
-      '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Manual controls</div>' +
-        '<span class="badge">your call</span></div>' +
-        '<p class="muted text-sm">The phase auto-grades on day ' + phase.lengthDays + ', but life doesn\'t run on a schedule. Close this phase early to bank a report card now, or jump straight into a recovery block when you\'re run down.</p>' +
-        '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap">' +
-          '<button class="btn btn--secondary btn--sm grow" id="ev-close-now">' +
-            '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' +
-            'Close phase &amp; grade now</button>' +
-          '<button class="btn btn--ghost btn--sm grow" id="ev-deload-now">' +
-            '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M12 22v-6M4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M2 12h6M22 12h-6"/></svg>' +
-            'Start a deload block</button>' +
-        '</div>' +
-        '<p class="faint text-xs">A deload reduces working volume by ~40% for one block so you can recover, then you re-evaluate as normal.</p>' +
-      '</div>' +
-
-      '<div class="grid grid-2 mt-4" style="grid-template-columns:1fr 1.1fr">' +
+      '<div class="grid grid-2 grid-eval mt-4">' +
         '<div class="card stack">' +
           '<div class="card__head"><div class="card__title">Live metrics</div>' +
           '<span class="badge">' + ev.sampleSize + ' session' + (ev.sampleSize === 1 ? "" : "s") + '</span></div>' +
@@ -6450,10 +6646,24 @@
             }).join("") + '</div>'
         : '') +
 
+      '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Manual controls</div>' +
+        '<span class="badge">your call</span></div>' +
+        '<p class="muted text-sm">The phase auto-grades on day ' + phase.lengthDays + ', but life doesn\'t run on a schedule. Close this phase early to bank a report card now, or jump straight into a recovery block when you\'re run down.</p>' +
+        '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap">' +
+          '<button class="btn btn--secondary btn--sm grow" id="ev-close-now">' +
+            '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' +
+            'Close phase &amp; grade now</button>' +
+          '<button class="btn btn--ghost btn--sm grow" id="ev-deload-now">' +
+            '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M12 22v-6M4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M2 12h6M22 12h-6"/></svg>' +
+            'Start a deload block</button>' +
+        '</div>' +
+        '<p class="faint text-xs">A deload reduces working volume by ~40% for one block so you can recover, then you re-evaluate as normal.</p>' +
+      '</div>' +
+
       '<div class="page-head" style="margin-top:var(--sp-8)"><div class="eyebrow">Track record</div><h2 class="display h3">Phase history</h2></div>' +
       histHtml +
 
-      '<p class="faint text-xs mt-6 mono">EVALUATION ONLINE · ' + (s.phaseHistory || []).length + ' phases closed · grading from ' + engine.completedSessions().length + ' lifetime sessions · stored locally.</p>';
+      '<p class="faint text-xs mt-6 mono">PHASE REVIEW ONLINE · ' + (s.phaseHistory || []).length + ' phases closed · grading from ' + engine.completedSessions().length + ' lifetime sessions · stored locally.</p>';
 
     var openBtn = document.getElementById("ev-open");
     if (openBtn) openBtn.addEventListener("click", openReportCard);
@@ -6580,20 +6790,20 @@
           '<span class="dash-delta dash-delta--flat">' + info.remaining + ' days to evaluation</span></div>' +
         '<div class="progress" style="height:12px"><div class="progress__bar" style="width:' + info.pct + '%"></div></div>' +
         '<div class="row" style="gap:var(--sp-2)">' +
-          '<button class="btn btn--secondary btn--sm grow" data-go="evaluation">Open Evaluation →</button>' +
+          '<button class="btn btn--secondary btn--sm grow" data-go="evaluation">Open Phase review →</button>' +
           '<button class="btn btn--ghost btn--sm" id="pg-report">Report card</button>' +
         '</div>' +
       '</div>' +
 
       '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Weekly split</div>' +
         '<span class="badge">' + engine.DAYS_PER_WEEK + ' days / week</span></div>' +
-        '<p class="muted text-sm">A rolling 4-day rotation. Each session auto-builds from your current tier levels in Today.</p>' +
+        '<p class="muted text-sm">A rolling 4-day rotation. Each session auto-builds from your current tier levels in Workout.</p>' +
         '<div class="pg-split">' + split + '</div></div>' +
 
       '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Current targets</div>' +
         '<span class="badge badge--era1">' + PATTERNS.length + ' patterns</span></div>' +
         '<div class="pg-targets">' + targets + '</div>' +
-        '<button class="btn btn--ghost btn--sm btn--block mt-2" data-go="progress">See full progression ladders in Progress →</button></div>' +
+        '<button class="btn btn--ghost btn--sm btn--block mt-2" data-go="progress">See strength levels in Progress →</button></div>' +
 
       '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Era I benchmarks</div>' +
         '<span class="badge badge--era1" id="bench-count">' + benchDone + '/' + benchKeys.length + '</span></div>' +
@@ -7067,7 +7277,7 @@
 
     el.innerHTML =
       '<div class="page-head row between wrap">' +
-        '<div><div class="eyebrow">Beyond the basics</div><h1 class="display h2">Skills & Mobility</h1></div>' +
+        '<div><div class="eyebrow">Beyond the basics</div><h1 class="display h2">Skills & mobility</h1></div>' +
         App.ui.eraBadge(s) +
       '</div>' +
       '<p class="muted text-sm" style="max-width:60ch;margin-bottom:var(--sp-5)">Long-term bodyweight skills and the mobility work that supports them. These run alongside your main program — train a skill fresh, early in a session, when you\'re strong. Tap any movement for the full guide.</p>' +

@@ -58,7 +58,7 @@
       title: "Keeping your data",
       body: "Link a synced folder or connect Google Drive, and this browser stops being the only copy. " +
             "Everything also exports as one JSON file and as CSV per data set, any time, from right here.",
-      onEnter: function () { Hub.show("settings"); }
+      onEnter: function () { Hub.show("settings"); if (Hub.settingsView) Hub.settingsView.unfold("data"); }
     },
     {
       target: "#wh-nav-desktop [data-view=\"fitness\"], #wh-nav-mobile [data-view=\"fitness\"]",

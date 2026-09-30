@@ -417,7 +417,7 @@
           '<svg class="placeholder__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">' +
           '<path d="M6 4v6a6 6 0 0 0 12 0V4"/><path d="M4 4h4M16 4h4M12 16v4"/></svg>' +
           '<h4>Nothing logged yet</h4>' +
-          '<p class="text-sm">Finish a session in <b>Today</b> and this fills in — every muscle group your work touched, ' +
+          '<p class="text-sm">Finish a session in <b>Workout</b> and this fills in — every muscle group your work touched, ' +
           'how much each one got, and which ones you have been skipping.</p>' +
           '<div class="row" style="justify-content:center;margin-top:var(--sp-4)">' +
             '<button class="btn btn--primary btn--sm" data-ms-go="today">Go to Today →</button>' +
@@ -821,7 +821,8 @@
     /* After Skills, before Running — it belongs with the training content. */
     var at = App.SECTIONS.map(function (x) { return x.id; }).indexOf("skills");
     App.SECTIONS.splice(at >= 0 ? at + 1 : App.SECTIONS.length, 0,
-      { id: "muscles", label: "Muscles", icon: "muscle" });
+      { id: "muscles", label: "Muscles", icon: "muscle", group: "Plan", rank: 7,
+        blurb: "Muscle map and exercise reference" });
   }
 
   function mount() {

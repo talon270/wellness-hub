@@ -110,10 +110,16 @@
       atDeskBtns.forEach(function (btn) {
         btn.classList.toggle("is-running", on);
         var t = btn.querySelector(".wh-atdesk-btn__t");
-        if (t) t.textContent = on ? (mins + "m at desk") : "At Desk";
+        if (t) t.textContent = on ? ("At desk · " + mins + "m") : "At Desk";
+        /* The label is the state; the accessible name keeps that label first (a
+           name that omits the visible text breaks voice control) and then says
+           what the click will do. */
         btn.title = on
           ? "Sitting " + mins + "m — click to stop the clock"
           : "Start the sitting clock";
+        btn.setAttribute("aria-label", on
+          ? "At desk · " + mins + "m — stop the clock"
+          : "At Desk — start the sitting clock");
       });
     }
 

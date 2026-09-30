@@ -20,7 +20,7 @@
    BUMP CACHE_VERSION whenever you change any file in PRECACHE.
    ========================================================================== */
 
-const CACHE_VERSION = "v36";
+const CACHE_VERSION = "v38";
 const CACHE_NAME = `wellness-hub-${CACHE_VERSION}`;
 
 /* Relative paths so the app works from any sub-directory. */
@@ -34,6 +34,7 @@ const PRECACHE = [
   "./css/basalt-makeover.css",
   "./css/muscles.css",
   "./css/themes.css",
+  "./css/neobrutal.css",
   "./fitness/basalt.css",
 
   "./vendor/sync.js",
@@ -74,6 +75,7 @@ const PRECACHE = [
 
   "./vendor/chart.umd.min.js",
   "./vendor/doto/Doto-Bold.woff2",
+  "./vendor/inter/Inter-latin.woff2",
 
   "./icons/icon.svg",
   "./icons/icon-192.png",

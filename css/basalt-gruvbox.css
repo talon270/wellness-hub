@@ -134,6 +134,15 @@
 
 /* --- BASALT's #app / main spacing defers to the hub's page padding --- */
 #app { display: block; }
+/* F2 (PLAN-neobrutal-ui.md) — the boundary between setup and the app.
+   bootstrap() sets `hidden` on #appbar and #app while onboarding is open, but
+   `.appbar { display: flex }` and the `#app { display: block }` above both
+   outrank the UA's `[hidden] { display: none }`, so on a fresh profile the
+   whole training shell sat live above the wizard and Today would render a
+   workout before setup had finished. Restated here, after the display rules,
+   with enough specificity to win. Nothing about onboarding state changes. */
+#wh-view-fitness #appbar[hidden],
+#wh-view-fitness #app[hidden] { display: none; }
 #app > .container { max-width: none; padding: 0; margin: 0; width: 100%; }
 /* No `both` fill: an entrance animation that never runs must not leave the
    section stuck at its opacity:0 first keyframe. */
@@ -173,3 +182,160 @@
   outline: 2px solid var(--yellow-bright);
   outline-offset: 2px;
 }
+
+/* ---------------------------------------------------------------------------
+   3. WORKOUT ACTIONS — F1 (PLAN-neobrutal-ui.md)
+   .session-bar is sticky to the viewport's bottom edge (z-index 30) while the
+   hub's phone navigation is fixed there too (z-index 70). At 390 x 844 the
+   Complete button occupied y=759-828 and the navigation began at y=782: a hit
+   test at the button's centre reached the hub's "Daily" tab. The bar now sticks
+   ABOVE the navigation and its safe-area inset, and everything else that floats
+   at the bottom (the rest timer, both toast hosts) rises by the bar's height
+   while it is on screen. The bar is 83px at most (50px buttons, 16px padding a side, a
+   1px rule). Scrolled to the end of the page it used to stop sticking and ride 32px
+   (48px on desktop) above its resting place, because .wh-main pads its bottom edge;
+   nothing follows the bar, so a matching negative margin takes that slack back and
+   the bar rests in the same place at every scroll position.
+   --------------------------------------------------------------------------- */
+.session-bar { margin-bottom: calc(-1 * var(--wh-s12)); }
+@media (max-width: 860px) {
+  .session-bar { bottom: calc(var(--wh-bottomnav-h) + env(safe-area-inset-bottom, 0px)); margin-bottom: calc(-1 * var(--wh-s8)); }
+  .rt { bottom: calc(var(--wh-bottomnav-h) + env(safe-area-inset-bottom, 0px) + var(--wh-lift, 0px) + var(--wh-s3)); }
+  #toast-host, .wh-toasts {
+    bottom: calc(var(--wh-bottomnav-h) + env(safe-area-inset-bottom, 0px) + var(--wh-lift, 0px) + var(--wh-s3));
+  }
+}
+/* Complete is the action; Discard is the way out; Print is an icon, not a third of the bar.
+   nowrap keeps the bar one line tall: measured at 390 wide, "Complete session" wrapped,
+   the bar grew from 83px to 102px, and everything lifted by a fixed amount overlapped it. */
+.session-bar .btn { white-space: nowrap; padding-inline: var(--sp-3); min-height: 44px; }
+.session-bar #complete-session { flex: 2 1 0; }
+.session-bar #print-session { flex: 0 0 auto; }
+/* :has() lets the bar announce itself without a line of JS. Where it is unsupported the
+   lift stays 0 and the rest timer and toasts sit where they always did. */
+@supports selector(:has(*)) {
+  body:has(#wh-view-fitness:not(.wh-hide) #view-today:not(.hide) .session-bar) { --wh-lift: 92px; }
+}
+/* Desktop: the toast corner sat on the right-hand end of the bar — Complete session —
+   and the rest timer's fixed 84px cleared it by one pixel. Both now clear it by the
+   lift; with no bar on screen the lift is 0 and they sit where they always did. */
+@media (min-width: 861px) {
+  #toast-host, .wh-toasts { bottom: calc(var(--wh-s5) + var(--wh-lift, 0px)); }
+  .rt { bottom: calc(var(--wh-s5) + max(64px, var(--wh-lift, 0px))); }
+}
+
+/* ---------------------------------------------------------------------------
+   4. PHASE REVIEW — F4 (PLAN-neobrutal-ui.md)
+   renderEvaluation() wrote `grid-template-columns:1fr 1.1fr` inline, which no
+   media query can override: at 390px the second card ended at x=504. A class,
+   two shrinkable columns, and one column once the content is narrower than the
+   two cards need (the hub's sidebar takes 232px of a 1000px window).
+   --------------------------------------------------------------------------- */
+.grid-eval { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+.grid-eval > * { min-width: 0; }
+.grid-eval .card__head { flex-wrap: wrap; }
+@media (max-width: 1000px) {
+  .grid-eval { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------------------------------------------------------------------------
+   5. FITNESS NAVIGATION — F5 (PLAN-neobrutal-ui.md)
+   Two layouts of one registry (App.SECTIONS): the full bar (#nav + Training
+   setup) and the compact picker (.fitbar). Exactly one is displayed, chosen by a
+   CONTAINER query on the app bar rather than a viewport query: what matters is
+   the width the bar actually has, which the hub's 232px sidebar, the phone
+   layout and browser zoom all change independently. display:none also takes the
+   hidden layout out of the tab order, so keyboard users only ever meet one.
+   Where container queries are unsupported the full bar simply stays, as before.
+   --------------------------------------------------------------------------- */
+.appbar { container: fitbar / inline-size; }
+
+/* The full bar wraps to a deliberate second row instead of scrolling behind a
+   hidden scrollbar (the old strip put 918px of buttons in 332px). */
+#nav { flex-wrap: wrap; overflow: visible; justify-content: flex-start; row-gap: 2px; }
+.nav__btn { padding-inline: var(--sp-3); }
+
+.fitbar { display: none; }
+@container fitbar (max-width: 719px) {
+  #nav, .appbar__io { display: none; }
+  .fitbar { display: block; flex: 1 1 100%; position: relative; min-width: 0; }
+}
+
+.fitbar__lbl {
+  display: block; margin-bottom: var(--sp-1);
+  font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--text-400);
+}
+.fitbar__row { display: flex; gap: var(--sp-2); }
+.fitbar__toggle { flex: 1 1 auto; min-width: 0; min-height: 44px; justify-content: space-between; font-weight: 700; }
+.fitbar__cur { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fitbar__chev { transition: transform var(--wh-fast); }
+.fitbar.is-open .fitbar__chev { transform: rotate(180deg); }
+.fitbar__go { flex: 0 0 auto; min-height: 44px; }
+
+/* The panel sits between the hub's top and bottom chrome and scrolls if it has to. */
+.fitbar__panel {
+  position: absolute; left: 0; right: 0; top: calc(100% + var(--sp-2)); z-index: 50;
+  max-height: calc(100dvh - var(--wh-topbar-h) - var(--wh-bottomnav-h) - env(safe-area-inset-bottom, 0px) - 156px);
+  overflow-y: auto; overscroll-behavior: contain;
+  background: var(--ink-850); border: 1px solid var(--line-2); border-radius: var(--r-md);
+  box-shadow: var(--shadow-md); padding: var(--sp-2);
+}
+.fitbar__panel[hidden] { display: none; }
+.fitbar__group + .fitbar__group { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
+.fitbar__gt {
+  margin: 0; padding: var(--sp-1) var(--sp-3);
+  font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--text-400);
+}
+.fitbar__item {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "ic name mark" "ic blurb mark";
+  align-items: center; column-gap: var(--sp-3);
+  width: 100%; min-height: 48px; padding: var(--sp-2) var(--sp-3); text-align: left; cursor: pointer;
+  font: inherit; color: var(--text-200); background: transparent;
+  border: 1px solid transparent; border-radius: var(--r-sm);
+}
+.fitbar__item .ic { grid-area: ic; width: 18px; height: 18px; color: var(--text-300); }
+.fitbar__name { grid-area: name; font-weight: 650; font-size: var(--fs-sm); color: var(--text-100); }
+.fitbar__blurb { grid-area: blurb; font-size: var(--fs-xs); color: var(--text-400); line-height: 1.35; }
+.fitbar__mark { grid-area: mark; }
+.fitbar__item:hover { background: var(--ink-700); }
+/* "You are here" is a word as well as a fill, so it does not rest on colour. */
+.fitbar__item[aria-current="page"] { background: var(--primary-soft); border-color: rgba(var(--primary-rgb), .3); }
+.fitbar__item[aria-current="page"] .fitbar__name { color: var(--primary); }
+.fitbar__item[aria-current="page"] .fitbar__mark::after {
+  content: "Current"; font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-300);
+}
+
+/* ---------------------------------------------------------------------------
+   6. PROGRESS VIEWS — F3 / F6 (PLAN-neobrutal-ui.md)
+   Five real tabs where five labels fit, one native <select> where they do not.
+   Exactly one is displayed, so the other contributes nothing to the tab order.
+   The four headline figures open Overview and stay two-up on a phone: BASALT's
+   own rule collapsed .grid-4 to a single column at 460px, four tiles tall.
+   --------------------------------------------------------------------------- */
+.prog-select { display: none; }
+.prog-tabs { max-width: 100%; }
+@media (max-width: 560px) {
+  .prog-tabs { display: none; }
+  .prog-select { display: flex; }
+  .prog-select .select { min-height: 44px; }
+}
+@media (max-width: 760px) {
+  .prog-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+  .prog-stats .stat { padding: var(--sp-3); }
+}
+
+/* A native disclosure in BASALT's card language — the day-one tips on Overview.
+   It follows the hero card directly, so it brings its own top margin. */
+.fit-fold { margin-top: var(--sp-4); }
+.fit-fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.fit-fold > summary::-webkit-details-marker { display: none; }
+.fit-fold > summary::after {
+  content: ""; width: 8px; height: 8px; flex: 0 0 auto; margin-left: auto;
+  border-right: 2px solid var(--text-400); border-bottom: 2px solid var(--text-400);
+  transform: rotate(45deg) translate(-2px, -2px); transition: transform var(--wh-fast);
+}
+.fit-fold[open] > summary::after { transform: rotate(-135deg) translate(-3px, -3px); }
+.fit-fold__t { font-size: var(--fs-sm); color: var(--text-100); }

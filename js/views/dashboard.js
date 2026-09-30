@@ -220,8 +220,16 @@
     var perfect = st.perfect || { current: 0, best: 0, doneToday: false };
     var partsDone = G.PERFECT_PARTS.filter(function (k) { return st[k] && st[k].doneToday; }).length;
 
+    /* ORDER IS THE DESIGN (PLAN-neobrutal-ui.md A1). The frequent action — log
+       something — is the first thing under the date, because on a 390 x 844
+       phone everything after the streak grid used to be below the fold. The
+       streak grid, badges and tip are reference material and come last. The
+       modules are the same ones as before, moved; every handler is untouched. */
     el.innerHTML =
-      /* ---------- hero ---------- */
+      /* ---------- the logging date ---------- */
+      Hub.dateNav() +
+
+      /* ---------- today, in one line and one ring ---------- */
       '<section class="wh-hero">' +
         "<div>" +
           '<div class="wh-hero__greet">' +
@@ -238,8 +246,9 @@
         "</div>" +
         '<div class="wh-hero__perfect">' +
           Hub.ring(Hub.pct(partsDone, G.PERFECT_PARTS.length), {
-            size: 96, stroke: 8,
-            color: perfect.doneToday ? "var(--green-bright)" : "var(--yellow-bright)",
+            size: 84, stroke: 8,
+            /* Green is reserved for "done"; in progress uses the shared accent. */
+            color: perfect.doneToday ? "var(--green-bright)" : "var(--wh-accent)",
             aria: partsDone + " of " + G.PERFECT_PARTS.length + " core habits complete",
             center: '<div class="wh-ringwrap__val">' + perfect.current + "</div>" +
                     '<div class="wh-ringwrap__lbl">day streak</div>'
@@ -247,20 +256,21 @@
         "</div>" +
       "</section>" +
 
-      /* ---------- the logging date ---------- */
-      Hub.dateNav() +
+      /* ---------- setup prompt: one row until it is dealt with ---------- */
+      setupPrompt() +
 
-      /* ---------- profile & suggestions ---------- */
-      profileCard() +
-
-      /* ---------- what needs attention ---------- */
-      topAdvice() +
-
-      /* ---------- streaks ---------- */
-      '<div class="wh-row wh-row--between wh-mb4">' +
-        '<h2 class="wh-h2" style="margin:0">Streaks</h2>' + graceNote(st) +
+      /* ---------- quick log ---------- */
+      '<div class="wh-card wh-card--feature wh-mb4">' +
+        '<div class="wh-card__head">' +
+          '<div class="wh-card__title">' + Hub.icon("plus") + "Quick log</div>" +
+          '<span class="wh-chip">one tap</span>' +
+        "</div>" +
+        '<div class="wh-quick">' + quickTiles(d) + "</div>" +
       "</div>" +
-      '<div class="wh-streaks wh-mb4">' + streakTiles(st) + "</div>" +
+
+      /* ---------- what needs attention, next to the actions it affects ---------- */
+      suggestions() +
+      topAdvice() +
 
       /* ---------- next reminder + today + timers ----------
          Three cards of the same rough shape: a short glanceable status block.
@@ -276,23 +286,22 @@
         '<div class="wh-card">' +
           '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("water") + "Today at a glance</div></div>" +
           '<div class="wh-stack wh-stack--sm">' +
-            miniBar("Water", d.water, goal, "cups", "var(--blue-bright)") +
-            miniBar("Eye breaks", d.eye2020, 3, "breaks", "var(--blue-bright)") +
-            miniBar("Brushing", (d.brushAM ? 1 : 0) + (d.brushPM ? 1 : 0), 2, "times", "var(--aqua-bright)") +
-            miniBar("Mindfulness", (d.mindful || []).length, 1, "sessions", "var(--purple-bright)") +
+            /* One treatment for every track: the value is printed beside it, so
+               hue was never carrying the meaning (PLAN-neobrutal-ui.md A3). */
+            miniBar("Water", d.water, goal, "cups") +
+            miniBar("Eye breaks", d.eye2020, 3, "breaks") +
+            miniBar("Brushing", (d.brushAM ? 1 : 0) + (d.brushPM ? 1 : 0), 2, "times") +
+            miniBar("Mindfulness", (d.mindful || []).length, 1, "sessions") +
           "</div>" +
         "</div>" +
         (Hub.timers ? Hub.timers.card() : "") +
       "</div>" +
 
-      /* ---------- quick log ---------- */
-      '<div class="wh-card wh-mt6">' +
-        '<div class="wh-card__head">' +
-          '<div class="wh-card__title">' + Hub.icon("plus") + "Quick log</div>" +
-          '<span class="wh-chip">one tap</span>' +
-        "</div>" +
-        '<div class="wh-quick">' + quickTiles(d) + "</div>" +
+      /* ---------- streaks ---------- */
+      '<div class="wh-row wh-row--between wh-mb4 wh-mt6">' +
+        '<h2 class="wh-h2" style="margin:0">Streaks</h2>' + graceNote(st) +
       "</div>" +
+      '<div class="wh-streaks wh-mb4">' + streakTiles(st) + "</div>" +
 
       /* ---------- badges ---------- */
       '<div class="wh-card wh-mt6">' +
@@ -319,25 +328,36 @@
   /* Either "you never finished setting up", or the suggestions that setup
      produced and you haven't acted on. Both disappear entirely once dealt
      with — a permanent nag card is how people learn to ignore a whole area
-     of a screen. */
-  function profileCard() {
+     of a screen.
+
+     The first is one row with its explanation folded away: it used to be a
+     paragraph and two buttons stacked above everything else on the page. */
+  function setupPrompt() {
     if (!Hub.onboarding) return "";
     var p = Hub.state.settings.profile;
+    if (p.completedAt) return "";
 
-    if (!p.completedAt) {
-      return '<div class="wh-card wh-card--accent wh-mb4">' +
-        '<div class="wh-card__head"><div class="wh-card__title">' + Hub.icon("idCard") +
-          "Set this up for you</div></div>" +
-        '<p class="wh-sm wh-muted">Six questions — your day, your goals, and the couple of things that ' +
-          "decide which parts of the app are worth showing you. It picks reminder times around your own " +
-          "waking hours instead of somebody else's defaults.</p>" +
-        '<div class="wh-row wh-mt4">' +
-          '<button type="button" class="wh-btn wh-btn--primary" data-onboard>' + Hub.icon("check") +
+    return '<div class="wh-card wh-card--accent wh-card--tight wh-mb4">' +
+      '<div class="wh-row wh-row--between">' +
+        '<div class="wh-card__title">' + Hub.icon("idCard") + "Set this up for you</div>" +
+        '<div class="wh-row" style="gap:var(--wh-s2)">' +
+          '<button type="button" class="wh-btn wh-btn--primary wh-btn--sm" data-onboard>' + Hub.icon("check") +
             (p.skipped ? "Do it now" : "Start") + "</button>" +
           (p.skipped ? "" : '<button type="button" class="wh-btn wh-btn--ghost wh-btn--sm" data-onboard-skip>Not now</button>') +
         "</div>" +
-      "</div>";
-    }
+      "</div>" +
+      '<details class="wh-fold"><summary>What are the six questions?</summary>' +
+        '<p class="wh-sm wh-muted">Your day, your goals, and the couple of things that ' +
+          "decide which parts of the app are worth showing you. It picks reminder times around your own " +
+          "waking hours instead of somebody else's defaults.</p>" +
+      "</details>" +
+    "</div>";
+  }
+
+  function suggestions() {
+    if (!Hub.onboarding) return "";
+    var p = Hub.state.settings.profile;
+    if (!p.completedAt) return "";
 
     var pend = Hub.onboarding.pending();
     if (!pend.length) return "";
@@ -440,7 +460,7 @@
     return tiles.join("");
   }
 
-  function miniBar(label, val, target, unit, color) {
+  function miniBar(label, val, target, unit) {
     var p = Hub.pct(val, target);
     return '<div>' +
       '<div class="wh-row wh-row--between" style="gap:8px">' +
@@ -449,7 +469,7 @@
           (p >= 100 ? 'style="color:var(--green-bright)"' : "") + ">" + val + "/" + target + " " + unit + "</span>" +
       "</div>" +
       '<div class="wh-bar" style="margin-top:4px"><div class="wh-bar__fill" style="width:' + p + "%;background:" +
-        (p >= 100 ? "var(--green-bright)" : color) + '"></div></div>' +
+        (p >= 100 ? "var(--green-bright)" : "var(--wh-accent)") + '"></div></div>' +
     "</div>";
   }
 

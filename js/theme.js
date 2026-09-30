@@ -60,6 +60,22 @@
       note: "Cool and deep, with real blues. The biggest departure here.",
       bg: "#16161e", surface: "#1a1b26", text: "#c0caf5",
       dots: ["#ff9e64", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7"]
+    },
+    /* The ochre pair (PLAN-neobrutal-ui.md). Appended, not prepended: Gruvbox
+       stays the default and the first tile, and a saved id keeps meaning what
+       it meant. Dots run accent, done, warning, info, danger — the four
+       status colours are the ones that must stay distinguishable. */
+    {
+      id: "paper-ochre", label: "Paper Ochre",
+      note: "Light. Paper ground, ink text, square corners, hard shadows. Ochre fills the main action; it never sets text.",
+      bg: "#f4f1e8", surface: "#fcfaf4", text: "#20201e",
+      dots: ["#d7b95e", "#2e6b34", "#8a5a00", "#1f5f99", "#b3261e"]
+    },
+    {
+      id: "charcoal-ochre", label: "Charcoal Ochre",
+      note: "The dark counterpart: same square shapes and one ochre accent on charcoal.",
+      bg: "#191919", surface: "#242423", text: "#f4f1e8",
+      dots: ["#d7b95e", "#8fc77a", "#f0a038", "#7fb2e5", "#f0736b"]
     }
   ];
 

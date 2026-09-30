@@ -29,6 +29,20 @@
   src: url("../vendor/doto/Doto-Bold.woff2") format("woff2");
 }
 
+/* Inter (SIL OFL 1.1, vendor/inter/OFL.txt) — the sans the two "-ochre" palettes
+   set --wh-font to. Latin subset, one variable file covering weights 400–700
+   (48 KB), fetched once from Google Fonts' static URL and stored here rather than
+   linked: no CDN, no build step, works offline and over file://. A browser only
+   downloads a face something actually uses, so the five older palettes never
+   fetch it. Glyphs outside Latin fall through to the system stack. */
+@font-face {
+  font-family: "WH Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("../vendor/inter/Inter-latin.woff2") format("woff2");
+}
+
 /* Nothing's own faces for the countdown: Ndot 57 (Aligned is its fixed-width
    digit cut) and Lettera Mono, the fonts Nothing OS draws its lock screen in.
    local() uses the copies already in the phone's /system/fonts, so nothing
@@ -130,7 +144,10 @@
   --wh-c-dental:       var(--aqua-bright);
   --wh-c-bodycare:     var(--green-bright);
   --wh-c-wellness:     var(--purple-bright);
-  --wh-c-health:       var(--red-bright);
+  /* Not red: red belongs to danger alone, and this tab's primary button (Save
+     reading) is painted in its accent. 248° is the hue every other palette in
+     css/themes.css already gives Health; 6.5:1 on the page ground. */
+  --wh-c-health:       #6caae5;
   --wh-c-insights:     var(--aqua);
   --wh-c-achievements: var(--green-bright);
   --wh-c-settings:     var(--fg4);
@@ -354,8 +371,13 @@ svg.wh-i {
 .wh-sidebar__row { display: flex; gap: var(--wh-s2); margin: 0 var(--wh-s2) var(--wh-s3); }
 .wh-atdesk-btn--sidebar { flex: 1 1 auto; }
 @media (max-width: 640px) {
-  .wh-atdesk-btn__t { display: none; }             /* icon + dot only on mobile — the topbar is tight */
+  /* Idle: icon + dot only, the topbar is tight. Running: the words come back
+     ("At desk · 12m") — a sitting clock you can only infer from a 8px dot is a
+     clock you forget is running. */
+  .wh-atdesk-btn:not(.is-running) .wh-atdesk-btn__t { display: none; }
   .wh-atdesk-btn { padding: 7px 9px; }
+  .wh-atdesk-btn.is-running { padding: 7px 10px; font-size: 12px; }
+  .wh-topbar__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 .wh-topbar__right { display: flex; align-items: center; gap: var(--wh-s3); }
 
@@ -904,6 +926,17 @@ svg.wh-i {
 .wh-hero__greet { font-size: clamp(1.25rem, 1.05rem + 1vw, 1.6rem); font-weight: 700; color: var(--fg0); }
 .wh-hero__sub { font-size: 13.5px; color: var(--wh-text-muted); margin-top: 4px; }
 .wh-hero__perfect { display: flex; align-items: center; gap: var(--wh-s4); }
+
+/* A folded explanation: the claim stays visible, the reasoning opens on demand. */
+.wh-fold { margin-top: var(--wh-s2); }
+.wh-fold > summary {
+  cursor: pointer; width: fit-content; list-style: none;
+  font-size: 12.5px; color: var(--wh-text-faint); text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.wh-fold > summary::-webkit-details-marker { display: none; }
+.wh-fold > summary:hover { color: var(--fg1); }
+.wh-fold[open] > summary { margin-bottom: var(--wh-s2); }
 
 /* streak grid */
 .wh-streaks { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: var(--wh-s3); }
@@ -1582,6 +1615,45 @@ svg.wh-i {
 .wh-danger-zone { border-color: rgba(var(--red-bright-rgb),.3); }
 .wh-danger-zone .wh-card__title svg { color: var(--red-bright); }
 
+/* Settings groups: four native <details>, open until folded (js/views/settings.js).
+   The summary is a heading row that says what is inside and the one status that
+   matters, so a folded group is still informative. */
+.wh-setnav { margin-bottom: var(--wh-s5); }
+.wh-group { margin-bottom: var(--wh-s6); scroll-margin-top: calc(var(--wh-topbar-h) + var(--wh-s3)); }
+.wh-group__sum {
+  display: flex; align-items: center; gap: var(--wh-s3); cursor: pointer; list-style: none;
+  padding: var(--wh-s3) var(--wh-s4); margin-bottom: var(--wh-s4);
+  background: var(--bg0-soft); border: 1px solid var(--wh-line); border-radius: var(--wh-r);
+}
+.wh-group:not([open]) > .wh-group__sum { margin-bottom: 0; }
+.wh-group__sum::-webkit-details-marker { display: none; }
+.wh-group__sum::after {
+  content: ""; margin-left: auto; width: 8px; height: 8px; flex: 0 0 auto;
+  border-right: 2px solid var(--fg4); border-bottom: 2px solid var(--fg4);
+  transform: rotate(45deg) translate(-2px,-2px); transition: transform var(--wh-fast);
+}
+.wh-group[open] > .wh-group__sum::after { transform: rotate(-135deg) translate(-3px,-3px); }
+.wh-group__sum:hover { background: var(--bg1); }
+.wh-group__ic { display: grid; place-items: center; color: var(--wh-accent); }
+.wh-group__ic svg { width: 18px; height: 18px; stroke-width: 2; }
+.wh-group__t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wh-group__t strong { font-size: 15px; color: var(--fg0); }
+.wh-group__s { font-size: 12.5px; color: var(--wh-text-faint); line-height: 1.5; }
+.wh-group__s .wh-chip { margin-left: 2px; }
+
+/* The palette card shows the current choice and folds the gallery behind it. */
+.wh-palette > summary { list-style: none; cursor: pointer; }
+.wh-palette > summary::-webkit-details-marker { display: none; }
+.wh-palette__sum { display: flex; align-items: center; gap: var(--wh-s4); }
+.wh-palette__cur { flex: 0 0 96px; }
+.wh-palette__cur .wh-theme__prev { margin-bottom: 0; }
+.wh-palette__cta {
+  flex: 0 0 auto; font-size: 12.5px; color: var(--wh-text-muted); text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.wh-palette[open] .wh-palette__cta::before { content: "Hide "; }
+.wh-palette__sum .wh-theme__note { display: block; margin-top: 2px; }
+
 /* ---------------------------------------------------------------------------
    7. RESPONSIVE
    ------------------------------------------------------------------------- */
@@ -1601,7 +1673,9 @@ svg.wh-i {
   }
   .wh-grid--2, .wh-grid--3, .wh-grid--4 { grid-template-columns: 1fr; }
   .wh-toasts { right: var(--wh-s3); left: var(--wh-s3); bottom: calc(var(--wh-bottomnav-h) + env(safe-area-inset-bottom, 0px) + var(--wh-s3)); max-width: none; }
-  .wh-hero { padding: var(--wh-s5); }
+  .wh-hero { padding: var(--wh-s4); gap: var(--wh-s3); flex-wrap: nowrap; margin-bottom: var(--wh-s4); }
+  .wh-hero > div:first-child { min-width: 0; }
+  .wh-hero__sub { font-size: 12.5px; }
   .wh-pills { width: 100%; overflow-x: auto; flex-wrap: nowrap; border-radius: var(--wh-r); }
 }
 

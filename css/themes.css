@@ -1,8 +1,9 @@
 /* ============================================================================
    WELLNESS HUB · THEMES
    ----------------------------------------------------------------------------
-   Four alternate palettes, each a straight re-point of the base tokens defined
-   in css/hub.css. Nothing here styles a component — a theme is data.
+   Six alternate palettes, each a straight re-point of the base tokens defined
+   in css/hub.css. Nothing here styles a component — a theme is data. (The two
+   "-ochre" palettes at the bottom also set the shape tokens css/neobrutal.css reads.)
 
    HOW IT WORKS
      css/hub.css declares the Gruvbox ramp on :root. That stays the default, so
@@ -293,6 +294,209 @@ html[data-theme="tokyo-night"] {
   --wh-c-insights: #73daca;           /* palette aqua · 10.80:1 */
   --wh-c-achievements: #fc918a;       /* generated 25° · 8.18:1 */
   --wh-c-settings: #8f96bd;           /* neutral */
+}
+
+/* ---------------------------------------------------------------------------
+   THE OCHRE PAIR — restrained neobrutalist (PLAN-neobrutal-ui.md Part B)
+   ----------------------------------------------------------------------------
+   Paper and charcoal share one interface accent, ochre #D7B95E, and the same
+   geometry. Both ids end in "-ochre" on purpose: css/neobrutal.css keys off
+   that suffix, so a third palette named "...-ochre" inherits the shape too.
+   Everything else — the five palettes above — is untouched by it.
+
+   Ochre is a FILL. On paper it is 1.83:1 against the card, so it never carries
+   text there: text uses --wh-c-* / --primary, a deeper ochre (6.85:1 on the
+   card), and the filled button carries ink on ochre (8.54:1).
+   Status colours are text-safe on their own ground and are meant to be read
+   with a word or an icon beside them, never alone.
+   --------------------------------------------------------------------------- */
+
+/* Paper Ochre — light. ink on paper 14.45:1 · ctl outline 3.92:1 on the card */
+html[data-theme="paper-ochre"] {
+  color-scheme: light;
+  --bg0-hard: #F4F1E8;
+  --bg0: #FCFAF4;
+  --bg0-soft: #F1EDE1;
+  --bg1: #E8E3D5;
+  --bg2: #D5CFBE;
+  --bg3: #B9B3A0;
+  --bg4: #6B6659;
+  --wh-bg-deep: #20201E;  /* modal scrim; the page itself is flat */
+  --fg0: #20201E;
+  --fg1: #2C2B27;
+  --fg2: #45423A;
+  --fg3: #5A564B;
+  --fg4: #655F52;
+  --gray: #6B6659;  /* BASALT's --text-500 (placeholders, empty states): text, so 5.5:1 */
+  --red: #B3261E;
+  --green: #2E6B34;
+  --yellow: #8A5A00;
+  --blue: #1F5F99;
+  --purple: #7A3F8F;
+  --aqua: #0F6B62;
+  --orange: #A24A00;
+  --red-bright: #B3261E;
+  --green-bright: #2E6B34;
+  --yellow-bright: #8A5A00;
+  --blue-bright: #1F5F99;
+  --purple-bright: #7A3F8F;
+  --aqua-bright: #0F6B62;
+  --orange-bright: #A24A00;
+  --red-bright-rgb: 179,38,30;
+  --green-bright-rgb: 46,107,52;
+  --yellow-bright-rgb: 138,90,0;
+  --blue-bright-rgb: 31,95,153;
+  --purple-bright-rgb: 122,63,143;
+  --aqua-bright-rgb: 15,107,98;
+  --orange-bright-rgb: 162,74,0;
+  --yellow-rgb: 138,90,0;
+  --fg1-rgb: 44,43,39;
+  --fg4-rgb: 101,95,82;
+  --ink-1000: #EAE6D8;
+  --ink-850: #F7F4EB;
+  --ink-800: #FAF8F1;
+  --ink-750: #FCFAF4;
+  --ink-700: #F1EDE1;
+  --ink-650: #E8E3D5;
+  --ink-600: #BDB7A5;
+  /* BASALT (Fitness) brand ramp. --primary is the accent as TEXT and LINE;
+     the filled button uses --wh-accent-fill, so the two can differ on paper. */
+  --primary: #6E5410;
+  --primary-rgb: 110,84,16;
+  --primary-600: #E3C878;
+  --primary-700: #B89A3E;
+  --primary-ink: #20201E;  /* text ON the ochre fill */
+  --primary-soft: rgba(110,84,16,.16);
+  --primary-glow: rgba(0,0,0,.45);
+  --line: rgba(var(--fg4-rgb),.16);
+  --line-2: rgba(var(--fg4-rgb),.30);
+  /* neobrutal tokens, read by css/neobrutal.css */
+  --wh-accent-fill: #D7B95E;  /* the one interface accent, as a fill */
+  --wh-on-accent: #20201E;  /* text on that fill */
+  --wh-ink: #20201E;  /* outline on main work surfaces */
+  --wh-ctl: #837D70;  /* outline on controls; 3:1 or better on the surface */
+  --wh-shadow-c: #20201E;  /* the hard offset shadow */
+  --wh-focus: #20201E;
+  --wh-shadow: none;
+  --wh-shadow-lg: 4px 4px 0 var(--wh-shadow-c);
+  --wh-r-sm: 2px;
+  --wh-r: 4px;
+  --wh-r-lg: 4px;
+  --wh-r-pill: 4px;
+  --wh-font: "WH Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+  /* BASALT's own geometry and type tokens, so the Fitness tab takes the same
+     4px corners and the same 12px floor without a per-rule override. */
+  --r-xs: 2px; --r-sm: 3px; --r-md: 4px; --r-lg: 4px; --r-xl: 4px; --r-pill: 4px;
+  --fs-2xs: .75rem; --fs-xs: .8125rem;
+  --font-body: var(--wh-font); --font-display: var(--wh-font);
+  /* one accent across sections: identity comes from the label, icon and position */
+  --wh-c-dashboard: #6E5410;
+  --wh-c-fitness: #6E5410;
+  --wh-c-desk: #6E5410;
+  --wh-c-mobility: #6E5410;
+  --wh-c-eyecare: #6E5410;
+  --wh-c-dental: #6E5410;
+  --wh-c-bodycare: #6E5410;
+  --wh-c-wellness: #6E5410;
+  --wh-c-repro: #6E5410;
+  --wh-c-health: #6E5410;
+  --wh-c-insights: #6E5410;
+  --wh-c-achievements: #6E5410;
+  --wh-c-settings: #5A564B;  /* neutral */
+}
+
+/* Charcoal Ochre — dark. paper on charcoal 15.57:1 · ctl outline 5.87:1 on the card */
+html[data-theme="charcoal-ochre"] {
+  color-scheme: dark;
+  --bg0-hard: #191919;
+  --bg0: #242423;
+  --bg0-soft: #2C2C2A;
+  --bg1: #363633;
+  --bg2: #46463F;
+  --bg3: #5E5D55;
+  --bg4: #8F8C82;
+  --wh-bg-deep: #0F0F0F;  /* modal scrim; the page itself is flat */
+  --fg0: #F4F1E8;
+  --fg1: #E6E2D6;
+  --fg2: #CFCABB;
+  --fg3: #B2AD9F;
+  --fg4: #ABA79A;
+  --gray: #A29F95;  /* BASALT's --text-500 (placeholders, empty states): text, so 5.9:1 */
+  --red: #F0736B;
+  --green: #8FC77A;
+  --yellow: #F0A038;
+  --blue: #7FB2E5;
+  --purple: #C49BE0;
+  --aqua: #6FCBBE;
+  --orange: #EE8A4F;
+  --red-bright: #F0736B;
+  --green-bright: #8FC77A;
+  --yellow-bright: #F0A038;
+  --blue-bright: #7FB2E5;
+  --purple-bright: #C49BE0;
+  --aqua-bright: #6FCBBE;
+  --orange-bright: #EE8A4F;
+  --red-bright-rgb: 240,115,107;
+  --green-bright-rgb: 143,199,122;
+  --yellow-bright-rgb: 240,160,56;
+  --blue-bright-rgb: 127,178,229;
+  --purple-bright-rgb: 196,155,224;
+  --aqua-bright-rgb: 111,203,190;
+  --orange-bright-rgb: 238,138,79;
+  --yellow-rgb: 240,160,56;
+  --fg1-rgb: 230,226,214;
+  --fg4-rgb: 171,167,154;
+  --ink-1000: #0F0F0F;
+  --ink-850: #1F1F1E;
+  --ink-800: #242423;
+  --ink-750: #2A2A28;
+  --ink-700: #30302E;
+  --ink-650: #3A3A37;
+  --ink-600: #46463F;
+  /* BASALT (Fitness) brand ramp. --primary is the accent as TEXT and LINE;
+     the filled button uses --wh-accent-fill, so the two can differ on paper. */
+  --primary: #D7B95E;
+  --primary-rgb: 215,185,94;
+  --primary-600: #E3C878;
+  --primary-700: #B89A3E;
+  --primary-ink: #20201E;  /* text ON the ochre fill */
+  --primary-soft: rgba(215,185,94,.16);
+  --primary-glow: rgba(0,0,0,.45);
+  --line: rgba(var(--fg4-rgb),.16);
+  --line-2: rgba(var(--fg4-rgb),.30);
+  /* neobrutal tokens, read by css/neobrutal.css */
+  --wh-accent-fill: #D7B95E;  /* the one interface accent, as a fill */
+  --wh-on-accent: #20201E;  /* text on that fill */
+  --wh-ink: #A29F95;  /* outline on main work surfaces */
+  --wh-ctl: #A29F95;  /* outline on controls; 3:1 or better on the surface */
+  --wh-shadow-c: #8E8A7E;  /* the hard offset shadow */
+  --wh-focus: #D7B95E;
+  --wh-shadow: none;
+  --wh-shadow-lg: 4px 4px 0 var(--wh-shadow-c);
+  --wh-r-sm: 2px;
+  --wh-r: 4px;
+  --wh-r-lg: 4px;
+  --wh-r-pill: 4px;
+  --wh-font: "WH Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+  /* BASALT's own geometry and type tokens, so the Fitness tab takes the same
+     4px corners and the same 12px floor without a per-rule override. */
+  --r-xs: 2px; --r-sm: 3px; --r-md: 4px; --r-lg: 4px; --r-xl: 4px; --r-pill: 4px;
+  --fs-2xs: .75rem; --fs-xs: .8125rem;
+  --font-body: var(--wh-font); --font-display: var(--wh-font);
+  /* one accent across sections: identity comes from the label, icon and position */
+  --wh-c-dashboard: #D7B95E;
+  --wh-c-fitness: #D7B95E;
+  --wh-c-desk: #D7B95E;
+  --wh-c-mobility: #D7B95E;
+  --wh-c-eyecare: #D7B95E;
+  --wh-c-dental: #D7B95E;
+  --wh-c-bodycare: #D7B95E;
+  --wh-c-wellness: #D7B95E;
+  --wh-c-repro: #D7B95E;
+  --wh-c-health: #D7B95E;
+  --wh-c-insights: #D7B95E;
+  --wh-c-achievements: #D7B95E;
+  --wh-c-settings: #B2AD9F;  /* neutral */
 }
 
 /* ---------------------------------------------------------------------------
