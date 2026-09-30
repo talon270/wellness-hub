@@ -966,7 +966,15 @@
 
     /* Re-trigger the entrance animation on the newly shown view. */
     var el = document.getElementById("wh-view-" + name);
-    if (el) { el.classList.remove("wh-view"); void el.offsetWidth; el.classList.add("wh-view"); }
+    /* `is-entering` gates the child cascade in css/neumorph.css. refresh() also
+       re-renders this element's children, so a permanent class would replay the
+       cascade on every logged glass of water; a 450ms flag limits it to a tab
+       switch (200ms animation + up to 180ms of stagger). */
+    if (el) {
+      el.classList.remove("wh-view", "is-entering"); void el.offsetWidth; el.classList.add("wh-view", "is-entering");
+      clearTimeout(el._enterT);
+      el._enterT = setTimeout(function () { el.classList.remove("is-entering"); }, 450);
+    }
 
     /* Per-view accent colour, so descendants just read var(--wh-accent). */
     var meta = NAV.find(function (n) { return n.id === name; });

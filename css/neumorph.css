@@ -1,0 +1,524 @@
+/* ============================================================================
+   WELLNESS HUB · NEUMORPHIC SHAPE + MOTION
+   ----------------------------------------------------------------------------
+   The geometry, depth and movement every palette in css/palettes.css is drawn
+   with (PLAN-neumorphism.md). Colours live in the palette blocks; this file only
+   says what shape to draw with them. Loaded last, so it outranks hub.css,
+   basalt.css and the BASALT skin sheets.
+
+   THE SHAPE, IN FIVE RULES
+     · Cards, the hero and modals sit on the SAME ground as the page and are
+       lifted by two shadows: a highlight up-left, a shade down-right.
+     · Anything nested inside a card is an inset well — pressed into the card
+       instead of raised off it — so depth reads one level at a time.
+     · Anything you press is raised, and PRESSING it sinks it: raised -> inset
+       in 120ms. That is the whole interaction language of the style, and it is
+       the one place motion is load-bearing.
+     · Selection is inset + the accent, never shadow alone. Selene measured
+       highlight/ground 1.24:1 and shadow/ground 1.27:1, under the 3:1 WCAG asks
+       of a control's edge, so inputs, buttons, switches and chips also keep a
+       1px hairline (--wh-ctl, generated at >=3:1) and focus is a 3px accent ring.
+     · Status colour is never the only cue: it sits beside a word or an icon, as
+       it did before this file existed.
+
+   EVERY SHADOW IS A FOUR-LAYER LIST
+     [outer highlight, outer shade, inset shade, inset highlight]. The layers a
+     state does not use are transparent zeros, so raised <-> inset interpolates
+     layer by layer. Two lists with different layer counts (or an `inset` flag in a
+     different position) do not interpolate — they jump — which is how a press
+     ends up snapping instead of sinking.
+
+   MOTION IS ON CONTROLS, NOT CARDS
+     box-shadow repaints, so it is animated only on small controls (buttons,
+     switches, nav items) where the repaint is a few hundred pixels, and never on
+     a card. Cards and view content move with transform + opacity only.
+     ponytail: box-shadow on ~20 small controls per screen; if a low-end WebView
+     drops frames on press, move the inset layer to a ::after and fade opacity.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. TOKENS
+   ------------------------------------------------------------------------- */
+:root {
+  /* Depth. --nm-hi / --nm-lo come from the palette block (a light palette needs
+     a stronger highlight and a cooler, weaker shade than a dark one). */
+  --nm-raise-lg: -9px -9px 18px var(--nm-hi), 9px 9px 18px var(--nm-lo), inset 0 0 0 0 transparent, inset 0 0 0 0 transparent;
+  --nm-raise:    -6px -6px 12px var(--nm-hi), 6px 6px 12px var(--nm-lo), inset 0 0 0 0 transparent, inset 0 0 0 0 transparent;
+  --nm-raise-sm: -3px -3px 7px  var(--nm-hi), 3px 3px 7px  var(--nm-lo), inset 0 0 0 0 transparent, inset 0 0 0 0 transparent;
+  --nm-inset:    0 0 0 0 transparent, 0 0 0 0 transparent, inset 5px 5px 10px var(--nm-lo), inset -5px -5px 10px var(--nm-hi);
+  --nm-inset-sm: 0 0 0 0 transparent, 0 0 0 0 transparent, inset 3px 3px 6px  var(--nm-lo), inset -3px -3px 6px  var(--nm-hi);
+  --nm-flat:     0 0 0 0 transparent, 0 0 0 0 transparent, inset 0 0 0 0 transparent, inset 0 0 0 0 transparent;
+
+  --wh-shadow: var(--nm-raise);
+  --wh-shadow-lg: var(--nm-raise-lg);
+  --shadow-sm: var(--nm-raise-sm);
+  --shadow-md: var(--nm-raise);
+  --shadow-lg: var(--nm-raise-lg);
+  --glow: none;
+
+  /* Soft corners, in the hub's tokens and BASALT's, so both apps agree. */
+  --wh-r-sm: 10px; --wh-r: 14px; --wh-r-lg: 22px; --wh-r-pill: 999px;
+  --r-xs: 8px; --r-sm: 12px; --r-md: 16px; --r-lg: 22px; --r-xl: 28px; --r-pill: 999px;
+
+  /* Motion. Extends the existing tokens rather than adding a second set: the
+     old --wh-ease (.22,.61,.36,1) was a mild ease-out; this is a strong one, so
+     every existing transition that reads it gets a faster start for free.
+     --wh-ease-io is for things that move between two places already on screen. */
+  --wh-ease: cubic-bezier(.23, 1, .32, 1);
+  --wh-ease-io: cubic-bezier(.77, 0, .175, 1);
+  --ease: var(--wh-ease);
+  --nm-press: 120ms var(--wh-ease);
+  --nm-hover: color-mix(in srgb, var(--bg0) 93%, var(--fg1));
+}
+
+/* ---------------------------------------------------------------------------
+   2. GROUND, SELECTION, FOCUS
+   ------------------------------------------------------------------------- */
+/* Flat: hub.css washes the page with radial glows, which would put a coloured
+   halo behind a surface whose whole depth comes from neutral light and shade. */
+html[data-theme] body::before { background: var(--bg0-hard); }
+html[data-theme] ::selection { background: var(--wh-accent-fill); color: var(--wh-on-accent); }
+html[data-theme] :focus-visible { outline: 3px solid var(--wh-focus); outline-offset: 3px; }
+html[data-theme] .wh-skip { background: var(--bg0); border: 1px solid var(--wh-ctl); box-shadow: var(--nm-raise-sm); }
+
+/* ---------------------------------------------------------------------------
+   3. SURFACES
+   ------------------------------------------------------------------------- */
+/* Main work surfaces: raised, borderless, same ground as the page. */
+html[data-theme] .wh-card,
+html[data-theme] .wh-hero,
+html[data-theme] .wh-stat,
+html[data-theme] .wh-modal__dialog,
+html[data-theme] .wh-tour-card,
+html[data-theme] .wh-unlock,
+html[data-theme] .wh-datenav,
+html[data-theme] .wh-tip {
+  background: var(--bg0);
+  border: 0;
+  border-radius: var(--wh-r-lg);
+  box-shadow: var(--nm-raise);
+}
+/* The card that matters most on a screen: deeper lift and an accent hairline
+   drawn as one more shadow layer, so no border changes the box size. */
+html[data-theme] .wh-card--accent,
+html[data-theme] .wh-card--feature {
+  box-shadow: var(--nm-raise-lg), inset 0 0 0 1px color-mix(in srgb, var(--primary) 38%, transparent);
+}
+html[data-theme] .wh-modal__dialog { box-shadow: var(--nm-raise-lg); }
+html[data-theme] .wh-danger-zone { box-shadow: var(--nm-raise), inset 0 0 0 1px color-mix(in srgb, var(--red-bright) 55%, transparent); }
+
+/* Secondary content is pressed INTO its card: a quiet well, no outline. */
+html[data-theme] .wh-timer,
+html[data-theme] .wh-vital,
+html[data-theme] .wh-checkup,
+html[data-theme] .wh-logrow,
+html[data-theme] .wh-streak,
+html[data-theme] .wh-badgestrip__item,
+html[data-theme] .wh-acc,
+html[data-theme] .wh-labpanel,
+html[data-theme] .wh-photogroup,
+html[data-theme] .wh-injury,
+html[data-theme] .wh-finding,
+html[data-theme] .wh-advice,
+html[data-theme] .wh-ex,
+html[data-theme] .wh-trophy {
+  background: var(--bg0);
+  border: 0;
+  border-radius: var(--wh-r);
+  box-shadow: var(--nm-inset-sm);
+}
+/* No float on hover: a well does not lift. */
+html[data-theme] .wh-streak:hover,
+html[data-theme] .wh-ex:hover,
+html[data-theme] .wh-trophy:hover { transform: none; }
+
+/* Rows you can press are raised, and sink when pressed. */
+html[data-theme] .wh-quickbtn,
+html[data-theme] .wh-check,
+html[data-theme] .wh-sheet__item,
+html[data-theme] .wh-weekrow,
+html[data-theme] .wh-theme {
+  background: var(--bg0);
+  border: 1px solid transparent;
+  border-radius: var(--wh-r);
+  box-shadow: var(--nm-raise-sm);
+  transition: box-shadow var(--nm-press), transform var(--nm-press), background-color var(--wh-fast), color var(--wh-fast), border-color var(--wh-fast);
+}
+html[data-theme] .wh-quickbtn:active,
+html[data-theme] .wh-check:active,
+html[data-theme] .wh-sheet__item:active,
+html[data-theme] .wh-weekrow:active,
+html[data-theme] .wh-theme:active { box-shadow: var(--nm-inset-sm); transform: scale(.985); }
+/* Done / selected = sunk, plus the state's colour and the word the app prints. */
+html[data-theme] .wh-quickbtn.is-done,
+html[data-theme] .wh-check.is-done {
+  box-shadow: var(--nm-inset-sm);
+  border-color: color-mix(in srgb, var(--green-bright) 55%, transparent);
+  background: color-mix(in srgb, var(--green-bright) 7%, var(--bg0));
+}
+html[data-theme] .wh-theme.is-active { box-shadow: var(--nm-inset-sm); border-color: var(--primary); }
+
+/* State on a well: a coloured hairline as one more inset layer + a faint wash,
+   beside the word or icon the app already prints (overdue, warn, done). */
+html[data-theme] .wh-checkup,
+html[data-theme] .wh-advice,
+html[data-theme] .wh-finding,
+html[data-theme] .wh-injury { border-left-width: 0; }
+html[data-theme] .wh-checkup.is-overdue { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--red-bright); background: color-mix(in srgb, var(--red-bright) 7%, var(--bg0)); }
+html[data-theme] .wh-advice--warn { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--yellow-bright); }
+html[data-theme] .wh-advice--bad  { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--red-bright); }
+html[data-theme] .wh-advice--info { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--blue-bright); }
+html[data-theme] .wh-finding--clear  { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--green-bright); }
+html[data-theme] .wh-finding--slight { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--yellow-bright); }
+html[data-theme] .wh-injury { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--orange-bright); }
+html[data-theme] .wh-injury.is-resolved { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--green-bright); }
+/* "Locked" and "empty" are a dashed edge and quieter text, not a fade: opacity
+   took locked text under 2.5:1 in the measured ochre audit. */
+html[data-theme] .wh-trophy--locked { opacity: 1; box-shadow: var(--nm-flat), inset 0 0 0 1px var(--wh-ctl); }
+html[data-theme] .wh-trophy--locked .wh-trophy__name { color: var(--fg3); }
+html[data-theme] .wh-trophy--unlocked { box-shadow: var(--nm-raise-sm); }
+html[data-theme] .wh-metricpick__btn { border: 1px solid var(--wh-ctl); box-shadow: var(--nm-raise-sm); }
+html[data-theme] .wh-metricpick__btn.is-empty { opacity: 1; border-style: dashed; color: var(--fg4); box-shadow: none; }
+html[data-theme] .wh-metricpick__btn.is-on { box-shadow: var(--nm-inset-sm); border-color: var(--wh-m-c, var(--primary)); color: var(--fg0); }
+html[data-theme] .wh-metricpick__n { opacity: 1; color: var(--fg3); }
+html[data-theme] .wh-empty { border: 2px dashed var(--wh-ctl); border-radius: var(--wh-r-lg); box-shadow: none; }
+
+/* Section identity was a hue; it is now the label and the icon. */
+html[data-theme] .wh-quickbtn__ic,
+html[data-theme] .wh-timer__ic,
+html[data-theme] .wh-streak__top svg { color: var(--fg1); border-radius: var(--wh-r-sm); }
+html[data-theme] .wh-streak { border-top: 0; }
+html[data-theme] .wh-timer__fill { background: var(--primary); }
+/* Running is raised out of its well; paused stays sunk with a dashed edge. */
+html[data-theme] .wh-timer.is-running { box-shadow: var(--nm-raise-sm); background: var(--bg0); }
+html[data-theme] .wh-timer.is-running .wh-timer__ic { background: var(--bg1); }
+html[data-theme] .wh-timer.is-running .wh-timer__clock { color: var(--fg0); }
+html[data-theme] .wh-timer.is-paused { box-shadow: var(--nm-inset-sm), inset 0 0 0 1px var(--wh-ctl); }
+html[data-theme] .wh-heat__cell { border-color: var(--bg2); }
+
+/* Progress: a sunk channel with the value printed beside it; the fill is raised. */
+html[data-theme] .wh-bar { height: 10px; border: 0; border-radius: var(--wh-r-pill); background: var(--bg0); box-shadow: var(--nm-inset-sm); overflow: hidden; }
+html[data-theme] .wh-bar__fill { border-radius: var(--wh-r-pill); }
+html[data-theme] .wh-ring__track { stroke: var(--bg2); }
+html[data-theme] .wh-ring__bar { stroke-linecap: round; }
+
+/* ---------------------------------------------------------------------------
+   4. CONTROLS
+   ------------------------------------------------------------------------- */
+html[data-theme] .wh-btn {
+  border: 1px solid var(--wh-ctl); background: var(--bg0); color: var(--fg0);
+  font-weight: 650; box-shadow: var(--nm-raise-sm);
+  transition: box-shadow var(--nm-press), transform var(--nm-press), background-color var(--wh-fast), color var(--wh-fast), border-color var(--wh-fast);
+}
+html[data-theme] .wh-btn:hover { background: var(--bg0); border-color: var(--wh-ctl); color: var(--fg0); }
+html[data-theme] .wh-btn:active { box-shadow: var(--nm-inset-sm); transform: scale(.98); }
+html[data-theme] .wh-btn--ghost { background: transparent; box-shadow: none; }
+html[data-theme] .wh-btn--ghost:active { box-shadow: var(--nm-inset-sm); }
+html[data-theme] .wh-btn[disabled] { box-shadow: var(--nm-flat); border-style: dashed; opacity: .55; transform: none; }
+
+/* The primary action is the one filled control: accent fill, generated
+   black-or-white text (>=4.5:1, never the theme file's onPrimary). */
+html[data-theme] .wh-btn--primary { background: var(--wh-accent-fill); color: var(--wh-on-accent); border-color: transparent; }
+html[data-theme] .wh-btn--primary:hover { background: var(--wh-accent-fill); color: var(--wh-on-accent); border-color: transparent; }
+html[data-theme] .wh-btn--primary[disabled] { background: var(--bg0); color: var(--fg3); border-color: var(--wh-ctl); }
+/* Danger and success are outlined, never filled: on a red-accent palette
+   (akira, andromeda, arasaka, basalt, quasar) the filled primary is close to red,
+   so a destructive action is told apart by its outline and its label. */
+html[data-theme] .wh-btn--danger { background: var(--bg0); border-color: var(--red-bright); color: var(--red-bright); }
+html[data-theme] .wh-btn--danger:hover { background: color-mix(in srgb, var(--red-bright) 10%, var(--bg0)); border-color: var(--red-bright); color: var(--red-bright); }
+html[data-theme] .wh-btn--success { background: var(--bg0); border-color: var(--green-bright); color: var(--green-bright); }
+html[data-theme] .wh-btn--success:hover { background: color-mix(in srgb, var(--green-bright) 10%, var(--bg0)); }
+
+/* Fields are wells: text goes INTO the surface. */
+html[data-theme] .wh-input,
+html[data-theme] .wh-select {
+  border: 1px solid var(--wh-ctl); background-color: var(--bg0); color: var(--fg0);
+  box-shadow: var(--nm-inset-sm);
+  transition: box-shadow var(--nm-press), border-color var(--wh-fast);
+}
+html[data-theme] .wh-input:focus,
+html[data-theme] .wh-select:focus { border-color: var(--primary); background-color: var(--bg0); box-shadow: var(--nm-inset-sm); }
+/* The chevron is a data-URI with a baked-in colour, so each ground needs its own. */
+html[data-theme] .wh-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A0B0B8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+html[data-theme="selene-day"] .wh-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23262E33' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+html[data-theme] .wh-datenav__date { color-scheme: inherit; border: 1px solid var(--wh-ctl); border-radius: var(--wh-r-sm); box-shadow: var(--nm-inset-sm); }
+html[data-theme] .wh-datenav__btn { border: 1px solid var(--wh-ctl); background: var(--bg0); box-shadow: var(--nm-raise-sm); transition: box-shadow var(--nm-press), transform var(--nm-press); }
+html[data-theme] .wh-datenav__btn:active { box-shadow: var(--nm-inset-sm); transform: scale(.96); }
+/* Backfilling is the worst silent failure this app has, so its state stays loud
+   in every palette: a warning-coloured ring, a tint and the banner. */
+html[data-theme] .wh-datenav.is-past { box-shadow: var(--nm-raise), inset 0 0 0 2px var(--yellow-bright); background: color-mix(in srgb, var(--yellow-bright) 10%, var(--bg0)); }
+html[data-theme] .wh-backfill { border-bottom: 3px solid var(--yellow-bright); box-shadow: 0 6px 14px -4px var(--nm-lo); }
+
+/* Switch: a sunk channel and a raised knob. "On" is also a position. */
+html[data-theme] .wh-switch__track,
+html[data-theme] .toggle__track {
+  border: 1px solid var(--wh-ctl); background: var(--bg0); box-shadow: var(--nm-inset-sm);
+  transition: background-color .2s var(--wh-ease), border-color .2s var(--wh-ease);
+}
+html[data-theme] .wh-switch__track::after,
+html[data-theme] .toggle__track::after { background: var(--fg3); box-shadow: var(--nm-raise-sm); }
+html[data-theme] .wh-switch input:checked + .wh-switch__track,
+html[data-theme] .toggle input:checked + .toggle__track { background: color-mix(in srgb, var(--primary) 22%, var(--bg0)); border-color: var(--primary); }
+html[data-theme] .wh-switch input:checked + .wh-switch__track::after,
+html[data-theme] .toggle input:checked + .toggle__track::after { background: var(--primary); }
+html[data-theme] .wh-switch input:focus-visible + .wh-switch__track,
+html[data-theme] .toggle input:focus-visible + .toggle__track { outline: 3px solid var(--wh-focus); outline-offset: 3px; }
+
+html[data-theme] .wh-check__box { border: 1px solid var(--wh-ctl); border-radius: 8px; box-shadow: var(--nm-inset-sm); }
+
+/* Segmented controls and pill rows: a sunk tray, the selected item raised out of
+   it and coloured — selection is a shape AND an accent, not a shadow alone. */
+html[data-theme] .wh-pills,
+html[data-theme] .wh-seg,
+html[data-theme] .seg { background: var(--bg0); border: 1px solid var(--wh-ctl); box-shadow: var(--nm-inset-sm); }
+html[data-theme] .wh-pill,
+html[data-theme] .wh-seg__btn,
+html[data-theme] .seg__btn { transition: box-shadow var(--nm-press), background-color var(--wh-fast), color var(--wh-fast); }
+html[data-theme] .wh-pill:hover { background: transparent; color: var(--fg0); }
+html[data-theme] .wh-pill.is-active,
+html[data-theme] .wh-seg__btn.is-on,
+html[data-theme] .seg .seg__btn.is-active,
+html[data-theme] .wh-daypick__d.is-on {
+  background: var(--bg0); color: var(--primary); font-weight: 700; box-shadow: var(--nm-raise-sm);
+}
+html[data-theme] .wh-pill.is-active svg { color: var(--primary); }
+html[data-theme] .wh-daypick__d,
+html[data-theme] .wh-rate__btn { border: 1px solid var(--wh-ctl); box-shadow: var(--nm-raise-sm); transition: box-shadow var(--nm-press), transform var(--nm-press); }
+html[data-theme] .wh-daypick__d:active,
+html[data-theme] .wh-rate__btn:active { box-shadow: var(--nm-inset-sm); transform: scale(.96); }
+html[data-theme] .wh-daypick__d.is-on { border-color: var(--primary); box-shadow: var(--nm-inset-sm); }
+html[data-theme] .wh-iconpick,
+html[data-theme] .wh-colorpick { border: 1px solid var(--wh-ctl); background: var(--bg0); box-shadow: var(--nm-raise-sm); }
+html[data-theme] .wh-iconpick.is-on { border-color: var(--primary); box-shadow: var(--nm-inset-sm); color: var(--primary); }
+
+/* Chips are flat labels: a hairline, no shadow — they are not controls. */
+html[data-theme] .wh-chip,
+html[data-theme] .chip,
+html[data-theme] .badge { background: var(--bg0); color: var(--fg1); border: 1px solid var(--wh-ctl); box-shadow: none; }
+html[data-theme] .wh-chip--accent { background: var(--wh-accent-fill); color: var(--wh-on-accent); border-color: transparent; }
+html[data-theme] .wh-chip--accent .wh-faint { color: inherit; }
+/* Status chips sit on the plain ground, not on a tint of their own colour. */
+html[data-theme] .wh-chip--good { background: var(--bg0); color: var(--green-bright); border-color: var(--green-bright); }
+html[data-theme] .wh-chip--warn { background: var(--bg0); color: var(--yellow-bright); border-color: var(--yellow-bright); }
+html[data-theme] .wh-chip--bad  { background: var(--bg0); color: var(--red-bright);  border-color: var(--red-bright); }
+
+html[data-theme] .wh-group__sum { background: var(--bg0); border: 0; border-radius: var(--wh-r-lg); box-shadow: var(--nm-raise); transition: box-shadow var(--nm-press); }
+html[data-theme] .wh-group__sum:hover { background: var(--bg0); }
+html[data-theme] .wh-group[open] > .wh-group__sum { box-shadow: var(--nm-inset); }
+html[data-theme] .wh-group__ic { color: var(--fg0); }
+html[data-theme] .wh-fold > summary { color: var(--fg3); }
+
+/* Hover, only where there is a real pointer: on touch a :hover sticks after the
+   tap, which on a raised control reads as a stuck highlight. */
+@media (hover: hover) and (pointer: fine) {
+  html[data-theme] .wh-btn:hover,
+  html[data-theme] .wh-quickbtn:hover,
+  html[data-theme] .wh-check:hover,
+  html[data-theme] .wh-sheet__item:hover,
+  html[data-theme] .wh-weekrow:hover,
+  html[data-theme] .wh-theme:hover,
+  html[data-theme] .wh-group__sum:hover,
+  html[data-theme] .wh-datenav__btn:hover { background: var(--nm-hover); }
+  html[data-theme] .wh-btn--primary:hover { background: color-mix(in srgb, var(--wh-accent-fill) 88%, var(--fg0)); }
+  html[data-theme] .wh-btn--danger:hover { background: color-mix(in srgb, var(--red-bright) 12%, var(--bg0)); }
+}
+
+/* ---------------------------------------------------------------------------
+   5. NAVIGATION — attached shell: a lit edge on the content side. The active
+   item is sunk, has an accent icon and keeps hub.css's accent mark.
+   ------------------------------------------------------------------------- */
+html[data-theme] .wh-sidebar { background: var(--bg0); border-right: 0; box-shadow: 8px 0 18px -6px var(--nm-lo); }
+html[data-theme] .wh-logo { background: var(--bg0); color: var(--primary); border: 1px solid var(--wh-ctl); border-radius: var(--wh-r); box-shadow: var(--nm-raise-sm); }
+html[data-theme] .wh-sidebar__brand--btn:hover { background: transparent; }
+html[data-theme] .wh-sidebar__brand--btn:hover .wh-logo { color: var(--primary); border-color: var(--primary); }
+html[data-theme] .wh-navbtn { border: 1px solid transparent; box-shadow: var(--nm-flat); transition: box-shadow var(--nm-press), background-color var(--wh-fast), color var(--wh-fast), border-color var(--wh-fast); }
+html[data-theme] .wh-navbtn:hover { background: transparent; color: var(--fg0); }
+html[data-theme] .wh-navbtn.is-active { background: var(--bg0); border-color: transparent; color: var(--fg0); font-weight: 700; box-shadow: var(--nm-inset-sm); }
+html[data-theme] .wh-navbtn.is-active svg { color: var(--primary); }
+html[data-theme] .wh-navbtn.is-active::before { background: var(--primary); left: 0; }
+html[data-theme] .wh-navbtn__dot { background: var(--green-bright); }
+html[data-theme] .wh-sidebar__foot { border-top: 0; box-shadow: inset 0 1px 0 var(--bg2); }
+
+html[data-theme] .wh-topbar { background: var(--bg0); backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 0; box-shadow: 0 8px 16px -8px var(--nm-lo); }
+html[data-theme] .wh-bottomnav { background: var(--bg0); backdrop-filter: none; -webkit-backdrop-filter: none; border-top: 0; box-shadow: 0 -8px 16px -8px var(--nm-lo); }
+html[data-theme] .wh-bottomnav .wh-navbtn { border-radius: var(--wh-r); margin: 6px 2px; box-shadow: var(--nm-flat); }
+html[data-theme] .wh-bottomnav .wh-navbtn.is-active { background: var(--bg0); box-shadow: var(--nm-inset-sm); }
+html[data-theme] .wh-bottomnav .wh-navbtn.is-active svg { color: var(--primary); }
+html[data-theme] .wh-bottomnav .wh-navbtn.is-active span { color: var(--fg0); }
+
+/* "At Desk": idle is a raised chip; running is sunk and coloured, with the
+   elapsed time in words — the one place a fill still means "on". */
+html[data-theme] .wh-atdesk-btn { background: var(--bg0); border: 1px solid var(--wh-ctl); color: var(--fg0); box-shadow: var(--nm-raise-sm); transition: box-shadow var(--nm-press), transform var(--nm-press), color var(--wh-fast); }
+html[data-theme] .wh-atdesk-btn:hover { color: var(--fg0); border-color: var(--wh-ctl); }
+html[data-theme] .wh-atdesk-btn:active { box-shadow: var(--nm-inset-sm); transform: scale(.97); }
+html[data-theme] .wh-atdesk-btn.is-running { background: var(--bg0); border-color: var(--primary); color: var(--primary); box-shadow: var(--nm-inset-sm); }
+html[data-theme] .wh-atdesk-btn.is-running .wh-atdesk-btn__ic { background: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent); }
+html[data-theme] .wh-guide-btn { background: var(--bg0); border: 1px solid var(--wh-ctl); color: var(--fg0); box-shadow: var(--nm-raise-sm); transition: box-shadow var(--nm-press), transform var(--nm-press); }
+html[data-theme] .wh-guide-btn:hover { color: var(--fg0); border-color: var(--wh-ctl); }
+html[data-theme] .wh-guide-btn:active { box-shadow: var(--nm-inset-sm); transform: scale(.94); }
+
+/* ---------------------------------------------------------------------------
+   6. TOASTS, MODALS — raised above the page; the scrim is the palette's own
+   deep tone, never black on a light palette.
+   ------------------------------------------------------------------------- */
+html[data-theme] .wh-toast,
+html[data-theme] .toast { background: var(--bg0); color: var(--fg0); border: 0; border-radius: var(--wh-r); box-shadow: var(--nm-raise-lg); }
+html[data-theme] .wh-modal__backdrop,
+html[data-theme] .modal__backdrop { background: color-mix(in srgb, var(--wh-bg-deep) 72%, transparent); }
+html[data-theme] .wh-modal__close { background: var(--bg0); border: 1px solid var(--wh-ctl); box-shadow: var(--nm-raise-sm); transition: box-shadow var(--nm-press); }
+html[data-theme] .wh-modal__close:active { box-shadow: var(--nm-inset-sm); }
+
+/* ---------------------------------------------------------------------------
+   7. FITNESS (BASALT) — the same shapes through its own class names, and the
+   places its makeover sheet hard-coded orange, which is one palette's accent
+   here and not every palette's.
+   ------------------------------------------------------------------------- */
+html[data-theme] .card {
+  background: var(--bg0); border: 0; border-radius: var(--wh-r-lg); box-shadow: var(--nm-raise);
+}
+html[data-theme] .card .card,
+html[data-theme] .card--glass,
+html[data-theme] .pg-split > *,
+html[data-theme] .pg-targets > * { background: var(--bg0); border: 0; border-radius: var(--wh-r); box-shadow: var(--nm-inset-sm); }
+html[data-theme] .card--accent { border: 0; box-shadow: var(--nm-raise-lg), inset 0 0 0 1px color-mix(in srgb, var(--primary) 38%, transparent); }
+html[data-theme] .card--notch::before { background: var(--primary); }
+html[data-theme] .hero::after { display: none; }
+
+html[data-theme] .btn {
+  --bg: var(--bg0); --bd: var(--wh-ctl); --fg: var(--fg0);
+  border-radius: var(--wh-r); box-shadow: var(--nm-raise-sm);
+  transition: box-shadow var(--nm-press), transform var(--nm-press), background-color var(--wh-fast), border-color var(--wh-fast), opacity var(--wh-fast);
+}
+html[data-theme] .btn:hover { background: var(--bg0); }
+html[data-theme] .btn:active { box-shadow: var(--nm-inset-sm); transform: scale(.98); }
+html[data-theme] .btn--primary { --bg: var(--wh-accent-fill); --bd: transparent; --fg: var(--wh-on-accent); background: var(--wh-accent-fill); }
+html[data-theme] .btn--primary:hover { --bg: var(--wh-accent-fill); background: var(--wh-accent-fill); box-shadow: var(--nm-raise-sm); }
+html[data-theme] .btn--secondary { --bg: var(--bg0); --bd: var(--wh-ctl); --fg: var(--fg1); }
+html[data-theme] .btn--ghost { --bg: transparent; box-shadow: none; }
+html[data-theme] .btn--danger { --bg: var(--bg0); --bd: var(--red-bright); --fg: var(--red-bright); }
+html[data-theme] .btn--danger:hover { --bg: color-mix(in srgb, var(--red-bright) 10%, var(--bg0)); background: color-mix(in srgb, var(--red-bright) 10%, var(--bg0)); }
+html[data-theme] .btn:disabled { box-shadow: var(--nm-flat); border-style: dashed; transform: none; }
+
+html[data-theme] .input,
+html[data-theme] .select,
+html[data-theme] .textarea { background: var(--bg0); border: 1px solid var(--wh-ctl); border-radius: var(--wh-r-sm); box-shadow: var(--nm-inset-sm); }
+html[data-theme] .input:focus,
+html[data-theme] .select:focus,
+html[data-theme] .textarea:focus { border-color: var(--primary); box-shadow: var(--nm-inset-sm); }
+
+html[data-theme] .appbar { background: var(--bg0); backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; border-radius: var(--wh-r-lg); box-shadow: var(--nm-raise); }
+html[data-theme] .nav__btn { border: 1px solid transparent; box-shadow: var(--nm-flat); color: var(--fg3); transition: box-shadow var(--nm-press), background-color var(--wh-fast), color var(--wh-fast); }
+html[data-theme] .nav__btn:hover { background: transparent; color: var(--fg0); }
+html[data-theme] .nav__btn.is-active { background: var(--bg0); color: var(--primary); border-color: transparent; box-shadow: var(--nm-inset-sm); }
+html[data-theme] .nav__btn.is-active .ic { color: var(--primary); opacity: 1; }
+html[data-theme] .fitbar__toggle { background: var(--bg0); border: 1px solid var(--wh-ctl); color: var(--fg0); box-shadow: var(--nm-raise-sm); transition: box-shadow var(--nm-press); }
+html[data-theme] .fitbar__toggle:active { box-shadow: var(--nm-inset-sm); }
+html[data-theme] .fitbar__panel { background: var(--bg0); border: 0; border-radius: var(--wh-r-lg); box-shadow: var(--nm-raise-lg); }
+html[data-theme] .fitbar__item { border: 1px solid transparent; }
+html[data-theme] .fitbar__item:hover { background: transparent; }
+html[data-theme] .fitbar__item[aria-current="page"] { background: var(--bg0); border-color: transparent; box-shadow: var(--nm-inset-sm); }
+html[data-theme] .fitbar__group + .fitbar__group { border-top: 0; box-shadow: 0 -1px 0 var(--bg2); }
+html[data-theme] .badge--primary { color: var(--primary); border-color: var(--primary); background: transparent; }
+html[data-theme] .badge--success { color: var(--green-bright); border-color: var(--green-bright); background: transparent; }
+html[data-theme] .badge--warn    { color: var(--yellow-bright); border-color: var(--yellow-bright); background: transparent; }
+html[data-theme] .badge--info    { color: var(--blue-bright); border-color: var(--blue-bright); background: transparent; }
+html[data-theme] .progress { background: var(--bg0); border: 0; box-shadow: var(--nm-inset-sm); }
+html[data-theme] .progress__bar { background: var(--primary); }
+html[data-theme] .brand__mark { background: var(--bg0); border: 1px solid var(--wh-ctl); box-shadow: var(--nm-raise-sm); }
+html[data-theme] .brand__mark svg { color: var(--primary); }
+html[data-theme] .rung.is-locked { opacity: 1; box-shadow: var(--nm-flat), inset 0 0 0 1px var(--wh-ctl); }
+html[data-theme] .rung.is-locked .rung__name { color: var(--text-300); }
+html[data-theme] .rung.is-done { opacity: 1; }
+html[data-theme] .swap-opt.is-locked { opacity: 1; }
+html[data-theme] .modal__dialog { background: var(--bg0); border: 0; border-radius: var(--wh-r-lg); box-shadow: var(--nm-raise-lg); }
+html[data-theme] .collapsible { background: var(--bg0); border: 0; border-radius: var(--wh-r); box-shadow: var(--nm-inset-sm); }
+html[data-theme] .collapsible__head:hover { background: transparent; }
+
+/* ---------------------------------------------------------------------------
+   8. PHONE — 44px targets on the controls a thumb actually presses (an
+   enhanced target under WCAG 2.2 SC 2.5.5, not the 24px minimum of 2.5.8).
+   ------------------------------------------------------------------------- */
+@media (max-width: 860px) {
+  html[data-theme] .wh-btn,
+  html[data-theme] .wh-quickbtn,
+  html[data-theme] .wh-check,
+  html[data-theme] .wh-atdesk-btn,
+  html[data-theme] .wh-datenav__btn,
+  html[data-theme] .wh-input,
+  html[data-theme] .wh-select,
+  html[data-theme] .btn,
+  html[data-theme] .input,
+  html[data-theme] .select { min-height: 44px; }
+  html[data-theme] .wh-datenav__btn,
+  html[data-theme] .wh-atdesk-btn { min-width: 44px; }
+  html[data-theme] .wh-guide-btn { width: 44px; height: 44px; }
+  html[data-theme] .wh-timer__btn { width: 34px; height: 34px; }
+  html[data-theme] .wh-pill { min-height: 40px; }
+}
+/* The palette picker: 21 tiles in one column is ~3,400px of scroll at 390px. Two
+   columns halve it; the per-tile note (contrast numbers) drops on the phone, and
+   the active palette's own note stays in the summary above the grid. */
+@media (max-width: 640px) {
+  html[data-theme] .wh-themes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html[data-theme] .wh-theme > .wh-theme__note { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   9. MOTION
+   ----------------------------------------------------------------------------
+   The gate, by how often each thing happens:
+     · press feedback         dozens/day   120ms, raised -> inset (section 3-5)
+     · palette switch         rare         a 220ms crossfade of the whole page
+     · switching tabs         tens/day     children rise 4px, 45ms apart, 200ms each
+     · a modal or toast       occasional   the existing entrances, on the strong curve
+   Nothing here is triggered by a keyboard shortcut or runs 100+ times a day.
+   ------------------------------------------------------------------------- */
+
+/* Tabs: the view's direct children rise in a short cascade — but only while
+   Hub.show() has the view flagged `is-entering`. refresh() re-renders the view's
+   innerHTML on every logged glass of water; without the flag every one of those
+   would replay the cascade. The whole-view fade it replaces animated the container
+   and never replayed, so this keeps that property. */
+html[data-theme] .wh-view { animation: none; }
+@keyframes nm-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+html[data-theme] .wh-view.is-entering > * { animation: nm-rise .2s var(--wh-ease) backwards; }
+html[data-theme] .wh-view.is-entering > :nth-child(2) { animation-delay: 45ms; }
+html[data-theme] .wh-view.is-entering > :nth-child(3) { animation-delay: 90ms; }
+html[data-theme] .wh-view.is-entering > :nth-child(4) { animation-delay: 135ms; }
+html[data-theme] .wh-view.is-entering > :nth-child(n+5) { animation-delay: 180ms; }
+
+/* Fitness sections and the hub's own modal/toast entrances: same curve, and a
+   modal scales from .97, never from nothing. */
+@keyframes viewIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+html[data-theme] .view { animation-duration: .22s; }
+@keyframes wh-pop { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+html[data-theme] .wh-modal__dialog { animation-duration: .22s; }
+
+/* Palette switch: the page crossfades instead of snapping. theme.js only starts
+   a view transition when the engine has one and the OS has not asked for less. */
+::view-transition-group(root) { animation-duration: .22s; animation-timing-function: var(--wh-ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* hub.css already collapses durations to .001ms; a stagger's DELAY is not a
+     duration, so without this the content would sit invisible for up to 180ms. */
+  html[data-theme] .wh-view.is-entering > * { animation: none; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  /* Press still sinks (state stays legible) — it just doesn't scale. */
+  html[data-theme] .wh-btn:active,
+  html[data-theme] .btn:active,
+  html[data-theme] .wh-quickbtn:active,
+  html[data-theme] .wh-check:active,
+  html[data-theme] .wh-atdesk-btn:active { transform: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   10. PRINT — shadows do not print; give the primary action an outline instead.
+   ------------------------------------------------------------------------- */
+@media print {
+  html[data-theme] .wh-card, html[data-theme] .card { box-shadow: none; border: 1px solid #999; }
+  html[data-theme] .wh-btn--primary { background: #fff; color: #000; border: 1px solid #000; }
+}

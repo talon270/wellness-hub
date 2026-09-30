@@ -412,18 +412,20 @@ service-worker.js           Offline shell cache + notification click handling
 icons/                      App icons (SVG source + PNG at 192/512, maskable)
 tools/
   serve.py                  Tiny localhost-only static server
+  build-palettes.py         Reads ../Themes/*.txt, writes css/palettes.css + js/palettes.data.js (stdlib only)
   install-service.sh        Installs it as a systemd user service
   uninstall-service.sh      Removes that service
 css/
-  hub.css                   Gruvbox tokens, layout shell, all hub components
+  hub.css                   Layout shell and all hub components (its Gruvbox :root is now only a fallback)
   basalt-gruvbox.css        Re-skins the calisthenics app onto the Gruvbox palette
   basalt-makeover.css       Fixes how that skin is USED: surface ramp, quieter accent
   muscles.css               The Muscles section: coverage table, heat dots, today strip
-  themes.css                The six alternate palettes (see "Palettes" below)
-  neobrutal.css             Shape and type for the two Ochre palettes only; every rule is scoped to them
+  palettes.css              GENERATED — one token block per palette, default (Selene) also :root
+  neumorph.css              Soft raised/sunk shape and the motion every palette is drawn with
 js/
   core.js                   Store, router, dates, toasts, modals, timers, reminders
-  theme.js                  Palette switching: the data-theme attribute and the list
+  theme.js                  Palette switching: the data-theme attribute, the crossfade, the list
+  palettes.data.js          GENERATED — swatch metadata for the Settings picker
   gamify.js                 Streak + badge engine
   insights.js               Series, correlations, heatmap, review, recovery advice
   storage.js                Persistent storage, on-disk backup, photos, CSV
@@ -452,73 +454,144 @@ fitness/
   ironframe_original.html   Untouched original, kept for reference only
 vendor/
   chart.umd.min.js          Chart.js, vendored locally so the app stays offline
-  inter/                    Inter (latin subset, 48 KB) and its OFL licence — used by the Ochre palettes only
+  inter/                    Inter (latin subset, 48 KB) and its OFL licence — unreferenced since the Ochre palettes were retired
 ```
 
 ### Palettes
 
-Seven, switchable from **Settings → Appearance → Palette**: Gruvbox Dark (the
-default), Gruvbox Material, Everforest, Rosé Pine Moon, Tokyo Night, and the
-two Ochre palettes below.
+Twenty-one, switchable from **Settings → Appearance → Palette**: the twenty
+terminal themes in the `Themes/` folder (Selene is the default) and **Selene
+Day**, a light palette derived from Selene because the folder has none. Every
+one is drawn in the same soft raised-and-sunk shape.
 
-The mechanism is one attribute. `css/hub.css` declares the Gruvbox ramp on
-`:root`; `css/themes.css` re-points the same token names under
-`html[data-theme="…"]`, and every other stylesheet resolves through those
-tokens — so the Fitness tab, the muscle heat map and the charts all follow
-without a single component rule changing. `js/theme.js` owns the attribute,
-keeps `<meta name="theme-color">` in step, and rebuilds any open chart, since
-Chart.js needs literal colour strings and therefore caches whatever palette was
-in force when it drew.
+The mechanism is one attribute. `css/palettes.css` defines every token the app
+reads — once per palette, under `html[data-theme="…"]` — and the default is also
+`:root`, so the page is right before any script has run. `css/hub.css` still
+carries a Gruvbox `:root` ramp, but only as a fallback the generated sheet
+overrides. Every other stylesheet resolves through those tokens, so the Fitness
+tab, the muscle heat map and the charts follow without a component rule changing.
+`js/theme.js` owns the attribute, keeps `<meta name="theme-color">` in step, and
+rebuilds any open chart, since Chart.js needs literal colour strings and
+therefore caches whatever palette was in force when it drew.
 
-Two details worth knowing before you add one:
+**Both generated files come from one script.** Run `python3 tools/build-palettes.py`
+after changing a file in `Themes/`; it needs no `.venv` (standard library only),
+prints a contrast table, and **writes nothing and exits 1 if any palette misses
+its floors** — 4.5:1 for every text colour on every surface it can sit on, 3:1 for
+a control's edge. `Themes/` lives outside this repo, so the values are baked in;
+the app never reads it.
+
+### The things most terminal-theme ports get wrong
+
+**The theme file's ground is black, and neumorphism can't be drawn on black.**
+`background` and `surface` are `#000000` in 20 of 20 files. Soft UI is a
+highlight on one edge and a shade on the opposite one; on `#000` the shade has
+nowhere to go. Measured on Selene with the same shadow recipe: shade-to-ground
+separation is 0.00 L\* on `#000000`, −3.6 on the file's own `surfaceVariant`
+(`#0E1418`), −10.3 on that hue lifted to L\* 16 (`#202930`). So the ground is
+each file's own `surfaceVariant`, saturation capped at 20% (uncapped, akira's
+came out `#441A24`, a maroon) and lifted to L\* 16. **The ground is therefore
+computed, not the file's** — the picker's swatch draws the lifted value so a tile
+matches what you get.
+
+**The files have no status colours.** `error`, `success` and `primary` are the
+same value in 20 of 20 (Selene: all `CFD8DC`), so done, warning, danger and info
+are one fixed set in every palette, nudged only until each clears 4.5:1 on that
+palette's surfaces. Five accents also sit within 25° of danger red — akira,
+andromeda, arasaka, basalt, quasar — so on those a filled primary button is close
+to red; destructive buttons are outlined instead of filled and always carry their
+label, which is the only thing telling them apart there.
+
+**The files' "on" colours are unreadable.** `onPrimary` reaches 4.5:1 on
+`primary` in 1 of 20 files; Selene's is 1.25:1 (light text on a light accent).
+Text on an accent fill is black or white, whichever scores higher, and an accent
+used as text is mixed toward the page text colour until it passes — 5 of 20
+accents fail as text on the lifted ground without that.
+
+**A soft shadow is not a control boundary.** On Selene, highlight/ground is
+1.24:1 and shade/ground 1.27:1; WCAG 1.4.11 asks 3:1. Inputs, buttons, switches
+and chips therefore keep a 1px hairline generated at ≥3:1, focus is a 3px accent
+ring, and selection is sunk *and* accent-coloured rather than shadow alone. This is
+less pure than the classic look; the pure look fails contrast.
+
+**Muted text has to clear the floor on the worst surface, not the base one.**
+On Selene Day, muted text that passed on the card ground measured 4.15:1 on the
+darker `bg1` tint that notes and metric buttons sit on. The generator checks the
+ground, the hover tint and the well tint, and takes the worst.
+
+Two details worth knowing before you change one:
 
 - **Translucent fills go through `--*-rgb` triplets.** A rule that writes
-  `rgba(254,128,25,.14)` stays Gruvbox orange forever; `rgba(var(--orange-bright-rgb),.14)`
-  follows the theme. Everything in `css/` was converted to the token form.
-- **The category accents aren't copied between themes.** Gruvbox's seven bright
-  accents span hues 2°–170° and then stop, which leaves thirteen tabs sharing
-  four hue neighbourhoods — `desk` and `insights` are literally the same colour,
-  as are `bodycare` and `achievements`. The alternate themes assign accents on a
-  fixed semantic plan instead, using the palette's own colour where one lands
-  near the target hue and generating the rest at that palette's mean OKLCH
-  lightness and chroma. The default theme is left exactly as it was.
+  `rgba(254,128,25,.14)` stays one palette's orange forever;
+  `rgba(var(--orange-bright-rgb),.14)` follows the theme.
+- **Every shadow is a four-layer list** — outer highlight, outer shade, inset
+  shade, inset highlight, with unused layers as transparent zeros — so raised ↔
+  sunk interpolates layer by layer. Lists with different layer counts jump
+  instead of animating, which is how a press ends up snapping.
 
-**The Ochre pair is a shape, not just a colour.** *Paper Ochre* (light) and
-*Charcoal Ochre* (dark) share square 4px corners, a 2px outline on main
-surfaces, one hard offset shadow on the primary button and on one featured panel
-per screen, and a single ochre `#D7B95E` accent used everywhere. Sections are
-told apart by label and icon, not by hue. `css/themes.css` holds their colours;
-`css/neobrutal.css` holds the geometry, and every rule in it is scoped to
-`html[data-theme$="-ochre"]`, so no selector in it can match the other five
-palettes. Against a reconstructed pre-change copy, 36 of 55 captures of those
-five palettes (11 views × 5) were pixel-identical; the other 19 were the
-Dashboard and Settings reorder, Health's accent going from red to blue, and
-chart animation caught mid-frame.
+### Motion
 
-**Ochre is a fill, never text, on paper.** On the paper card it is 1.83:1 — so
-the filled button carries ink on ochre (8.54:1) and every place the accent sets
-text or an icon uses a deeper ochre (6.85:1). Status colours are text-safe on
-their own ground, and every place one appears has a word beside it (*overdue*,
-*Low — typical of trained people*, *2 left*); colour alone is never the message.
-Faded "off" states (locked trophies, empty metrics) use a dashed edge and a
-quieter text colour instead of `opacity`, which a measured audit showed taking
-trophy text to 2.26:1.
+**Press is the whole interaction language: raised → sunk in 120ms.** Buttons,
+quick-log tiles, switches, nav items and the date arrows sink when pressed. It
+is a `box-shadow` transition, so it is used only on small controls and never on a
+card; cards and view content move with `transform` and `opacity` only.
 
-**What was measured, and what wasn't.** A script walked every visible text
-element on the eleven hub views (1440 and 390 px) and seven of the eight
-Fitness tabs and composed each one's real background: 0 elements below 4.5:1
-(3:1 for large text) in either palette after fixes. At 1440 px the first run
-found 163 (paper) and 168 (charcoal), nearly all from `opacity` dimming. 247
-outlined controls per palette measured at or above 3:1; disabled controls are
-exempt and were skipped. **Not** covered: text inside SVGs
-and over gradients (2 elements on Phase review), hover and pressed states,
-overlays such as the wizard and tour beyond a visual pass, and any physical
-device — the Android countdown face and alarm behaviour need checking on a
-phone, and this pass did not do that.
+| What | Trigger | Motion | Why it exists |
+|---|---|---|---|
+| Press | every tap, dozens a day | 120ms shadow raised → sunk, 2% scale | feedback that the tap registered |
+| Tab switch | tens a day | children rise 4px, 45ms apart, 200ms each | the new view arrives in order instead of all at once |
+| Palette switch | rare | 220ms crossfade of the page | the colours change without a flash |
+| Modal, toast | occasional | existing entrances, on the strong ease-out; modal scales from 97% | unchanged behaviour, one curve |
 
-The choice lives in `wellnessHub.ui`, outside the versioned schema: it isn't in
-a backup and a data reset won't clear it. An inline script in `<head>` stamps it
-before the first paint.
+Two guards that matter: the tab cascade runs only while `Hub.show()` has flagged
+the view `is-entering` (450ms), because `refresh()` re-renders a view on every
+logged glass of water and a permanent class would replay the cascade each time;
+and under `prefers-reduced-motion` the cascade is switched off outright, since a
+stagger's *delay* is not a duration and would otherwise leave content invisible for
+up to 180ms. The palette crossfade uses `document.startViewTransition`, so where
+an engine lacks it the switch is instant — which is also correct. Nothing
+animates from a keyboard shortcut or runs a hundred times a day.
+
+### What was measured, and what wasn't
+
+The same script — every visible text element, its real composited background, WCAG
+ratio, 3:1 for large text — ran on a copy of the pre-change tree rebuilt from git
+and on the new one, across the 12 hub tabs at 1440px:
+
+| Palette | Text elements | Below the floor |
+|---|---|---|
+| Gruvbox Dark (old default) | 1,051 | **108** — 67 on Achievements, 38 on Insights |
+| Paper Ochre (old light) | 1,047 | 1 |
+| Charcoal Ochre (old dark) | 1,047 | 0 |
+| Selene (new default) | 1,057 | **0** |
+| Selene Day | 1,057 | **0** |
+| Selene, 60 days of seeded data | 1,272 | **0** |
+
+The verification suite also switched through **all 21 palettes** by clicking each
+tile in Settings and audited 8 tabs per palette: 0 below the floor, and on every
+palette the 146 controls sampled (Health and Settings) had their edge at ≥3:1. 21 switches left the saved logs
+byte-identical (30,855 bytes before and after). A saved preference from any of
+the retired palettes, from an id that never existed, or from nothing loads Selene
+with no console error. At 390px no horizontal overflow was introduced (none
+before, none after); at 1920px the content is centred beside the sidebar on all
+12 tabs (worst left/right difference 0.0px).
+
+The first light-palette run found 11 elements at 4.15:1 and 3.91:1 — muted text
+that passed on the card ground and failed on the darker tint under notes and
+metric buttons. That is why the generator now checks three surfaces.
+
+**Not covered:** an installed desktop shell (the Update button rebuilds it, and
+whether `startViewTransition` exists in its WebKitGTK is unchecked — the palette
+switch is instant there if not), the Android WebView and any physical device,
+frame rate of the press animation on a low-end phone, hover states (only press
+was driven), the keyboard focus ring (verified in the CSS, not on screen), print
+output, Fitness with real training history, and how any of the motion *feels* —
+that needs a person, at 2–5× duration and again the next day.
+
+The choice lives in `wellnessHub.ui`, outside the versioned schema: it isn't in a
+backup and a data reset won't clear it. Because it is outside the schema, replacing
+the palette list needed no migration — a saved id that is no longer in the list
+falls back to Selene. An inline script in `<head>` stamps it before the first paint.
 
 ### Why the Fitness tab is separate files
 

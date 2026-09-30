@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#1d2021" />
+<meta name="theme-color" content="#202930" />
 <meta name="description" content="Personal wellness hub — calisthenics, mobility &amp; recovery, eye care, dental care, body care, daily wellness habits and health records, with trackers, timers, reminders and streaks. Fully offline, all data stays in your browser." />
 <title>Wellness Hub</title>
 
@@ -16,41 +16,43 @@
 <meta name="mobile-web-app-capable" content="yes" />
 
 <!-- Favicon: inline SVG data URI, no network needed. -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23282828'/%3E%3Cpath d='M12 20s-6.5-4.3-6.5-9A3.8 3.8 0 0 1 12 8.4 3.8 3.8 0 0 1 18.5 11c0 4.7-6.5 9-6.5 9z' fill='none' stroke='%23b8bb26' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23202930'/%3E%3Cpath d='M12 20s-6.5-4.3-6.5-9A3.8 3.8 0 0 1 12 8.4 3.8 3.8 0 0 1 18.5 11c0 4.7-6.5 9-6.5 9z' fill='none' stroke='%23CFD8DC' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E" />
 
 <!--
   STYLESHEET ORDER MATTERS
   1. fitness/basalt.css  — the original calisthenics app's stylesheet, extracted verbatim.
-  2. css/hub.css         — the Wellness Hub shell + all hub modules (Gruvbox tokens live here).
-  3. css/basalt-gruvbox.css — re-maps BASALT's design tokens onto the Gruvbox palette and
+  2. css/hub.css         — the Wellness Hub shell + all hub modules. Its :root tokens are the
+                           pre-Selene fallback; css/palettes.css overrides every one of them.
+  3. css/basalt-gruvbox.css — re-maps BASALT's design tokens onto the hub's tokens and
                               reshapes its chrome so it reads as a native tab, not a bolt-on.
-  4. css/themes.css      — the alternate palettes. Scoped to html[data-theme="…"],
-                           so it outranks every :root block above.
-  5. css/neobrutal.css   — the shape and type of the two "-ochre" palettes, and
-                           nothing else: every rule keys off html[data-theme$="-ochre"].
-  Everything is local: no CDN, works offline and over file://. The one web font
-  (Inter, for the ochre palettes) is a file in vendor/inter/, not a link.
+                              (The file keeps its name; the palette it maps is whatever is applied.)
+  4. css/palettes.css    — GENERATED from ../Themes by tools/build-palettes.py. One token
+                           block per palette; the default (Selene) is also :root, so the page is
+                           right before any script runs.
+  5. css/neumorph.css    — the shape, depth and motion every palette is drawn with. Loaded last.
+  Everything is local: no CDN, works offline and over file://.
 -->
 <link rel="stylesheet" href="fitness/basalt.css" />
 <link rel="stylesheet" href="css/hub.css" />
 <link rel="stylesheet" href="css/basalt-gruvbox.css" />
 <link rel="stylesheet" href="css/basalt-makeover.css" />
 <link rel="stylesheet" href="css/muscles.css" />
-<link rel="stylesheet" href="css/themes.css" />
-<link rel="stylesheet" href="css/neobrutal.css" />
+<link rel="stylesheet" href="css/palettes.css" />
+<link rel="stylesheet" href="css/neumorph.css" />
 
 <!--
   Stamp the saved palette before the first paint. This has to be inline and
   before <body>: js/theme.js runs at the end of the document, by which time a
-  themed page would already have flashed Gruvbox. Deliberately dependency-free
-  and wrapped in try/catch — if storage is unavailable the app simply loads in
-  the default theme, which is what :root says anyway.
+  themed page would already have flashed the default. Deliberately dependency-free
+  and wrapped in try/catch — if storage is unavailable, or holds an id from a
+  palette that no longer exists, no block matches and :root (Selene) applies,
+  which is the default anyway.
 -->
 <script>
 (function () {
   try {
     var id = (JSON.parse(localStorage.getItem("wellnessHub.ui") || "{}") || {}).theme;
-    if (id && id !== "gruvbox") document.documentElement.setAttribute("data-theme", id);
+    document.documentElement.setAttribute("data-theme", id || "selene");
   } catch (e) {}
 })();
 </script>
@@ -460,6 +462,7 @@
 <!-- after core.js: core assigns window.Hub wholesale, so anything hanging off
      the namespace has to attach afterwards. Nothing reads syncMerge until boot. -->
 <script src="js/syncmerge.js"></script>      <!-- Helth's merge rules -->
+<script src="js/palettes.data.js"></script> <!-- GENERATED palette list for the picker -->
 <script src="js/theme.js"></script>         <!-- palette switching -->
 <script src="js/gamify.js"></script>        <!-- streaks + badge engine -->
 <script src="js/insights.js"></script>      <!-- trends, patterns, advice -->

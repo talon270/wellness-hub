@@ -2,7 +2,8 @@
    WELLNESS HUB · THEME
    ----------------------------------------------------------------------------
    Owns the one attribute that reskins the whole app: `data-theme` on <html>.
-   css/themes.css does the rest — a theme is data, not behaviour.
+   css/palettes.css does the rest — a theme is data, not behaviour — and
+   css/neumorph.css draws every palette in the same soft-UI shape.
 
    Three things have to happen on a switch, and only the first is CSS:
 
@@ -12,11 +13,21 @@
      3. Chart.js is re-themed and the open view re-rendered, because charts
         need literal colour strings and therefore hold a copy of the old ones.
 
+   The palette list is js/palettes.data.js, generated with css/palettes.css by
+   tools/build-palettes.py from the Themes/ folder. Both come from the same run,
+   so a swatch in the picker can never disagree with the palette it applies.
+
    The stored preference lives in `wellnessHub.ui` (Hub.uiGet/uiSet) rather than
    the versioned state, so it survives "reset my data" and never rides along in
-   a backup — a theme is about this browser, not about your records. The same
-   key is read by a tiny inline script in index.html <head>, which stamps the
-   attribute before first paint; without it every load would flash Gruvbox.
+   a backup — a theme is about this browser, not about your records. That is
+   also why replacing the old palette list needed no migration: a saved id that
+   is no longer in the list (gruvbox, tokyo-night, paper-ochre …) fails byId()
+   and falls back to DEFAULT. The same key is read by a tiny inline script in
+   index.html <head>, which stamps the attribute before first paint.
+
+   The switch crossfades (document.startViewTransition, GPU-composited) where
+   the engine has it and the OS hasn't asked for reduced motion; anywhere else
+   it is instant, which is also correct.
 
    Public: Hub.theme.list() / .active() / .apply(id) / .label(id)
    Event:  document → "wh:themechange" { detail: { id } }
@@ -25,59 +36,8 @@
   "use strict";
 
   var KEY = "theme";
-  var DEFAULT = "gruvbox";
-
-  /* Preview colours are duplicated from css/themes.css on purpose: the picker
-     has to draw a swatch for a theme that isn't applied, and a CSS custom
-     property only ever reports the value of the theme currently in force. */
-  var THEMES = [
-    {
-      id: "gruvbox", label: "Gruvbox Dark",
-      note: "The original. Warm, high-contrast, unmistakably a terminal theme.",
-      bg: "#1d2021", surface: "#282828", text: "#ebdbb2",
-      dots: ["#fe8019", "#b8bb26", "#fabd2f", "#83a598", "#d3869b"]
-    },
-    {
-      id: "gruvbox-material", label: "Gruvbox Material",
-      note: "Same identity, evened out. Accents stop competing for attention.",
-      bg: "#232323", surface: "#282828", text: "#d4be98",
-      dots: ["#e78a4e", "#a9b665", "#d8a657", "#7daea3", "#d3869b"]
-    },
-    {
-      id: "everforest", label: "Everforest",
-      note: "Green-grey grounds and softer accents. The calmest of the five.",
-      bg: "#232a2e", surface: "#2d353b", text: "#d3c6aa",
-      dots: ["#e69875", "#a7c080", "#dbbc7f", "#7fbbb3", "#d699b6"]
-    },
-    {
-      id: "rose-pine", label: "Rosé Pine Moon",
-      note: "Plum-tinted and low-heat. Reads as a product rather than an editor.",
-      bg: "#232136", surface: "#2a273f", text: "#e0def4",
-      dots: ["#ea9a97", "#9ccfd8", "#f6c177", "#6cb6d4", "#c4a7e7"]
-    },
-    {
-      id: "tokyo-night", label: "Tokyo Night",
-      note: "Cool and deep, with real blues. The biggest departure here.",
-      bg: "#16161e", surface: "#1a1b26", text: "#c0caf5",
-      dots: ["#ff9e64", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7"]
-    },
-    /* The ochre pair (PLAN-neobrutal-ui.md). Appended, not prepended: Gruvbox
-       stays the default and the first tile, and a saved id keeps meaning what
-       it meant. Dots run accent, done, warning, info, danger — the four
-       status colours are the ones that must stay distinguishable. */
-    {
-      id: "paper-ochre", label: "Paper Ochre",
-      note: "Light. Paper ground, ink text, square corners, hard shadows. Ochre fills the main action; it never sets text.",
-      bg: "#f4f1e8", surface: "#fcfaf4", text: "#20201e",
-      dots: ["#d7b95e", "#2e6b34", "#8a5a00", "#1f5f99", "#b3261e"]
-    },
-    {
-      id: "charcoal-ochre", label: "Charcoal Ochre",
-      note: "The dark counterpart: same square shapes and one ochre accent on charcoal.",
-      bg: "#191919", surface: "#242423", text: "#f4f1e8",
-      dots: ["#d7b95e", "#8fc77a", "#f0a038", "#7fb2e5", "#f0736b"]
-    }
-  ];
+  var THEMES = window.WH_PALETTES || [];
+  var DEFAULT = window.WH_PALETTE_DEFAULT || "selene";
 
   function byId(id) {
     for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i];
@@ -98,25 +58,44 @@
     if (v) meta.setAttribute("content", v);
   }
 
+  /* Always stamped, including for the default: css/palettes.css makes the
+     default palette :root as well, so the attribute is for the picker and the
+     inline boot script, not for the first paint. */
   function stamp(id) {
-    var root = document.documentElement;
-    /* Gruvbox is what :root already says in css/hub.css, so it is the absence
-       of an attribute rather than a block of its own. */
-    if (id === DEFAULT) root.removeAttribute("data-theme");
-    else root.setAttribute("data-theme", id);
+    document.documentElement.setAttribute("data-theme", id);
+  }
+
+  function reducedMotion() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }
 
   function apply(id, opts) {
     opts = opts || {};
     if (!byId(id)) id = DEFAULT;
-    stamp(id);
-    setMetaColour();
     if (opts.save !== false) Hub.uiSet(KEY, id);
 
-    /* Charts cached literal hexes from the palette that was in force when they
-       were built; nothing short of a rebuild recolours them. */
-    document.dispatchEvent(new CustomEvent("wh:themechange", { detail: { id: id } }));
-    if (opts.rerender !== false) redrawCharts();
+    function commit() {
+      stamp(id);
+      setMetaColour();
+      /* Charts cached literal hexes from the palette that was in force when they
+         were built; nothing short of a rebuild recolours them. Inside the commit
+         so the crossfade lands on a page whose charts already match. */
+      document.dispatchEvent(new CustomEvent("wh:themechange", { detail: { id: id } }));
+      if (opts.rerender !== false) redrawCharts();
+    }
+
+    /* First paint and the boot re-stamp pass animate:false — there is nothing
+       to fade from. A skipped or aborted transition rejects its promises; the
+       commit has already run by then, so those rejections are noise. */
+    if (opts.animate !== false && document.startViewTransition && !reducedMotion()) {
+      try {
+        var vt = document.startViewTransition(commit);
+        if (vt.ready) vt.ready.catch(function () {});
+        if (vt.finished) vt.finished.catch(function () {});
+        return;
+      } catch (e) { /* fall through to the instant path */ }
+    }
+    commit();
   }
 
   /* Re-render whichever chart-bearing surface is open — and only that one.
@@ -142,7 +121,8 @@
   };
 
   /* The inline boot script in <head> already stamped the attribute; this only
-     re-derives the meta colour, which needs the stylesheets to have loaded. */
+     re-derives it (an unknown saved id becomes the default) and the meta
+     colour, which needs the stylesheets to have loaded. */
   document.addEventListener("DOMContentLoaded", function () {
     stamp(active());
     setMetaColour();

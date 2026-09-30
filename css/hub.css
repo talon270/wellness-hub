@@ -29,12 +29,12 @@
   src: url("../vendor/doto/Doto-Bold.woff2") format("woff2");
 }
 
-/* Inter (SIL OFL 1.1, vendor/inter/OFL.txt) — the sans the two "-ochre" palettes
-   set --wh-font to. Latin subset, one variable file covering weights 400–700
-   (48 KB), fetched once from Google Fonts' static URL and stored here rather than
-   linked: no CDN, no build step, works offline and over file://. A browser only
-   downloads a face something actually uses, so the five older palettes never
-   fetch it. Glyphs outside Latin fall through to the system stack. */
+/* Inter (SIL OFL 1.1, vendor/inter/OFL.txt) — the sans the two retired "-ochre"
+   palettes set --wh-font to. Nothing reads it since css/neumorph.css replaced their
+   shape layer, so a browser never downloads it; the file stays until you decide
+   whether the sans comes back. Latin subset, one variable file covering weights
+   400–700 (48 KB), stored here rather than linked: no CDN, no build step, works
+   offline and over file://. Glyphs outside Latin fall through to the system stack. */
 @font-face {
   font-family: "WH Sans";
   font-style: normal;
@@ -60,6 +60,13 @@
 
 /* ---------------------------------------------------------------------------
    1. DESIGN TOKENS — the real Gruvbox Dark palette
+   ----------------------------------------------------------------------------
+   Since PLAN-neumorphism.md this ramp is only a FALLBACK: css/palettes.css
+   (generated from Themes/) redefines every token below on :root, so it wins on
+   source order and Selene is what renders. It stays so this sheet still opens
+   correctly on its own, and because deleting a ramp other sheets were written
+   against is a change with no upside. Component rules must keep reading these
+   token names — never a literal — or a palette cannot reach them.
    ------------------------------------------------------------------------- */
 :root {
   /* backgrounds, darkest to lightest */
@@ -99,8 +106,8 @@
 
   /* ---- rgb triplets ----------------------------------------------------
      Component rules build translucent fills with rgba(var(--x-rgb), a).
-     They exist so a theme swap (css/themes.css) reaches every wash, glow and
-     hairline in the app — a literal rgba() would stay Gruvbox forever. */
+     They exist so a theme swap (css/palettes.css) reaches every wash, glow and
+     hairline in the app — a literal rgba() would stay one palette forever. */
   --red-bright-rgb:    251,73,52;
   --green-bright-rgb:  184,187,38;
   --yellow-bright-rgb: 250,189,47;
@@ -145,8 +152,9 @@
   --wh-c-bodycare:     var(--green-bright);
   --wh-c-wellness:     var(--purple-bright);
   /* Not red: red belongs to danger alone, and this tab's primary button (Save
-     reading) is painted in its accent. 248° is the hue every other palette in
-     css/themes.css already gives Health; 6.5:1 on the page ground. */
+     reading) is painted in its accent. 248° is the hue the generated palettes'
+     status set leaves free for Health; every palette in css/palettes.css defines
+     this token itself, so this value only shows when that sheet is missing. */
   --wh-c-health:       #6caae5;
   --wh-c-insights:     var(--aqua);
   --wh-c-achievements: var(--green-bright);
@@ -172,7 +180,7 @@
      exist for the desktop/daylight case and are picked by the OS's own
      light/dark preference (this app otherwise only ships dark colour
      *palettes*, not a light/dark pair, so there's no app toggle to key off
-     — see the media query in css/themes.css). Two tones plus one accent is
+     — see the media query just below this block). Two tones plus one accent is
      the whole palette; the accent stays red in both. */
   --face-bg: #000;
   --face-ink: #fff;
@@ -193,6 +201,25 @@
   --wh-sidebar-w: 232px;
   --wh-topbar-h: 56px;
   --wh-bottomnav-h: 62px;
+}
+
+/* ---------------------------------------------------------------------------
+   COUNTDOWN FACE — light variant (PLAN-android.md Part C)
+   ----------------------------------------------------------------------------
+   The face's light/dark split is a different axis from the palette you pick in
+   Settings (AOD black vs. daylight desktop use). It follows the OS's own
+   `prefers-color-scheme` — the native feature that already answers "is this
+   screen in a bright room" without a new setting or a fourth thing to keep in
+   sync. Lived in css/themes.css until that sheet was retired for the generated
+   css/palettes.css; a palette generator must not own a face colour.
+   --face-accent is repeated, unchanged, so both branches stay a complete,
+   explicit pair rather than one inheriting a value from :root by accident. */
+@media (prefers-color-scheme: light) {
+  .wh-face:not(.wh-face--aod) {
+    --face-bg: #f2f2f2;
+    --face-ink: #000;
+    --face-accent: #d71921;
+  }
 }
 
 /* ---------------------------------------------------------------------------

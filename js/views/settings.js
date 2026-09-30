@@ -374,7 +374,7 @@
         " h · profile, habits, how the app counts",
       reminders: on + " of " + keys.length + " reminders on · notifications " +
         '<span class="wh-chip ' + permChipClass(perm, canNotify) + '">' + permLabel(perm, canNotify) + "</span>",
-      look: "Palette: " + Hub.esc(Hub.theme ? Hub.theme.label(Hub.theme.active()) : "Gruvbox Dark"),
+      look: "Palette: " + Hub.esc(Hub.theme ? Hub.theme.label(Hub.theme.active()) : "Selene"),
       data: (links.length ? "Synced to " + links.join(" + ") : "No sync linked") + " · " +
         Hub.dayKeys().length + " days logged"
     };
@@ -396,8 +396,8 @@
      Swatches are drawn from the values in js/theme.js rather than from CSS,
      because a custom property only ever reports the theme currently applied —
      most of the previews would otherwise all paint the active palette.
-     The gallery is folded behind the current choice: seven tiles of prose were
-     most of the card, and nobody needs the other six until they want to change. */
+     The gallery is folded behind the current choice: twenty-one tiles of prose would
+     be most of the card, and nobody needs the other twenty until they want to change. */
   function paletteSwatch(t) {
     return '<span class="wh-theme__prev" style="background:' + t.bg + '" aria-hidden="true">' +
       '<span class="wh-theme__surface" style="background:' + t.surface + '">' +
@@ -441,9 +441,10 @@
           }).join("") +
         "</div>" +
         '<p class="wh-help wh-mt4">' + Hub.icon("info") +
-          " The five original palettes give each section its own colour, spaced far enough apart that no two " +
-          "tabs read as the same. The two Ochre palettes use one accent everywhere and tell sections apart by " +
-          "label and icon instead. Charts and the muscle heat map follow either way." +
+          " Every palette is drawn in the same soft raised-and-sunk shape with one accent; sections are told apart " +
+          "by label and icon, and done, warning, danger and info are the same four colours in all of them. Twenty " +
+          "are the terminal themes in the Themes folder, with the ground lifted from black so the shapes can " +
+          "show; Selene Day is the light one, derived from Selene. Charts and the muscle heat map follow the palette." +
         "</p>" +
       "</details>" +
     "</div>";

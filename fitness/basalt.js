@@ -772,7 +772,7 @@
   }
 
   /* The hub owns both `data-theme` and <meta name="theme-color"> now — see
-     js/theme.js and css/themes.css, where the palettes actually live. Writing
+     js/theme.js and css/palettes.css, where the palettes actually live. Writing
      the attribute from here would wipe the user's choice on every Fitness boot,
      so this only keeps the legacy `ironframe.theme` key in step for the picker
      below, which is itself vestigial (the standalone app's theme grid isn't in
