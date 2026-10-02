@@ -1,0 +1,468 @@
+{
+ "_note": "localStorage as the Stage 1 build (schema v3) left it, captured 2026-10-01 by real clicks: onboarded with tests 10/0/12 s/8/0, one workout on 28 Sep, then a push workout begun at 07:30 IST on 1 Oct with three sets logged and not finished. T11 and T12 in check-workout.py seed from it. Never regenerate it with a newer build: its value is that an old build wrote it.",
+ "ironframe.state.v1": {
+  "version": 3,
+  "meta": {
+   "createdAt": "2026-09-28T12:30:00.674Z",
+   "updatedAt": "2026-10-01T02:00:00.478Z",
+   "onboarded": true
+  },
+  "profile": {
+   "name": "",
+   "age": null,
+   "sex": "male",
+   "heightCm": null,
+   "weightKg": null,
+   "goal": "both",
+   "activity": "moderate",
+   "bmi": null,
+   "tdee": 2800,
+   "surplusTarget": 3300,
+   "macros": {
+    "protein": 116,
+    "carbs": 413,
+    "fat": 92
+   },
+   "hydrationTargetL": 3.2
+  },
+  "equipment": {
+   "pullupBar": false,
+   "dumbbells": true,
+   "bench": true,
+   "kettlebells": true,
+   "rings": false,
+   "nothing": false
+  },
+  "prefs": {
+   "restDefaultSec": 90,
+   "restHoldSec": 60,
+   "volumeMode": "standard",
+   "sessionLength": "focused"
+  },
+  "running": {
+   "goal": null,
+   "startISO": null,
+   "runDays": [
+    3,
+    6,
+    0
+   ],
+   "runLog": [],
+   "streak": {
+    "count": 0,
+    "lastISO": null,
+    "best": 0
+   }
+  },
+  "era": 1,
+  "benchmarks": {
+   "pushups": {
+    "label": "15 clean push-ups",
+    "metric": "reps",
+    "target": 15,
+    "current": 10,
+    "complete": false
+   },
+   "pull": {
+    "label": "5 pull-ups / 20 inverted rows",
+    "metric": "reps",
+    "target": 5,
+    "altTarget": 20,
+    "current": 0,
+    "complete": false
+   },
+   "lsit": {
+    "label": "30s L-sit tuck hold",
+    "metric": "sec",
+    "target": 30,
+    "current": 12,
+    "complete": false
+   },
+   "bulgarian": {
+    "label": "10 Bulgarian split squats /leg",
+    "metric": "reps",
+    "target": 10,
+    "current": 8,
+    "complete": false
+   },
+   "hollow": {
+    "label": "30s hollow body hold",
+    "metric": "sec",
+    "target": 30,
+    "current": 0,
+    "complete": false
+   }
+  },
+  "tiers": {
+   "push": {
+    "level": 2,
+    "repsTarget": 12,
+    "progress": 0
+   },
+   "pull": {
+    "level": 1,
+    "repsTarget": 5,
+    "progress": 0
+   },
+   "squat": {
+    "level": 2,
+    "repsTarget": 14,
+    "progress": 0
+   },
+   "hinge": {
+    "level": 2,
+    "repsTarget": 14,
+    "progress": 0
+   },
+   "core": {
+    "level": 2,
+    "repsTarget": 15,
+    "progress": 0
+   },
+   "shoulder": {
+    "level": 2,
+    "repsTarget": 8,
+    "progress": 0
+   },
+   "dip": {
+    "level": 1,
+    "repsTarget": 8,
+    "progress": 0
+   }
+  },
+  "currentPhase": {
+   "number": 1,
+   "startISO": "2026-09-28T12:30:00.674Z",
+   "lengthDays": 28,
+   "action": "start",
+   "weighIns": []
+  },
+  "sessions": [
+   {
+    "id": "s_1790598604214",
+    "dateISO": "2026-09-28T12:30:04.214Z",
+    "dayKey": "2026-09-28",
+    "type": "push",
+    "exercises": [
+     {
+      "key": "push_2",
+      "pattern": "push",
+      "name": "Push-up",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 9,
+        "weight": 0
+       },
+       {
+        "reps": 0,
+        "weight": 0
+       },
+       {
+        "reps": 0,
+        "weight": 0
+       }
+      ],
+      "difficulty": null,
+      "skipped": false,
+      "flag": null
+     },
+     {
+      "key": "shoulder_2",
+      "pattern": "shoulder",
+      "name": "Elevated Pike Push-up",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 0,
+        "weight": 0
+       },
+       {
+        "reps": 0,
+        "weight": 0
+       },
+       {
+        "reps": 0,
+        "weight": 0
+       }
+      ],
+      "difficulty": null,
+      "skipped": false,
+      "flag": null
+     },
+     {
+      "key": "dip_1",
+      "pattern": "dip",
+      "name": "Bench Dip",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 0,
+        "weight": 0
+       },
+       {
+        "reps": 0,
+        "weight": 0
+       },
+       {
+        "reps": 0,
+        "weight": 0
+       }
+      ],
+      "difficulty": null,
+      "skipped": false,
+      "flag": null
+     },
+     {
+      "key": "core_2",
+      "pattern": "core",
+      "name": "Hollow Body Hold",
+      "era2": false,
+      "accessory": false,
+      "mode": "hold",
+      "unit": "sec",
+      "sets": [
+       {
+        "reps": 0,
+        "weight": 0
+       },
+       {
+        "reps": 0,
+        "weight": 0
+       },
+       {
+        "reps": 0,
+        "weight": 0
+       }
+      ],
+      "difficulty": null,
+      "skipped": false,
+      "flag": null
+     }
+    ],
+    "warmupDone": false,
+    "cooldownDone": false,
+    "notes": "",
+    "volume": 9,
+    "completed": true,
+    "flags": []
+   }
+  ],
+  "bodyweightLog": [],
+  "measurements": [],
+  "sleepLog": [],
+  "nutritionLog": [],
+  "prs": [
+   {
+    "id": "pr_1790598604214_push_2",
+    "exerciseId": "push_2",
+    "exercise": "Push-up",
+    "kind": "reps",
+    "value": 9,
+    "dateISO": "2026-09-28T12:30:04.214Z"
+   }
+  ],
+  "goals": [],
+  "streak": {
+   "count": 1,
+   "lastISO": "2026-09-28",
+   "best": 1
+  },
+  "flagsHistory": [],
+  "phaseHistory": []
+ },
+ "ironframe.ui": {
+  "muscle.seenLevels": {
+   "chest": 1,
+   "delts_front": 1,
+   "delts_side": 1,
+   "triceps": 1,
+   "lats": 1,
+   "upper_back": 1,
+   "lower_back": 1,
+   "biceps": 1,
+   "forearms": 1,
+   "abs": 1,
+   "obliques": 1,
+   "glutes": 1,
+   "quads": 1,
+   "hamstrings": 1
+  },
+  "section": "today",
+  "today.workout": {
+   "dayType": "pull",
+   "startedISO": "2026-10-01T02:00:00.478Z",
+   "warmup": [
+    false,
+    false,
+    false,
+    false,
+    false
+   ],
+   "cooldown": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "exercises": [
+    {
+     "pattern": "pull",
+     "id": "pull_1",
+     "name": "Dead Hang",
+     "level": 1,
+     "mode": "hold",
+     "unit": "sec",
+     "equipment": [
+      "pullupBar"
+     ],
+     "cues": [
+      "Grip the bar slightly wider than shoulders, full grip.",
+      "Let the body hang long but keep shoulders 'active' — slightly engaged.",
+      "Brace the core so you don't swing.",
+      "Breathe steadily and build grip endurance."
+     ],
+     "mistakes": [
+      "Hanging completely passive with shrugged-up, dead shoulders.",
+      "Swinging or kipping to extend the time."
+     ],
+     "readiness": "Advance at a 45-second controlled hang with active shoulders.",
+     "injury": "Build grip slowly to protect the elbows and forearm tendons.",
+     "target": 5,
+     "targetDelta": 0,
+     "targetReason": "",
+     "era2": false,
+     "accessory": false,
+     "restSec": 60,
+     "sets": [
+      {
+       "value": 11,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": 10,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    },
+    {
+     "pattern": "hinge",
+     "id": "hinge_2",
+     "name": "Hip Thrust",
+     "level": 2,
+     "mode": "reps",
+     "unit": "reps",
+     "equipment": [
+      "bench"
+     ],
+     "cues": [
+      "Upper back on a bench, feet flat, shins vertical at the top.",
+      "Tuck the chin and ribs down to keep a neutral spine.",
+      "Drive the hips up until the torso is parallel to the floor.",
+      "Pause and squeeze the glutes, then lower under control."
+     ],
+     "mistakes": [
+      "Hyperextending the back instead of finishing with the glutes.",
+      "Letting the knees cave in on the way up."
+     ],
+     "readiness": "Advance at 15 reps with a full lockout and pause.",
+     "injury": "Keep the chin tucked to avoid loading the neck/lumbar.",
+     "target": 14,
+     "targetDelta": 0,
+     "targetReason": "",
+     "era2": false,
+     "accessory": false,
+     "restSec": 90,
+     "sets": [
+      {
+       "value": 7,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    },
+    {
+     "pattern": "core",
+     "id": "core_2",
+     "name": "Hollow Body Hold",
+     "level": 2,
+     "mode": "hold",
+     "unit": "sec",
+     "equipment": [],
+     "cues": [
+      "Lie on your back, press the lower back flat into the floor.",
+      "Lift the shoulders and legs, arms overhead.",
+      "Hold a shallow 'banana' shape with constant abdominal tension.",
+      "Lower the arms/legs to make it easier, raise them to make it harder."
+     ],
+     "mistakes": [
+      "Lower back arching off the floor (the cardinal sin).",
+      "Holding the breath instead of staying braced."
+     ],
+     "readiness": "Advance at a 30-sec hold with legs low (also the Era I core benchmark).",
+     "injury": "Keep the lumbar pinned — arching turns this into a back exercise.",
+     "target": 15,
+     "targetDelta": 0,
+     "targetReason": "",
+     "era2": false,
+     "accessory": false,
+     "restSec": 60,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    }
+   ],
+   "notes": "",
+   "setCount": 3,
+   "volumeMode": "standard",
+   "dayKey": "2026-10-01"
+  },
+  "rt": null
+ }
+}

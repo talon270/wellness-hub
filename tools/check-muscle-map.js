@@ -4,7 +4,7 @@
  *
  *   node tools/check-muscle-map.js
  *
- * Two assertions, and the second one is the important one:
+ * Three assertions, and the second one is the important one:
  *
  *   1. Every exercise id in EXERCISE_DB has an explicit entry in MUSCLE_MAP.
  *      (The pattern fallback is a safety net, not a substitute.)
@@ -14,6 +14,11 @@
  *      UI and an unearnable badge. Writing this check FIRST is what would have
  *      caught the five phantom groups (neck, calves, adductors, traps, rear
  *      delts) that an imported taxonomy brought in.
+ *
+ *   3. The weekly-target model (MUSCLE_WEEK) covers every slot of every
+ *      template in fitness/basalt.js, and no template leaves a group untrained
+ *      (section 6). The templates are read from basalt.js, so a new one is
+ *      audited the day it is added.
  *
  * Exits non-zero on any failure, so it can gate a commit.
  */
@@ -146,66 +151,86 @@ console.log("\ncoverage (exercises touching each group):\n");
 const rows = GROUPS.map((g) => ({
   group: g.label,
   primary: primaryCount[g.key],
-  total: anyCount[g.key],
-  target: g.weeklyTarget
+  total: anyCount[g.key]
 })).sort((a, b) => b.total - a.total);
 const pad = (s, n) => String(s).padEnd(n);
-console.log("  " + pad("group", 18) + pad("primary", 9) + pad("any", 6) + "weekly target");
+console.log("  " + pad("group", 18) + pad("primary", 9) + "any");
 rows.forEach((r) =>
-  console.log("  " + pad(r.group, 18) + pad(r.primary, 9) + pad(r.total, 6) + r.target)
+  console.log("  " + pad(r.group, 18) + pad(r.primary, 9) + r.total)
 );
 
-/* -- --targets: compute the weekly volume the default program delivers ----
-   This is what makes `weeklyTarget` a measurement rather than a guess. The
-   model is the app's own defaults, read straight out of fitness/basalt.js:
-     DAY_PATTERNS  the 4-day rotation (one push/pull/legs/fullbody per week)
-     BASE_REPS     steady-state rep targets per pattern
-     TARGET_SETS   3
-   Holds convert at 5s = 1 unit, matching engine.sessionVolume.
+/* -- 6. the weekly-target model, over every template -----------------------
+   App.muscles.weeklyTargets works a group's target out at run time from the
+   active template's slots (fitness/muscles.js). This runs the same arithmetic
+   for every template in fitness/basalt.js, on the default day patterns with
+   every slot on, which is what a profile that owns a pull-up bar and has the
+   dip switched on trains. It fails on the two ways the model goes quiet:
+     · a slot with no unitsPerSet entry or no profile (the row had neither
+       until this check was written, and its work counted as nothing);
+     · a template that never trains a group, which would pin its target at 0.
+   The templates are read out of basalt.js, never copied, so a new one is
+   audited the day it is added (plan D7). The numbers it prints are for you to
+   eyeball: the app's own targets are per profile (equipment, optional slots),
+   so they can be lower than these. */
+const SHARE = { primary: 1.0, secondary: 0.4, stabiliser: 0.15 };   // fitness/muscles.js
+const WEEK = sandbox.window.MUSCLE_WEEK;
 
-   Profiles come from MUSCLE_FALLBACK, not from a specific exercise, because a
-   target describes what "a push day" trains — it should not move when the user
-   climbs from Wall Push-up to Archer Push-up. */
-if (process.argv.includes("--targets")) {
-  const DAY_PATTERNS = {
-    push: ["push", "shoulder", "dip", "core"],
-    pull: ["pull", "hinge", "core"],
-    legs: ["squat", "hinge", "core"],
-    fullbody: ["push", "pull", "squat", "core"]
-  };
-  const BASE_REPS = { push: 12, pull: 8, squat: 14, hinge: 14, core: 30, shoulder: 8, dip: 8 };
-  const HOLD_PATTERNS = new Set(["core"]);
-  const TARGET_SETS = 3;
-  const SHARE = { primary: 1.0, secondary: 0.4, stabiliser: 0.15 };
+const basalt = fs.readFileSync(path.join(root, "fitness/basalt.js"), "utf8");
+function fromBasalt(name, open, close) {
+  const m = basalt.match(new RegExp("\\n  var " + name + "\\s*=\\s*(\\" + open + "[\\s\\S]*?\\" + close + ");\\n"));
+  if (!m) { fail(`could not find ${name} in fitness/basalt.js`); return null; }
+  return m[1];
+}
+const rotationSrc = fromBasalt("ROTATION", "[", "]");
+const patternsSrc = fromBasalt("DAY_PATTERNS", "{", "}");
+const templatesSrc = fromBasalt("TEMPLATES", "{", "}");
+let TEMPLATES = {}, DAY_PATTERNS = {};
+if (rotationSrc && patternsSrc && templatesSrc) {
+  const ctx = vm.createContext({});
+  vm.runInContext("var ROTATION = " + rotationSrc + ";", ctx);
+  DAY_PATTERNS = vm.runInContext("(" + patternsSrc + ")", ctx);
+  TEMPLATES = vm.runInContext("(" + templatesSrc + ")", ctx);
+}
+if (!WEEK) fail("fitness/muscles.data.js has no MUSCLE_WEEK");
 
-  const perWeek = {};
-  Object.values(DAY_PATTERNS).forEach((pats) =>
-    pats.forEach((p) => { perWeek[p] = (perWeek[p] || 0) + 1; })
-  );
-
+function measure(tpl) {
+  const perType = tpl.perWeek / tpl.order.length;
   const work = {};
   groupKeys.forEach((k) => { work[k] = 0; });
-  Object.entries(perWeek).forEach(([pattern, times]) => {
-    const reps = BASE_REPS[pattern];
-    const unitsPerSet = HOLD_PATTERNS.has(pattern) ? Math.round(reps / 5) : reps;
-    const units = unitsPerSet * TARGET_SETS * times;
-    const prof = FALLBACK[pattern];
-    if (!prof) return;
+  tpl.order.forEach((day) => (DAY_PATTERNS[day] || []).forEach((slot) => {
+    const units = WEEK.unitsPerSet[slot];
+    const prof = FALLBACK[WEEK.profileOf[slot] || slot];
+    if (!units) { fail(`MUSCLE_WEEK.unitsPerSet has no "${slot}" (day ${day})`); return; }
+    if (!prof) { fail(`MUSCLE_FALLBACK has no profile for "${slot}" (day ${day})`); return; }
     for (const tier of ["primary", "secondary", "stabiliser"]) {
       (prof[tier] || []).forEach((k) => {
-        if (k in work) work[k] += units * SHARE[tier];
+        if (k in work) work[k] += units * WEEK.sets * perType * SHARE[tier];
       });
     }
-  });
-
-  console.log("measured weekly targets (default 4-day rotation, 3 sets, steady-state BASE_REPS):\n");
-  GROUPS.forEach((g) => {
-    const measured = Math.round(work[g.key]);
-    const flag = measured === g.weeklyTarget ? "" : `   <-- data file says ${g.weeklyTarget}`;
-    console.log(`    { key: "${g.key}", weeklyTarget: ${measured} }${flag}`);
-  });
-  console.log("");
+  }));
+  const out = {};
+  groupKeys.forEach((k) => { out[k] = Math.round(work[k]); });
+  return out;
 }
+
+const measured = {};
+const templateIds = Object.keys(TEMPLATES);
+console.log(`\nweekly-target model — ${templateIds.length} templates read from fitness/basalt.js\n`);
+templateIds.forEach((id) => {
+  const tpl = TEMPLATES[id];
+  measured[id] = measure(tpl);
+  const untrained = [...groupKeys].filter((k) => !(measured[id][k] > 0));
+  if (untrained.length) {
+    untrained.forEach((k) => fail(`${id}: ${tpl.label} never trains ${k}, so its target would be 0`));
+  } else {
+    ok(`${pad(id, 11)} ${tpl.perWeek}/wk over ${tpl.order.join(" + ")} — all ${groupKeys.size} groups trained`);
+  }
+});
+console.log("\n  " + pad("group", 18) + templateIds.map((id) => pad(id, 12)).join(""));
+GROUPS.forEach((g) =>
+  console.log("  " + pad(g.label, 18) + templateIds.map((id) => pad(measured[id][g.key], 12)).join(""))
+);
+console.log("");
 
 console.log(failed ? "\nFAILED\n" : "\nOK\n");
 process.exit(failed ? 1 : 0);

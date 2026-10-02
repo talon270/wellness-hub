@@ -8,7 +8,8 @@
      · SHAPES        the 25 fields under `logs`, grouped into four kinds
      · STAMPING      set `updatedAt` on records that actually changed
      · BACKFILL      give a v3 save the stamps a v4 merge needs
-     · MERGE         combine a file payload with the local one
+     · MERGE         combine a file payload with the local one, BASALT's
+                     fitness key included (mergeIronframe)
 
    The merge is per-shape rather than per-field. Twenty-five fields collapse
    into four kinds with no remainder, so a per-field table would be 25 rows
@@ -269,6 +270,115 @@
     return out;
   }
 
+  /* ----------------------------------------------------------------------
+     BASALT (fitness/basalt.js, key ironframe.state.v1)
+     ----------------------------------------------------------------------
+     Its logged collections carry ids — sessions `s_`, flags `f_`, goals `g_`,
+     runs `run_`, PRs `pr_` — so they union like the Hub's arrays. Replacing
+     the whole array, as the generic field merge did, kept one device's
+     workouts and dropped the other's.
+
+     The same id on both sides keeps the newer `updatedAt`, a tie keeping the
+     LOCAL copy — the Hub's mergeById rule. BASALT stamps the three places it
+     edits a saved record: a session's volume and notes (session log → Edit),
+     a goal's done and pinned toggles, a run re-logged under its own id, and a
+     recovery block ended early (its `endedKey`).
+     A record never edited has no stamp, so any edit outranks it. A deleted
+     record still comes back from a device that has it: no tombstones (R1-4).
+
+     Arrays without ids (bodyweightLog, measurements, sleepLog, nutritionLog,
+     phaseHistory, currentPhase.weighIns) still merge whole, local winning —
+     each needs its own rule, which is out of scope for this step
+     (plans/PLAN-workout-progression.md, Out of scope). */
+  var IRON_ID_ARRAYS = ["sessions", "flagsHistory", "goals", "recoveryBlocks"];
+
+  /* Same id → newer `updatedAt`, a tie → local (b, read last). An item with
+     no id keys on its own contents, so two identical legacy records collapse
+     and two different ones both survive. */
+  function unionById(a, b) {
+    var byKey = new Map();
+    [a || [], b || []].forEach(function (arr) {
+      arr.forEach(function (it) {
+        if (!it) return;
+        var k = it.id != null ? "id:" + it.id : "raw:" + JSON.stringify(it), cur = byKey.get(k);
+        if (!cur || (it.updatedAt || "") >= (cur.updatedAt || "")) byKey.set(k, it);
+      });
+    });
+    return Array.from(byKey.values());
+  }
+
+  /* A PR is a best, so two devices' records for one exercise and kind
+     resolve to the higher value — and that value's own record, date
+     included. Each device mints its own `pr_` id, which is why this keys on
+     the exercise rather than the id. A tie keeps the local record. */
+  function mergePRs(a, b) {
+    var best = new Map();
+    [a || [], b || []].forEach(function (arr) {
+      arr.forEach(function (p) {
+        if (!p) return;
+        var ex = p.exerciseId || p.exercise;
+        var k = ex != null ? ex + "|" + p.kind : "id:" + p.id;
+        var cur = best.get(k);
+        if (!cur || (Number(p.value) || 0) >= (Number(cur.value) || 0)) best.set(k, p);
+      });
+    });
+    return Array.from(best.values());
+  }
+
+  /* `training` (BASALT schema v4). Every record in it travels whole: merging
+     field by field — what mergeFields does to nested objects — can pair one
+     device's exercise with the other's setup and stamp the result as the
+     newest choice. A record keeps the newer stamp; a tie, or a record with no
+     stamp on either side, keeps local.
+       slots       newer `acceptedAt`. A carried-over slot has none, so it
+                   loses to any prescription actually accepted elsewhere.
+       decisions   keyed "exerciseId|sessionId", so they union; the newer
+                   `at` takes a shared key.
+       assessment  one record, newer `at`. */
+  function newerRecord(f, l, stamp) {
+    if (!isObj(f)) return l === undefined ? f : l;
+    if (!isObj(l)) return f;
+    return (f[stamp] || "") > (l[stamp] || "") ? f : l;
+  }
+  function recordsByStamp(f, l, stamp) {
+    var out = {};
+    Object.keys(f || {}).forEach(function (k) { out[k] = f[k]; });
+    Object.keys(l || {}).forEach(function (k) { out[k] = newerRecord(out[k], l[k], stamp); });
+    return out;
+  }
+  function mergeTraining(f, l) {
+    if (!isObj(f)) return l;
+    if (!isObj(l)) return f;
+    return Object.assign({}, f, l, {
+      slots: recordsByStamp(f.slots, l.slots, "acceptedAt"),
+      decisions: recordsByStamp(f.decisions, l.decisions, "at"),
+      assessment: newerRecord(f.assessment, l.assessment, "at")
+    });
+  }
+
+  function mergeIronframe(file, local) {
+    if (!file) return local;
+    if (!local) return file;
+    var out = mergeFields(file, local, true);
+    IRON_ID_ARRAYS.forEach(function (f) { out[f] = unionById(file[f], local[f]); });
+    out.prs = mergePRs(file.prs, local.prs);
+    if (file.training || local.training) out.training = mergeTraining(file.training, local.training);
+    if (out.running) {
+      /* A copy: when only one side has `running`, mergeFields hands back that
+         side's own object, and the inputs must not be mutated. */
+      out.running = Object.assign({}, out.running, {
+        runLog: unionById((file.running || {}).runLog, (local.running || {}).runLog)
+      });
+    }
+    /* The higher version, never local's: a device on an older build must
+       carry a newer save's version forward so it opens read-only
+       (basalt.js READ_ONLY) instead of rewriting it in the old shape. */
+    var vf = typeof file.version === "number" ? file.version : 0;
+    var vl = typeof local.version === "number" ? local.version : 0;
+    if (vf || vl) out.version = Math.max(vf, vl);
+    return out;
+  }
+
   /* Merge two whole backup payloads — the shape Helth actually writes to disk
      (see storage.js `payload()` / `fullPayload()`). */
   function mergePayload(file, local) {
@@ -279,10 +389,8 @@
       formatVersion: Math.max(local.formatVersion || 0, file.formatVersion || 0),
       exportedAt: new Date().toISOString(),
       wellnessHub: mergeState(file.wellnessHub, local.wellnessHub),
-      /* BASALT keeps its own key. Treated as one nested object rather than
-         given a bespoke merge, because nothing in it is keyed by id and a
-         field-level union is the honest generic answer. */
-      ironframe: mergeFields(file.ironframe, local.ironframe, true),
+      /* BASALT keeps its own key and its own rules — see mergeIronframe. */
+      ironframe: mergeIronframe(file.ironframe, local.ironframe),
       /* Photo bytes never change once written, so there is nothing to
          resolve — union by id and keep everything. */
       photoData: (function () {

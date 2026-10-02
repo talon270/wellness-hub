@@ -44,6 +44,7 @@
   var MAP    = window.MUSCLE_MAP || {};
   var FALL   = window.MUSCLE_FALLBACK || {};
   var RANKS  = window.MUSCLE_RANKS || [];
+  var WEEK   = window.MUSCLE_WEEK || { sets: 3, unitsPerSet: {}, profileOf: {} };
 
   var GROUP_BY_KEY = {};
   GROUPS.forEach(function (g) { GROUP_BY_KEY[g.key] = g; });
@@ -172,9 +173,9 @@
      and one at 00:10 aren't a day apart by accident). */
   function sessionsWithin(s, days) {
     if (days == null) return completed(s);
-    var today = App.lib.dayKey(App.lib.iso());
+    var today = App.lib.today();
     return completed(s).filter(function (x) {
-      return App.lib.daysBetween(App.lib.dayKey(x.dateISO), today) < days;
+      return App.lib.daysBetween(App.lib.sessionDay(x), today) < days;
     });
   }
 
@@ -182,9 +183,36 @@
      4. THE VIEW MODEL — one call, everything a row needs
      ==================================================================== */
 
+  /* The weekly target per group under the template you train on (plan D7):
+     a week of that template's slots at MUSCLE_WEEK's steady-state units, so a
+     ratio near 1.0 means "you followed your template". The slots come from
+     engine.slotsFor, which is why a profile with no pull-up bar rows where the
+     pull would be, and why a slot you left off adds nothing. The standard
+     ("focused") session is used so Short and Full read as under or over it.
+     { key: units, ... } plus the template's label for the card to say whose
+     target it is. */
+  function weeklyTargets(s) {
+    var E = App.engine, id = s && s.prefs && E.TEMPLATES[s.prefs.template] ? s.prefs.template : "rotation";
+    var tpl = E.TEMPLATES[id], perType = tpl.perWeek / tpl.order.length, work = {};
+    tpl.order.forEach(function (day) {
+      E.slotsFor(day, "focused").forEach(function (sl) {
+        var units = WEEK.unitsPerSet[sl.slot];
+        var prof = FALL[WEEK.profileOf[sl.slot] || sl.slot];
+        if (!units || !prof) return;            /* tools/check-muscle-map.js fails on this */
+        var u = units * WEEK.sets * perType;
+        addWork(work, prof.primary,    u, PRIMARY_SHARE);
+        addWork(work, prof.secondary,  u, SECONDARY_SHARE);
+        addWork(work, prof.stabiliser, u, STABILISER_SHARE);
+      });
+    });
+    Object.keys(work).forEach(function (k) { work[k] = Math.round(work[k]); });
+    work.template = tpl.label;
+    return work;
+  }
+
   /* Heat bucket, measured against the group's own weekly target so a light
-     week looks light. Targets come from the default program, so ratio ~1.0
-     means "you followed the plan" rather than "you beat an arbitrary number". */
+     week looks light. Ratio ~1.0 means "you followed your template" rather
+     than "you beat an arbitrary number". */
   function bucketFor(ratio, work) {
     if (work <= 0) return "cold";
     if (ratio < 0.5) return "low";
@@ -204,9 +232,9 @@
   function lastTrainedMap(s) {
     return cached(s, "last", function () {
       var out = {};
-      var today = App.lib.dayKey(App.lib.iso());
+      var today = App.lib.today();
       completed(s).forEach(function (sess) {
-        var d = App.lib.daysBetween(App.lib.dayKey(sess.dateISO), today);
+        var d = App.lib.daysBetween(App.lib.sessionDay(sess), today);
         (sess.exercises || []).forEach(function (ex) {
           var prof = profileFor(ex);
           if (!prof) return;
@@ -235,16 +263,18 @@
     var win  = windowDays == null ? all : workByMuscle(sessionsWithin(s, windowDays));
     var week = weekWork(s);
     var last = lastTrainedMap(s);
+    var targets = weeklyTargets(s);
 
     return GROUPS.map(function (g) {
       var total   = all[g.key] || 0;
       var inWin   = win[g.key] || 0;
       var w7      = week[g.key] || 0;
-      var ratio   = g.weeklyTarget > 0 ? w7 / g.weeklyTarget : 0;
+      var target  = targets[g.key] || 0;
+      var ratio   = target > 0 ? w7 / target : 0;
       var info    = levelInfo(total);
       return {
         key: g.key, label: g.label, short: g.short, region: g.region,
-        target: g.weeklyTarget,
+        target: target, targetFor: targets.template,
         work: total, windowWork: inWin, week: w7,
         ratio: ratio, bucket: bucketFor(ratio, w7), bucketLabel: BUCKET_LABEL[bucketFor(ratio, w7)],
         lastDays: last[g.key] == null ? null : last[g.key],
@@ -538,7 +568,7 @@
         progress +
         '<div class="ms-detail__grid">' +
           '<div><div class="ms-detail__k">This week</div><div class="ms-detail__v mono">' + row.week + '</div></div>' +
-          '<div><div class="ms-detail__k">Weekly target</div><div class="ms-detail__v mono">' + row.target + '</div></div>' +
+          '<div><div class="ms-detail__k">Weekly target</div><div class="ms-detail__v mono">' + row.target + '</div><div class="faint text-xs">' + esc(row.targetFor) + ' · assumes ' + WEEK.sets + ' sets a slot</div></div>' +
           '<div><div class="ms-detail__k">Status</div><div class="ms-detail__v">' + row.bucketLabel + '</div></div>' +
           '<div><div class="ms-detail__k">Last trained</div><div class="ms-detail__v mono">' + lastText(row.lastDays) + '</div></div>' +
         '</div>' +
@@ -626,25 +656,13 @@
     return { planned: planned, logged: logged };
   }
 
-  /* The exercises the ready screen would build for a day type. Uses the
-     engine's own movement chooser so it tracks the user's tier levels. A
-     per-session swap made in the preview isn't visible from out here, so the
-     strip stays at the pattern's default — right for a preview, and it
-     re-renders the moment a session actually starts. */
+  /* The exercises the ready screen would build for a day type: the engine's
+     own builder, so the strip shows the row a no-bar pull day trains, not a
+     Dead Hang. A per-session swap made in the preview isn't visible from out
+     here, so the strip stays at the slot's prescription — right for a
+     preview, and it re-renders the moment a session actually starts. */
   function previewExercises(dayType) {
-    var s = App.getState();
-    var pats = (App.engine.DAY_PATTERNS || {})[dayType] || [];
-    return pats.map(function (p) {
-      var mv = App.engine.movementFor ? App.engine.movementFor(p) : null;
-      var tier = (s.tiers || {})[p] || {};
-      return {
-        id: mv ? mv.id : null,
-        pattern: p,
-        mode: mv ? mv.mode : "reps",
-        target: tier.repsTarget || 10,
-        sets: [0, 0, 0]
-      };
-    });
+    return App.engine.buildWorkout(dayType).exercises;
   }
 
   function stripHtml(data, opts) {
@@ -724,8 +742,10 @@
     var host = document.createElement("div");
     host.innerHTML = html;
     var node = host.firstChild;
-    var headEl = el.querySelector(".page-head");
-    if (headEl && headEl.nextSibling) headEl.parentNode.insertBefore(node, headEl.nextSibling);
+    /* Below the prescriptions (plan C5): after the exercise list in a
+       session, after the hero that holds the preview on the ready screen. */
+    var after = el.querySelector("#ex-list") || el.querySelector(".hero") || el.querySelector(".page-head");
+    if (after && after.parentNode) after.parentNode.insertBefore(node, after.nextSibling);
     else el.insertBefore(node, el.firstChild);
   }
 
@@ -775,6 +795,7 @@
     xpForLevel: xpForLevel,
     levelInfo: levelInfo,
     workByMuscle: workByMuscle,
+    weeklyTargets: function () { return weeklyTargets(App.getState()); },
     sessionBreakdown: sessionBreakdown,
     invalidate: invalidate,
 

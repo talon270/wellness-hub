@@ -9,6 +9,7 @@
      App.saveState()                -> persists App.STATE to Local Storage
      App.updateState(path, value)   -> dot-path set + persist (+ re-render)
      App.resetState()               -> wipe + restart onboarding
+     App.readOnly()                 -> null | "unreadable" | "newer" (no writes while set)
      App.defaultState()             -> fresh default-state factory
      App.showSection(name)          -> router (dashboard|today|program|
                                        nutrition|progress|evaluation)
@@ -44,7 +45,7 @@
     }
   ];
   var UI_KEY        = "ironframe.ui";        // tiny, non-schema UI prefs
-  var SCHEMA_VERSION = 3;                    // v2: prefs.sessionLength · v3: repaired progression targets
+  var SCHEMA_VERSION = 4;                    // v2: prefs.sessionLength · v3: repaired progression targets · v4: training prescriptions
 
   /* ----------------------------------------------------------------------
      STATIC PROGRAM DATA — Level 1–6 progressions per movement pattern.
@@ -118,7 +119,11 @@
         sex: "male",
         heightCm: null,
         weightKg: null,
-        goal: "both",             // "strength" | "size" | "both"
+        goal: "both",             // "strength" | "size" | "both" — sets rep ranges (training.data.js GOAL_RANGES)
+        /* Bodyweight direction, its own optional setting (plan D2): "gain" |
+           "hold" | "lose", or null for no direction. The training goal no
+           longer implies one, and the phase report doesn't use either. */
+        weightDirection: null,
         activity: "moderate",
         bmi: null,
         tdee: 2800,
@@ -141,23 +146,33 @@
       prefs: {
         restDefaultSec: 90,       // default between-set rest timer
         restHoldSec: 60,          // default rest after a timed hold
-        volumeMode: "standard",   // "standard" | "extended" | "max"
+        volumeMode: "standard",   // "standard" | "extended" (+1 set); an old "max" reads as "extended"
         /* How MANY movements a session contains, as opposed to how hard each
-           one is — volumeMode only ever adds sets/reps/density to the same
-           3-4 exercises. Independent of it and combinable with it. */
-        sessionLength: "focused"  // "focused" | "full"
+           one is — volumeMode only ever adds sets to the same 3-4
+           exercises. Independent of it and combinable with it. */
+        sessionLength: "focused", // "short" | "focused" | "full"
+        /* The template (engine TEMPLATES). null is the rotation, which every
+           save had before templates existed; it stays until you choose. */
+        template: null
       },
 
-      /* — Running program (complements the lifting rotation on off-days) —
+      /* — Running program (fixed run days; the lifting follows your last session, so the two can land together) —
          goal:    null until the user picks one ("base" | "stamina" | "sprint")
          startISO: anchor date the week-by-week plan counts from
-         runLog:   [{ id, dateISO, kind, distanceKm, durationSec, rpe, notes }] */
+         runLog:   [{ id, dateISO, kind, distanceKm, durationSec, rpe, notes }]
+         weekOffset  weeks you chose to repeat: the plan week is the calendar week minus this
+         askedWeek   the calendar week whose "repeat or move on" was answered (null: none)
+         moved       { "YYYY-MM-DD": "YYYY-MM-DD" } a run moved off its day, by its planned date
+         The last three are absent in older saves and read as 0, null and {}. */
       running: {
         goal: null,
         startISO: null,
-        runDays: [3, 6, 0],   // Wed, Sat, Sun — the days the lifting rotation leaves open
+        runDays: [3, 6, 0],   // Wed, Sat, Sun: fixed weekdays, unlike the lifting
         runLog: [],
-        streak: { count: 0, lastISO: null, best: 0 }
+        streak: { count: 0, lastISO: null, best: 0 },
+        weekOffset: 0,
+        askedWeek: null,
+        moved: {}
       },
 
       /* — Era state: 1 = Calisthenics Foundation, 2 = Hybrid Strength — */
@@ -188,7 +203,7 @@
         number: 1,
         startISO: nowISO,
         lengthDays: 28,
-        action: "start",        // start | advance | consolidate | deload
+        action: "start",        // legacy label (advance | consolidate | deload); only volumeFactor < 1 still does anything
         weighIns: []            // up to 4 weekly weights used by the evaluator
       },
 
@@ -202,7 +217,25 @@
       goals: [],            // { id, text, target, byPhase, metric, pinned, done }
       streak: { count: 0, lastISO: null, best: 0 },
       flagsHistory: [],     // { id, dateISO, exerciseKey, pattern, bodyPart, severity, substitutedTo }
-      phaseHistory: []      // { number, score, grade, metrics{}, feedback, action, endedISO }
+      phaseHistory: [],     // { number, template, attended, planned, steps, flags, failed, blocks, tierLevels, endedISO } — entries from before the report lost its grade also carry score, grade, action
+
+      /* — Prescriptions (v4, plans/PLAN-workout-progression.md C1, C2, C6) —
+         slots       slot name -> { exerciseId, setup, sets, range, unit,
+                     acceptedAt, why }: the one prescription each slot trains
+         decisions   "exerciseId|sessionId" -> { choice, at }: your Step up /
+                     Repeat answer to the evidence ending at that session
+         assessment  null until the Stage 2 onboarding records one
+         Sessions copy the prescription onto each exercise as `rx` from v4 on;
+         a session without `rx` is never evidence (fitness/training.js). */
+      training: { slots: {}, decisions: {}, assessment: null },
+
+      /* — Recovery blocks (plan D3) — one record per block, so two devices
+         union them by id: { id, startKey, startedISO, days, reason:
+         "reduce" | "flag" | "asked", endedKey, updatedAt }. Active on a day
+         from startKey up to (not including) endedKey, or startKey + days.
+         Ending early stamps endedKey and updatedAt, and the newer stamp wins
+         the merge. A block started and ended the same day never applied. — */
+      recoveryBlocks: []
     };
   }
 
@@ -214,7 +247,9 @@
     // Example pattern for the future:
     //   if (state.version < 2) { /* transform */ state.version = 2; }
     if (typeof state.version !== "number" || state.version > SCHEMA_VERSION) {
-      // Unknown / future schema — fall back to a deep-merged default to stay safe.
+      // Unknown / future schema — deep-merged so the views can render it. A
+      // future version is also opened read-only by load(), so this shape is
+      // only ever displayed, never written back.
       return deepMerge(defaultState(), state);
     }
     if (state.version < SCHEMA_VERSION) {
@@ -224,12 +259,67 @@
          already had and nobody's program silently gets longer on upgrade. */
       state = deepMerge(defaultState(), state);
       if (state.version < 3) repairTargets(state);   // v2 -> v3, see below
+      if (state.version < 4) toV4(state);            // v3 -> v4, after the repaired targets
       state.version = SCHEMA_VERSION;
     } else {
       // Same version: still backfill keys added during default development.
       state = deepMerge(defaultState(), state);
     }
+    rowWithoutBar(state);
+    recountStreak(state);
     return state;
+  }
+
+  /* The streak is a cache of the session days, so it is recounted from them
+     on every load and after every workout rather than bumped in place. A
+     running count can't follow a sync (sessions union, but `streak` merges
+     field-wise with local winning) or a workout backfilled to an earlier day
+     (R1-2). Up to 3 days between sessions keeps it alive, and longer when
+     your template plans fewer sessions: two a week always leaves one gap of 4
+     days or more, so at 3 Full body x2 followed exactly could never pass 2
+     (R3-1). `best` never drops — a deleted session doesn't take a past best
+     with it. */
+  var STREAK_GAP_DAYS = 3;
+  function streakGap(state) {
+    var T = window.App && App.engine && App.engine.TEMPLATES;
+    var tpl = T && (T[state && state.prefs && state.prefs.template] || T.rotation);
+    return tpl ? Math.max(STREAK_GAP_DAYS, Math.ceil(7 / tpl.perWeek)) : STREAK_GAP_DAYS;
+  }
+  function recountStreak(state) {
+    var days = {};
+    (state.sessions || []).forEach(function (x) {
+      /* An undated one is healState's to drop; here it must not throw, or
+         load() would open the whole save read-only over it. */
+      if (x && x.completed && (x.dayKey || x.dateISO)) days[x.dayKey || Hub.dayOf(x.dateISO)] = 1;
+    });
+    var keys = Object.keys(days).sort(), count = 0, best = 0, last = null, gap = streakGap(state);
+    keys.forEach(function (k) {
+      count = last && Hub.daysBetween(last, k) <= gap ? count + 1 : 1;
+      best = Math.max(best, count);
+      last = k;
+    });
+    var st = state.streak || (state.streak = {});
+    st.count = count;
+    st.lastISO = last;
+    st.best = Math.max(st.best || 0, best);
+  }
+
+  /* Without a pull-up bar the pull day trains the row (engine.slotsFor), so
+     the row needs a slot record like any trained slot: without one,
+     recommendFor("row") is null and the row can never step up (R2-1). The
+     assessment writes one for new users; this gives every other save the
+     same, on every load — a save migrated before this existed, or a bar
+     removed later. It isn't C6's offer: that is for a profile with a bar,
+     where the row would be extra. acceptedAt stays null, so a choice made on
+     another device outranks it. A no-op without training.js — toV4 is the
+     one that refuses. */
+  function rowWithoutBar(state) {
+    var T = window.Training, TDATA = window.TRAINING_DATA;
+    var slots = state.training && state.training.slots;
+    if (!T || !TDATA || !isObj(slots) || slots.row || T.owns(state.equipment, "pull_1")) return;
+    var id = TDATA.SLOTS.row.first.filter(function (x) { return T.owns(state.equipment, x); })[0];
+    if (id) slots.row = T.startOf(id, { why: "carried over — rows replace pull-ups without a bar",
+                                        goal: state.profile && state.profile.goal });
   }
 
   /* v2 -> v3 · REPAIR TARGETS LEFT BY THE OLD PROGRESSION CODE
@@ -276,6 +366,51 @@
     });
   }
 
+  /* v3 -> v4 · PRESCRIPTIONS (plans/PLAN-workout-progression.md, C6)
+     ----------------------------------------------------------------------
+       1. Each tier's slot becomes the exercise its level prescribes today, at
+          the range training.data.js gives it, 3 sets. Nothing in your program
+          changes; the level stays on `tiers` as history.
+       2. Every session without a dayKey gets the one its readers already
+          compute — the Hub's rollover rule — so changing the rollover hour
+          later can't move an old workout to another day.
+     Tiers, sets, PRs, phases and benchmarks are not touched, and no `rx` or
+     effort is invented for a legacy session: training.js reads "no rx" as
+     unknown evidence at the point of use.
+
+     Additive only. A slot that already exists is kept — a v3 save can carry
+     one if an older build merged a v4 file into it — so running this twice,
+     or on a save that already has prescriptions, changes nothing.
+
+     Throws when training.js didn't load: a v4 save without its slots would be
+     a save every later version has to second-guess. load() catches it, keeps
+     the raw save untouched and opens Fitness read-only; the next load with
+     the file present migrates normally. */
+  function toV4(state) {
+    if (!window.Training || !window.Hub || !window.Hub.dayOf) {
+      throw new Error("v4 migration needs fitness/training.js and the Hub's dayOf()");
+    }
+    slotsFromTiers(state.tiers, state.training.slots, "carried over from", state.profile && state.profile.goal);
+    state.sessions.forEach(function (s) {
+      if (s && !s.dayKey && s.dateISO) s.dayKey = window.Hub.dayOf(s.dateISO);
+    });
+  }
+
+  /* Fills `slots` with one prescription per tier, at the exercise that tier's
+     level prescribes (DB.byLevel's `<pattern>_<level>` id). acceptedAt stays
+     null — nobody accepted it — so in a sync any real choice made on another
+     device outranks it (js/syncmerge.js). The row slot is never added here:
+     it is offered, not imposed (C6). */
+  function slotsFromTiers(tiers, slots, verb, goal) {
+    Object.keys(tiers || {}).forEach(function (p) {
+      var lvl = tiers[p] && tiers[p].level;
+      if (slots[p] || !lvl) return;
+      var rx = window.Training.startOf(p + "_" + lvl, { why: verb + " Level " + lvl, goal: goal });
+      if (rx) slots[p] = rx;
+    });
+    return slots;
+  }
+
   /* Deep-merge `source` onto a fresh `base` so newly-added schema keys are
      always present even on older saves (arrays/values from source win). */
   function deepMerge(base, source) {
@@ -299,19 +434,93 @@
      -------------------------------------------------------------------- */
   var STATE = defaultState();   // live in-memory state
 
+  /* READ-ONLY GUARD
+     null, or why this device must not write STORAGE_KEY:
+       "unreadable"  the save failed to parse, migrate or heal. It used to be
+                     replaced by defaults, and finishing the onboarding that
+                     followed wrote `sessions: []` over months of history.
+       "newer"       the save's version is above SCHEMA_VERSION — written by a
+                     newer build, which an old one would rewrite in its own
+                     shape. The Android updater makes mixed builds normal.
+     saveState() and resetState() write nothing while it is set, and a
+     persistent banner says so. load() re-decides it on every read, so a sync
+     or an import that brings a readable save clears it. */
+  var READ_ONLY = null;
+  var UNREADABLE_COPY = null;   // the key holding the raw copy, or null if it wouldn't fit
+  var lastBlockedToast = 0;
+
   function load() {
+    READ_ONLY = null;
     var raw;
     try { raw = localStorage.getItem(STORAGE_KEY); }
     catch (e) { raw = null; }
     if (!raw) { STATE = defaultState(); return STATE; }
+    var parsed;
     try {
-      STATE = migrate(JSON.parse(raw));
+      parsed = JSON.parse(raw);
+      /* Valid JSON that isn't an object ("null", a number) is as unreadable
+         as a truncated string — migrate() would quietly turn it into defaults. */
+      if (!isObj(parsed)) throw new Error("save is not an object");
+      STATE = migrate(parsed);
       healState(STATE);   // validate & repair shape before any view touches it
     } catch (e) {
-      console.warn("IRONFRAME: corrupt save, starting fresh.", e);
+      console.warn("IRONFRAME: unreadable save, kept untouched and opened read-only.", e);
+      UNREADABLE_COPY = keepUnreadable(raw);
+      READ_ONLY = "unreadable";
       STATE = defaultState();
+      return STATE;
     }
+    if (typeof parsed.version === "number" && parsed.version > SCHEMA_VERSION) READ_ONLY = "newer";
     return STATE;
+  }
+
+  /* Copy the raw string to `<key>.unreadable-YYYYMMDD-HHMMSS`, local time. A
+     copy with identical contents is reused, so reopening the app doesn't add
+     another full-size copy on every load. Returns the key, or null when the
+     copy wouldn't fit — the original is still untouched either way. */
+  function keepUnreadable(raw) {
+    var prefix = STORAGE_KEY + ".unreadable-";
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(prefix) === 0 && localStorage.getItem(k) === raw) return k;
+      }
+      var d = new Date();
+      var p = function (n) { return (n < 10 ? "0" : "") + n; };
+      var key = prefix + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" +
+                p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+      localStorage.setItem(key, raw);
+      return key;
+    } catch (e) { return null; }
+  }
+
+  /* The banner sits above BASALT's own appbar, so it shows on every fitness
+     section and while the app is hidden. Reuses the Hub's .wh-advice callout,
+     which every palette already themes in light and dark. */
+  function renderReadOnlyBanner() {
+    var host = document.getElementById("wh-view-fitness") || document.body;
+    var el = document.getElementById("fit-readonly");
+    if (!READ_ONLY) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "fit-readonly";
+      el.setAttribute("role", "alert");
+      host.insertBefore(el, host.firstChild);
+    }
+    var body = READ_ONLY === "newer"
+      ? "This fitness data was saved by a newer version of the app. Update this device to keep logging here — until then it's read-only."
+      : "Your fitness data couldn't be read. It's untouched" +
+        (UNREADABLE_COPY
+          ? ", and a copy is saved as <code>" + escapeHtml(UNREADABLE_COPY) + "</code>."
+          : ", but there wasn't room in storage to save a second copy.") +
+        " Restore a backup from Settings, or keep using Fitness read-only.";
+    el.className = "wh-advice wh-advice--" + (READ_ONLY === "newer" ? "warn" : "bad");
+    el.style.margin = "0 0 var(--wh-s4, 16px)";
+    el.innerHTML =
+      '<span class="wh-advice__ic"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        TOAST_ICONS.warn + "</svg></span>" +
+      '<div><div class="wh-advice__title">Fitness is read-only on this device</div>' +
+      '<p class="wh-advice__body">' + body + "</p></div>";
   }
 
   /* Validate and repair the saved state in place so a single malformed record
@@ -324,16 +533,20 @@
     var def = defaultState();
 
     // 1) Collections must be arrays.
-    ["sessions","bodyweightLog","measurements","sleepLog","nutritionLog","prs","goals","flagsHistory","phaseHistory"].forEach(function (key) {
+    ["sessions","bodyweightLog","measurements","sleepLog","nutritionLog","prs","goals","flagsHistory","phaseHistory","recoveryBlocks"].forEach(function (key) {
       if (!Array.isArray(s[key])) { s[key] = []; fixed++; }
     });
 
     // 2) Core objects must exist with required sub-keys (backfill from defaults).
-    ["profile","equipment","prefs","tiers","benchmarks","currentPhase","streak","meta","running"].forEach(function (key) {
+    ["profile","equipment","prefs","tiers","benchmarks","currentPhase","streak","meta","running","training"].forEach(function (key) {
       if (!s[key] || typeof s[key] !== "object" || Array.isArray(s[key])) { s[key] = def[key]; fixed++; }
     });
     // running.runLog must be an array
     if (s.running && !Array.isArray(s.running.runLog)) { s.running.runLog = []; fixed++; }
+    // training's two maps must be objects (a sync can deliver anything)
+    ["slots", "decisions"].forEach(function (key) {
+      if (!isObj(s.training[key])) { s.training[key] = {}; fixed++; }
+    });
 
     // 3) Every tier needs numeric level/progress and a reps target.
     if (s.tiers) {
@@ -376,6 +589,14 @@
   function getState() { return STATE; }
 
   function saveState() {
+    if (READ_ONLY) {
+      /* Throttled: some actions save several times in a row. */
+      if (Date.now() - lastBlockedToast > 5000) {
+        lastBlockedToast = Date.now();
+        toast("Not saved — fitness is read-only on this device. See the banner above.", "danger", 5000);
+      }
+      return STATE;
+    }
     try {
       STATE.meta.updatedAt = new Date().toISOString();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
@@ -405,6 +626,7 @@
   }
 
   function resetState() {
+    if (READ_ONLY) { saveState(); return; }   // writes nothing; says why
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     STATE = defaultState();
     saveState();
@@ -753,7 +975,19 @@
     reader.onload = function () {
       try {
         var parsed = JSON.parse(reader.result);
-        STATE = migrate(parsed);
+        if (!isObj(parsed)) throw new Error("not an object");
+        if (typeof parsed.version === "number" && parsed.version > SCHEMA_VERSION) {
+          toast("That backup is from a newer version of the app. Update this device, then import it.", "danger", 6000);
+          return;
+        }
+        /* Migrated before read-only is lifted: a migration that throws must
+           leave the guard up, not clear it over the defaults on screen. */
+        var next = migrate(parsed);
+        /* An import is the recovery the unreadable banner points to. The raw
+           copy already exists, so this is the one write allowed over it. */
+        READ_ONLY = null;
+        renderReadOnlyBanner();
+        STATE = next;
         saveState();
         closeModal("modal-settings");
         if (STATE.meta && STATE.meta.onboarded) { enterApp(); refresh(); }
@@ -835,7 +1069,7 @@
     document.getElementById("set-rest").value = (s.prefs && s.prefs.restDefaultSec) || 90;
     document.getElementById("set-rest-hold").value = (s.prefs && s.prefs.restHoldSec) || 60;
     /* default intensity */
-    var curVol = (s.prefs && s.prefs.volumeMode) || "standard";
+    var curVol = App.engine.volumeModeOf(s.prefs && s.prefs.volumeMode);   // an old "max" shows as +1 set
     document.querySelectorAll("[data-voldefault]").forEach(function (b) {
       b.classList.toggle("is-active", b.dataset.voldefault === curVol);
     });
@@ -850,6 +1084,7 @@
     document.querySelectorAll("#set-goal .seg__btn").forEach(function (b) {
       b.classList.toggle("is-active", b.dataset.goal === (s.profile.goal || "both"));
     });
+    document.getElementById("set-weightdir").value = s.profile.weightDirection || "";
 
     // equipment grid
     var grid = document.getElementById("set-equip");
@@ -885,8 +1120,11 @@
     var hM = (Number(s.profile.heightCm) || 0) / 100;
     if (hM > 0) s.profile.bmi = Math.round(((Number(s.profile.weightKg) || 0) / (hM * hM)) * 10) / 10;
 
-    var goalBtn = document.querySelector("#set-goal .seg__btn.is-active");
-    if (goalBtn) s.profile.goal = goalBtn.dataset.goal;
+    /* A new goal re-ranges your prescriptions (engine.setGoal); the toast
+       below says how many changed. */
+    var goalBtn = document.querySelector("#set-goal .seg__btn.is-active"), reRanged = null;
+    if (goalBtn && goalBtn.dataset.goal !== (s.profile.goal || "both")) reRanged = App.engine.setGoal(goalBtn.dataset.goal);
+    s.profile.weightDirection = document.getElementById("set-weightdir").value || null;
 
     if (!s.prefs) s.prefs = {};
     if (rest >= 15 && rest <= 600) s.prefs.restDefaultSec = rest;
@@ -909,7 +1147,8 @@
     saveState();
     closeModal("modal-settings");
     if (App.refresh) App.refresh();
-    toast("Settings saved.", "success");
+    toast(reRanged ? "Settings saved. " + (reRanged.length ? reRanged.length + " prescription" + (reRanged.length === 1 ? "" : "s") +
+      " moved to your new goal's range." : "No prescription's range changes with this goal.") : "Settings saved.", "success");
   }
 
   function wireSettings() {
@@ -935,6 +1174,7 @@
         document.querySelectorAll("#set-goal .seg__btn").forEach(function (x) { x.classList.toggle("is-active", x === b); });
       });
     });
+
     document.getElementById("btn-export").addEventListener("click", exportData);
     document.getElementById("btn-import").addEventListener("click", function () {
       document.getElementById("file-import").click();
@@ -1021,7 +1261,7 @@
           '<div class="card__head"><div class="card__title">Phase ' + phase.number + ' progress</div>' +
           '<span class="badge">' + dayInfo.pct + '% complete</span></div>' +
           '<div class="progress" style="height:14px"><div class="progress__bar" style="width:' + dayInfo.pct + '%"></div></div>' +
-          '<p class="muted text-sm mt-4">A new Phase Report Card auto-generates at day ' + phase.lengthDays + ', grading completion, rep ratios, bodyweight trend, recovery and plateaus — then advances, consolidates or deloads your program.</p>' +
+          '<p class="muted text-sm mt-4">A phase report is ready at day ' + phase.lengthDays + ': attendance, progress per movement and recovery, as three separate readings with their sample sizes and no overall grade. Closing it changes nothing in your program.</p>' +
         '</div>' +
         '<div class="card">' +
           '<div class="card__head"><div class="card__title">Era I benchmarks</div>' +
@@ -1081,8 +1321,11 @@
   function bootstrap() {
     load();
     buildNav();
+    renderReadOnlyBanner();
 
-    if (!STATE.meta.onboarded) {
+    /* A read-only save never routes to onboarding: finishing it is the write
+       that used to erase an unreadable history. */
+    if (!STATE.meta.onboarded && !READ_ONLY) {
       // First launch (or post-reset) -> onboarding overlay.
       document.getElementById("appbar").hidden = true;
       document.getElementById("app").hidden = true;
@@ -1108,9 +1351,13 @@
      the sync system exists to prevent, just one layer this app was never
      wired into. */
   function reloadFromRemote() {
-    var wasOnboarded = STATE.meta.onboarded;
-    load();
-    if (STATE.meta.onboarded && !wasOnboarded) {
+    /* Whether the app was on screen, not STATE.meta.onboarded: a read-only
+       device shows the app with an un-onboarded default state. */
+    var wasInApp = !document.getElementById("app").hidden;
+    load();   // re-decides READ_ONLY: a sync can bring in a newer save, or a readable one
+    renderReadOnlyBanner();
+    var inApp = STATE.meta.onboarded || READ_ONLY;
+    if (inApp && !wasInApp) {
       // Another device had already finished onboarding — adopt that instead
       // of making you repeat a setup flow you've already done elsewhere.
       var onb = document.getElementById("onboarding");
@@ -1121,7 +1368,7 @@
       showSection(uiGet("section", "dashboard"));
       return;
     }
-    if (STATE.meta.onboarded) refresh();
+    if (inApp || wasInApp) refresh();
     // Still not onboarded on this machine either: nothing arrived that
     // should replace the onboarding overlay currently on screen.
   }
@@ -1145,8 +1392,12 @@
     resetState: resetState,
     defaultState: defaultState,
     migrate: migrate,
+    slotsFromTiers: slotsFromTiers,
     deepMerge: deepMerge,
     reloadFromRemote: reloadFromRemote,
+    recountStreak: recountStreak,
+    streakGap: streakGap,
+    readOnly: function () { return READ_ONLY; },   // null | "unreadable" | "newer"
 
     // routing / views
     showSection: showSection,
@@ -1596,6 +1847,15 @@
     ]
   };
 
+  /* The templates' days (plan D1) borrow the warm-up and cool-down of the
+     rotation day they resemble: Full Body A and B the full-body set, Upper the
+     push set (the pull set opens with a dead hang, which needs a bar), Lower
+     the leg set. */
+  [["fullA", "fullbody"], ["fullB", "fullbody"], ["upper", "push"], ["lower", "legs"]].forEach(function (p) {
+    WARMUPS[p[0]] = WARMUPS[p[1]];
+    COOLDOWNS[p[0]] = COOLDOWNS[p[1]];
+  });
+
   /* ==========================================================================
      4) SUBSTITUTIONS
         SUBSTITUTIONS[pattern][bodyPart][severity] = { era1:{name,cue}, era2:{name,cue} }
@@ -1906,7 +2166,14 @@
       var d = lib.parse(v || Date.now());
       return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     },
-    today: function () { return lib.dayKey(Date.now()); },
+    /* dayKey is plain calendar arithmetic, for keys and Dates built from them.
+       "Now" and a record's own day honour the Hub's rollover hour instead —
+       train at 23:00, log at 00:20 with rollover 4, and both say yesterday. */
+    today: function () { return Hub.today(); },
+    /* The training day a session is filed on: the day its workout began,
+       saved since 2026-10-01; older sessions fall back to their timestamp's
+       day. Every reader that asks "which day was this workout" goes here. */
+    sessionDay: function (s) { return s.dayKey || Hub.dayOf(s.dateISO); },
     /* whole-day difference between two day-keys / dates (b - a) */
     daysBetween: function (a, b) {
       var da = midnight(a), db = midnight(b);
@@ -1926,7 +2193,7 @@
       return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     },
     relTime: function (v) {
-      var diff = lib.daysBetween(lib.dayKey(v), lib.today());
+      var diff = lib.daysBetween(Hub.dayOf(v), lib.today());
       if (diff <= 0) return "today";
       if (diff === 1) return "yesterday";
       if (diff < 7) return diff + " days ago";
@@ -1954,19 +2221,90 @@
   var DB = window.DB;
 
   var ROTATION = ["push", "pull", "legs", "fullbody"];
-  var DAY_LABEL = { push: "Push Day", pull: "Pull Day", legs: "Leg Day", fullbody: "Full Body" };
+  var DAY_LABEL = { push: "Push Day", pull: "Pull Day", legs: "Leg Day", fullbody: "Full Body",
+                    fullA: "Full Body A", fullB: "Full Body B", upper: "Upper", lower: "Lower" };
   var DAY_DESC = {
     push: "Press, shoulders, dips & core — anterior chain power.",
     pull: "Pulls, posterior chain & core — build the back.",
     legs: "Squat & hinge patterns with bracing core work.",
-    fullbody: "One push, one pull, one squat, one core — balanced."
+    fullbody: "One push, one pull, one squat, one core — balanced.",
+    fullA: "Push, row, squat and core — every major pattern in one session.",
+    fullB: "Shoulders, pull, hinge and core — the other half of the body.",
+    upper: "Push, row, shoulders and pull, plus dips if they're on your plan.",
+    lower: "Squat, hinge and core — the legs get the whole session."
   };
+  /* `row` names the row slot explicitly; slotsFor turns `pull` into the row
+     when you have no bar, so a no-bar Full Body B rows as well. */
   var DAY_PATTERNS = {
     push: ["push", "shoulder", "dip", "core"],
     pull: ["pull", "hinge", "core"],
     legs: ["squat", "hinge", "core"],
-    fullbody: ["push", "pull", "squat", "core"]
+    fullbody: ["push", "pull", "squat", "core"],
+    fullA: ["push", "row", "squat", "core"],
+    fullB: ["shoulder", "pull", "hinge", "core"],
+    upper: ["push", "row", "shoulder", "pull", "dip"],
+    lower: ["squat", "hinge", "core"]
   };
+
+  /* Templates (plan D1) — chosen, never imposed. A save without one keeps
+     the rotation it has always had, until you pick another in Program.
+       order     the day types, repeating
+       perWeek   planned sessions a week: attendance is attended ÷ planned, so
+                 following the template exactly reads 100%. The rotation's 3.5
+                 is "every other day": 14 in 28 days, the most its rest rule
+                 allows. (It was DAYS_PER_WEEK = 4 before Stage 1, which
+                 expected 16 and read 87.5% for following the rule exactly.)
+       rest      "afterEach": the day after any session is a rest day.
+                 "sameType": two different days can run back to back, but a
+                 rest day has to fall between two sessions of the same type —
+                 Upper, Lower, rest, Upper, Lower
+     2 or 3 full-body sessions a week is the same template at a different
+     plan: the rest rule already allows either, so only perWeek differs. */
+  var TEMPLATES = {
+    fullbody3:  { label: "Full body ×3", short: "3 a week", order: ["fullA", "fullB"], perWeek: 3, rest: "afterEach",
+                  desc: "A and B alternating, three sessions a week, a rest day after each." },
+    fullbody2:  { label: "Full body ×2", short: "2 a week", order: ["fullA", "fullB"], perWeek: 2, rest: "afterEach",
+                  desc: "A and B alternating, two sessions a week, a rest day after each." },
+    upperlower: { label: "Upper / lower", short: "4 a week", order: ["upper", "lower"], perWeek: 4, rest: "sameType",
+                  desc: "Upper and Lower can run back to back; a rest day comes before repeating either." },
+    rotation:   { label: "Current rotation", short: "every other day", order: ROTATION, perWeek: 3.5, rest: "afterEach",
+                  desc: "Push, Pull, Legs, Full Body in turn, a rest day after each." }
+  };
+  var TEMPLATE_ORDER = ["fullbody3", "fullbody2", "upperlower", "rotation"];
+  function templateOf(s) { return TEMPLATES[s && s.prefs && s.prefs.template] || TEMPLATES.rotation; }
+  function templateId(s) { return TEMPLATES[s && s.prefs && s.prefs.template] ? s.prefs.template : "rotation"; }
+
+  /* The day after the last of `done` in the template's order; the first day
+     when the last session isn't one of the template's (or there is none). */
+  function nextDayAfter(tpl, done) {
+    var last = done.length ? done[done.length - 1].type : null;
+    return tpl.order[(tpl.order.indexOf(last) + 1) % tpl.order.length];
+  }
+
+  /* Whether `key` is a rest day under the template's rule, judged from the
+     sessions before it (`done`, sorted by training day). Only the day right
+     after a session can be one — a longer break is your call, not a debt.
+       afterEach  it is.
+       sameType   only if the day the template trains next was already
+                  trained since your last day off: Upper, Lower, then rest.
+                  A last session from another template (you just switched)
+                  rests as afterEach does: a Push then Upper the next day
+                  would press two days running (R3-3). */
+  function restOn(tpl, done, key) {
+    var before = done.filter(function (x) { return lib.sessionDay(x) < key; });
+    if (!before.length) return false;
+    var lastKey = lib.sessionDay(before[before.length - 1]);
+    if (lib.daysBetween(lastKey, key) !== 1) return false;
+    if (tpl.rest !== "sameType" || tpl.order.indexOf(before[before.length - 1].type) < 0) return true;
+    var next = nextDayAfter(tpl, before), trained = {};
+    before.forEach(function (x) { trained[lib.sessionDay(x)] = true; });
+    var same = before.filter(function (x) { return x.type === next; });
+    if (!same.length) return false;
+    for (var d = lib.sessionDay(same[same.length - 1]); d < key; d = lib.dayKey(lib.addDays(d, 1))) {
+      if (!trained[d]) return false;            // a day off since then
+    }
+    return true;
+  }
 
   /* "Full" session length — one extra movement per day, chosen as the
      antagonist the day is otherwise missing. Every added pattern already has
@@ -1982,7 +2320,11 @@
     push: "pull",       // antagonist balance for a push-dominant day
     pull: "push",
     legs: "dip",        // legs is otherwise entirely lower-body
-    fullbody: "hinge"   // the one major pattern full body doesn't cover
+    fullbody: "hinge",  // the one major pattern full body doesn't cover
+    fullA: "hinge",     // A's missing pattern; B trains it
+    fullB: "squat",     // B's missing pattern; A trains it
+    upper: "core"       // Lower has no extra: an upper-body accessory there
+                        // would break the back-to-back recovery Upper/Lower is for
   };
 
   function patternsFor(dayType, sessionLength) {
@@ -1993,9 +2335,12 @@
   }
 
   /* Session-length modes — parallel to VOLUME_MODES, and independent of it.
-     "Full + Max effort" is a real combination: more movements, and more
-     sets/reps on each. */
+     "Full + 1 set" is a real combination: more movements, and more sets on
+     each. Short is how a session gets shorter (plan D2): it drops the day's
+     last slot and never cuts rest, because rest is what makes the sets you do
+     keep count. */
   var LENGTH_MODES = {
+    short:   { label: "Short",   desc: "Drops the day's last movement — rest stays the same" },
     focused: { label: "Focused", desc: "3-4 movements — the core of the day" },
     full:    { label: "Full",    desc: "+1 antagonist movement, doesn't affect your ladders" }
   };
@@ -2006,34 +2351,6 @@
      double as a reps value; holds get HOLD_START below instead. */
   var BASE_REPS    = { push: 12, pull: 8, squat: 14, hinge: 14, core: 5, shoulder: 8, dip: 8 };
   var TARGET_SETS  = 3;
-  var DAYS_PER_WEEK = 4;
-
-  /* ------------------------------------------------------------------------
-     PROGRESSION CALIBRATION
-     ------------------------------------------------------------------------
-     A flat ±1 was applied to every target regardless of unit, so a 30-second
-     plank progressed to 31 seconds — a 3% step — while a 5-rep pull-up
-     progressed to 6, a 20% step. Same code, opposite meanings.
-
-     Steps are BANDED by the current value, so a number that is already large
-     moves in proportionally larger jumps instead of crawling.
-     ------------------------------------------------------------------------ */
-  var STEP_BANDS = {
-    /* seconds: a hold under 45s is still short enough that 5s is a real
-       increase; past 90s, 5s is noise. */
-    hold: [{ under: 45, step: 5 }, { under: 90, step: 10 }, { under: Infinity, step: 15 }],
-    /* reps: +1 is genuinely standard calisthenics programming at low counts.
-       Past a dozen it stops being a meaningful week-to-week change. */
-    reps: [{ under: 12, step: 1 }, { under: Infinity, step: 2 }]
-  };
-
-  function stepFor(value, isHold) {
-    var bands = isHold ? STEP_BANDS.hold : STEP_BANDS.reps;
-    for (var i = 0; i < bands.length; i++) {
-      if (value < bands[i].under) return bands[i].step;
-    }
-    return bands[bands.length - 1].step;
-  }
 
   /* Where each ladder hold stops being worth extending, promoted from the
      `readiness` prose that already shipped in the exercise DB — the text and
@@ -2062,27 +2379,34 @@
     return Math.max(10, Math.round((cap * 0.5) / 5) * 5);
   }
 
-  /* Volume modes — applied on top of phase volumeFactor and session adaptation.
-     sets:    bonus sets added to the adapted count
-     reps:    flat bonus added to every adapted rep target
-     restMul: multiplier on rest times (< 1 = shorter rest = more intensity)
-     label / desc: shown in the Today UI */
+  /* Volume modes — applied on top of the phase's volumeFactor (plan D4).
+     sets:    bonus sets on the day's main slots; the Full-length accessory
+              keeps the base count, since it is support work
+     label / desc: shown in the Today UI
+     "Extended" (+1 set, 15% less rest) and "Max effort" (+2 sets, 25% less
+     rest) are one option now, and no mode touches rest: shorter rest buys
+     fewer good reps, not more work. Extra sets make a different
+     prescription, so a +1 set session is never evidence for a standard one
+     (training.js comparable). A save that still says "max" reads as +1 set
+     (volumeModeOf) — nothing is rewritten. */
   var VOLUME_MODES = {
-    standard: { sets: 0,  reps: 0,  restMul: 1.00, label: "Standard",   desc: "Adaptive defaults — 3 sets, normal rest" },
-    extended: { sets: 1,  reps: 2,  restMul: 0.85, label: "Extended",   desc: "+1 set, +2 reps, 15% shorter rest" },
-    max:      { sets: 2,  reps: 3,  restMul: 0.75, label: "Max effort", desc: "+2 sets, +3 reps, 25% shorter rest" }
+    standard: { sets: 0, label: "Standard", desc: "Your prescription — 3 sets" },
+    extended: { sets: 1, label: "+1 set",   desc: "One more set on each main movement, same rest" }
   };
+  function volumeModeOf(name) { return name === "extended" || name === "max" ? "extended" : "standard"; }
 
   var engine = {
     ROTATION: ROTATION, DAY_LABEL: DAY_LABEL, DAY_DESC: DAY_DESC,
-    DAY_PATTERNS: DAY_PATTERNS, TARGET_SETS: TARGET_SETS, DAYS_PER_WEEK: DAYS_PER_WEEK,
-    VOLUME_MODES: VOLUME_MODES,
+    DAY_PATTERNS: DAY_PATTERNS, TARGET_SETS: TARGET_SETS,
+    VOLUME_MODES: VOLUME_MODES, volumeModeOf: volumeModeOf,
+    TEMPLATES: TEMPLATES, TEMPLATE_ORDER: TEMPLATE_ORDER,
+    template: function () { return templateOf(App.getState()); },
+    templateId: function () { return templateId(App.getState()); },
     DAY_ACCESSORY: DAY_ACCESSORY, LENGTH_MODES: LENGTH_MODES,
     patternsFor: patternsFor,
-    STEP_BANDS: STEP_BANDS, stepFor: stepFor,
     HOLD_ADVANCE_AT: HOLD_ADVANCE_AT, holdStart: holdStart,
 
-    /* Sorted by date, not by insertion order. Every caller that reads
+    /* Sorted by training day, then time saved — not by insertion order. Every caller that reads
        `done[done.length - 1]` means "my most recent session" — but sessions
        are appended in the order you LOG them, and the app lets you log a past
        day. Backdate yesterday's session after today's and the unsorted tail
@@ -2090,23 +2414,116 @@
        and advanced the rotation off the wrong session. */
     completedSessions: function () {
       return App.getState().sessions.filter(function (s) { return s.completed; })
-        .sort(function (a, b) { return new Date(a.dateISO) - new Date(b.dateISO); });
+        .sort(function (a, b) {
+          var da = lib.sessionDay(a), db = lib.sessionDay(b);
+          return da < db ? -1 : da > db ? 1 : new Date(a.dateISO) - new Date(b.dateISO);
+        });
     },
 
+    /* The template's next day after your last session. A last session from
+       another template (you just switched) starts the new one at its first
+       day. */
     recommendedDayType: function () {
-      var done = engine.completedSessions();
-      if (done.length) {
-        var last = done[done.length - 1].type;
-        var i = ROTATION.indexOf(last);
-        return ROTATION[(i + 1) % ROTATION.length];
-      }
-      return ROTATION[0];
+      return nextDayAfter(templateOf(App.getState()), engine.completedSessions());
     },
 
-    /* current movement for a pattern (respects tier level) */
+    /* The movement a pattern trains now: its slot's prescription (v4), else
+       the tier's level. Screens that still show the old ladder read this, so
+       they name what the workout will actually prescribe. */
     movementFor: function (pattern) {
-      var t = App.getState().tiers[pattern];
-      return DB.byLevel(pattern, t.level) || DB.ladder(pattern)[0];
+      var s = App.getState(), rx = (s.training && s.training.slots || {})[pattern];
+      var t = s.tiers[pattern];
+      return (rx && !rx.off && DB.getExercise(rx.exerciseId)) ||
+             (t && DB.byLevel(pattern, t.level)) || DB.ladder(pattern)[0];
+    },
+
+    /* The prescription a slot trains today, with your equipment applied
+       (plan C3). Returns { rx, note } — a copy, never the stored record — or
+       null when the slot is turned off or nothing on it is possible (the pull
+       slot without a bar). Without the equipment, the nearest easier movement
+       on the slot's path that you can do is prescribed instead, and `note`
+       says why. */
+    prescriptionFor: function (slot) {
+      var s = App.getState(), eq = s.equipment, T = window.Training;
+      var rec = s.training.slots[slot], t = s.tiers[slot];
+      if (rec && rec.off) return null;
+      var rx = rec || (t ? rxStart(slot + "_" + t.level, { why: "carried over from Level " + t.level }) : null);
+      if (rx && T.owns(eq, rx.exerciseId)) return { rx: JSON.parse(JSON.stringify(rx)), note: "" };
+      var alt = rx ? nearestOwned(rx.exerciseId, eq) : null;
+      var first = (TD().SLOTS[slot].first || []).filter(function (id) { return T.owns(eq, id); })[0];
+      if (!alt && first) alt = rxStart(first);
+      if (!alt) return null;
+      var note = rx ? (DB.getExercise(rx.exerciseId) || {}).name + " needs " + missingGear(rx.exerciseId, eq) +
+        ", which isn't in your equipment — this is the closest movement you can do without it." : "";
+      alt.why = note || alt.why;
+      return { rx: alt, note: note };
+    },
+
+    /* The slots a day trains, in order, each with its prescription.
+         · pull without a bar becomes the row, and the card says why (T14);
+         · an accepted row slot joins the rotation's pull day beside the
+           pull-ups (the templates name the row where they want it);
+         · a slot that is off (the optional dip) is left out;
+         · Short drops the day's last slot (D2).
+       `accessory` marks the Full-length extra, as before. */
+    slotsFor: function (dayType, sessionLength) {
+      var s = App.getState(), pats = patternsFor(dayType, sessionLength);
+      var accAt = sessionLength === "full" ? pats.length - 1 : -1;
+      var out = [], seen = {};
+      function add(slot, pr, accessory, note) {
+        if (!pr || seen[slot]) return;
+        seen[slot] = true;
+        out.push({ slot: slot, rx: pr.rx, accessory: accessory, note: note || pr.note });
+      }
+      pats.forEach(function (p, i) {
+        var pr = engine.prescriptionFor(p);
+        if (!pr && p === "pull") {
+          var row = engine.prescriptionFor("row");
+          if (row && !row.rx.why) row.rx.why = "no pull-up bar";
+          return add("row", row, i === accAt, TD().SLOTS.pull.none);
+        }
+        add(p, pr, i === accAt);
+        var rowRec = s.training.slots.row;
+        if (dayType === "pull" && p === "pull" && pr && i !== accAt && rowRec && !rowRec.off) add("row", engine.prescriptionFor("row"), false);
+      });
+      if (sessionLength === "short" && out.length > 1) out.pop();
+      return out;
+    },
+
+    /* Every exercise a slot can swap to, for the swap lists: owned first,
+       then main path before optional, then by level. No Era gate — loaded
+       movements show to anyone whose equipment covers them. */
+    slotOptions: function (slot) {
+      var s = App.getState(), EXS = TD().EXERCISES;
+      var list = Object.keys(EXS).filter(function (id) { return EXS[id].slot === slot && DB.getExercise(id); })
+        .map(function (id) { return DB.getExercise(id); });
+      var rank = function (x) {
+        return (window.Training.owns(s.equipment, x.id) ? 0 : 1000) + (EXS[x.id].branch === "main" ? 0 : 100) + (x.level || 50);
+      };
+      return list.sort(function (a, b) { return rank(a) - rank(b); });
+    },
+
+    /* One workout exercise from a prescription. Its rx is the copy the
+       session saves, with this session's set count: a deload or Max effort
+       session is a different prescription and is never comparable with a
+       standard one. The target — what a set logs when you tick it without
+       typing — is the bottom of the range, where a fresh prescription starts. */
+    exerciseFromRx: function (slot, rx, setCount, restMul, o) {
+      o = o || {};
+      var s = App.getState(), db = DB.getExercise(rx.exerciseId) || {};
+      var r = JSON.parse(JSON.stringify(rx));
+      r.sets = setCount;
+      var load = r.setup && r.setup.loadKg;
+      return {
+        slot: slot, pattern: db.pattern || slot, id: r.exerciseId, name: db.name || r.exerciseId,
+        level: db.level || null, mode: db.mode, unit: db.unit, equipment: db.equipment || [],
+        cues: db.cues || [], mistakes: db.mistakes || [],
+        readiness: db.readiness || "", injury: db.injury || "",
+        rx: r, range: r.range, target: r.range[0] != null ? r.range[0] : r.range[1],
+        era2: false, accessory: !!o.accessory, note: o.note || "", swapped: !!o.swapped,
+        restSec: Math.round((db.mode === "hold" ? restHoldPref(s) : restRepPref(s)) * (restMul || 1)),
+        sets: newSets(setCount, load), difficulty: null, flag: null
+      };
     },
 
     /* Cross-phase plateau detection: a pattern is "stalled" when its level has
@@ -2129,85 +2546,40 @@
       return out;
     },
 
-    /* Optional Era-II accessory for a workout (only if graduated + equipped) */
-    era2Accessory: function (dayType) {
-      var s = App.getState();
-      if (s.era !== 2) return null;
-      var pats = DAY_PATTERNS[dayType];
-      for (var i = 0; i < pats.length; i++) {
-        var adds = DB.era2Addons(pats[i]);
-        for (var j = 0; j < adds.length; j++) {
-          var a = adds[j];
-          var ok = (a.equipment || []).every(function (e) { return s.equipment[e]; });
-          if (ok) return a;
-        }
-      }
-      return null;
-    },
+    /* A workout is the day's slots, each at its prescription (slotsFor).
+       `overrides` maps a slot to an exercise id chosen in the preview's Swap:
+       that exercise at the bottom of its range, for this session only.
 
-    buildWorkout: function (dayType, overrideMode, overrideLength) {
+       The Era-II accessory that used to be appended here is gone with the Era
+       gate (plan C3): it appeared only once every Era I benchmark was
+       cleared. Loaded movements are in every slot's Swap list instead, for
+       anyone who owns the gear. */
+    buildWorkout: function (dayType, overrideMode, overrideLength, overrides) {
       var s = App.getState();
       var lengthName = overrideLength || (s.prefs && s.prefs.sessionLength) || "focused";
-      var pats = patternsFor(dayType, lengthName);
-      var accessoryPattern = lengthName === "full" ? DAY_ACCESSORY[dayType] : null;
       var ph = s.currentPhase || {};
       var vf = Number(ph.volumeFactor) || 1;                 // deload phases < 1
       var baseSetCount = Math.max(2, Math.round(TARGET_SETS * vf));
-      var restMul = ph.action === "consolidate" ? 0.8 : 1;   // density: shorter rest
 
-      /* Volume mode — user-selected intensity multiplier.
-         Deload phases always cap to standard to protect recovery. */
-      var modeName = vf < 1 ? "standard" : (overrideMode || (s.prefs && s.prefs.volumeMode) || "standard");
-      var mode = VOLUME_MODES[modeName] || VOLUME_MODES.standard;
-      restMul = restMul * mode.restMul;
+      /* Volume mode — "+1 set" on the main slots, or standard. Deload phases
+         always cap to standard to protect recovery. Nothing here shortens
+         rest any more: not the mode, and not a consolidation phase (D4). */
+      /* A recovery block (D3) cuts every count to x 0.6 and drops the mode:
+         nothing rises inside it. */
+      var rb = engine.recoveryOn(Hub.viewDate());
+      var modeName = vf < 1 || rb ? "standard" : volumeModeOf(overrideMode || (s.prefs && s.prefs.volumeMode));
+      var mode = VOLUME_MODES[modeName];
 
-      /* Adapt set count from last session, then apply mode bonus */
-      var adaptedSetCount = engine._adaptSets(s, dayType, baseSetCount);
-      var setCount = Math.min(6, Math.max(2, adaptedSetCount + mode.sets));
+      var setCount = Math.min(6, Math.max(2, baseSetCount + mode.sets));
+      if (rb) { baseSetCount = window.Training.recoverySets(baseSetCount); setCount = window.Training.recoverySets(setCount); }
 
-      var exercises = pats.map(function (p, i) {
-        /* The accessory is always the appended last entry, identified by
-           position rather than by pattern name — a name test would go wrong
-           the day an accessory duplicates a pattern already in the day. */
-        var isAccessory = accessoryPattern != null && i === pats.length - 1;
-        var t = s.tiers[p];
-        var ex = DB.byLevel(p, t.level) || DB.ladder(p)[0];
-        /* Adapt rep target from last session, then apply mode rep bonus.
-           An accessory holds its ladder's plain base target: it neither reads
-           adaptation nor feeds it, so support work can't drag a real
-           pattern's target around. */
-        var adapt = isAccessory
-          ? { target: t.repsTarget, delta: 0, reason: "" }
-          : engine._adaptTarget(s, p, t.repsTarget);
-        var finalTarget = adapt.target + mode.reps;
-        return {
-          pattern: p, id: ex.id, name: ex.name, level: t.level,
-          mode: ex.mode, unit: ex.unit, equipment: ex.equipment || [],
-          cues: ex.cues || [], mistakes: ex.mistakes || [],
-          readiness: ex.readiness || "", injury: ex.injury || "",
-          target: finalTarget, targetDelta: adapt.delta, targetReason: adapt.reason,
-          era2: false, accessory: isAccessory,
-          restSec: Math.round((ex.mode === "hold" ? restHoldPref(s) : restRepPref(s)) * restMul),
-          sets: newSets(setCount),
-          difficulty: null, flag: null
-        };
+      var exercises = engine.slotsFor(dayType, lengthName).map(function (it) {
+        var rx = it.rx, pick = overrides && overrides[it.slot];
+        var swapped = !!(pick && pick !== rx.exerciseId && window.TRAINING_DATA.EXERCISES[pick]);
+        if (swapped) rx = rxStart(pick, { why: "swapped for this session" });
+        return engine.exerciseFromRx(it.slot, rx, it.accessory ? baseSetCount : setCount, 1,
+          { accessory: it.accessory, note: swapped ? "" : it.note, swapped: swapped });
       });
-      /* Full length REPLACES the era-2 accessory rather than stacking on it.
-         Both exist to add one extra movement to the day; stacking them makes
-         an Era-II push day six exercises at up to six sets, which is how a
-         40-minute session quietly becomes a 75-minute one. */
-      var acc = accessoryPattern ? null : engine.era2Accessory(dayType);
-      if (acc) {
-        exercises.push({
-          pattern: acc.pattern, id: acc.id, name: acc.name, level: null,
-          mode: acc.mode, unit: acc.unit, equipment: acc.equipment || [],
-          cues: acc.cues || [], mistakes: acc.mistakes || [],
-          readiness: acc.readiness || "", injury: acc.injury || "",
-          target: (acc.mode === "hold" ? 30 : 10) + mode.reps, targetDelta: 0, targetReason: "",
-          era2: true, restSec: Math.round(restRepPref(s) * restMul),
-          sets: newSets(setCount), difficulty: null, flag: null
-        });
-      }
       return {
         dayType: dayType,
         startedISO: lib.iso(),
@@ -2216,153 +2588,25 @@
         exercises: exercises,
         notes: "",
         setCount: setCount,
-        setCountDelta: adaptedSetCount - baseSetCount,
-        volumeMode: modeName
+        volumeMode: modeName,
+        /* The block this workout was cut for; finalize stamps the session so
+           it is never evidence. Set here, not at save time, so the flag
+           always matches the sets that were prescribed. */
+        recovery: rb ? rb.id : null
       };
     },
 
-    /* -----------------------------------------------------------------------
-       Adaptive target — reads the last 2 sessions containing this pattern,
-       compares what was logged to the prescribed target, and moves the target
-       for the next session.
-
-       Steps are BANDED by the current value and by unit (see STEP_BANDS), not
-       a flat ±1. A flat step meant a 30-second plank advanced to 31 seconds
-       while a 5-rep pull-up advanced to 6 — 3% against 20%, from one line of
-       code that could not tell seconds from reps.
-
-       Rules (applied in order, first match wins):
-         • Any set rated "failed" last session       → −1 band step
-         • Avg < 80% of target last session          → −1 band step
-         • Avg ≥ 125% of target                      → +2 band steps (badly under-set)
-         • Avg ≥ target AND rated "easy"             → +1 band step
-         • Avg ≥ 110% of target                      → +1 band step
-         • Hit target in both of last 2 sessions     → +1 band step
-         • Otherwise                                 → hold
-
-       Holds additionally stop at their own advance point (HOLD_ADVANCE_AT),
-       because past it a harder progression is better training than a longer
-       hold — `capped` is returned so the caller can act on that rather than
-       silently flat-lining the number.
-       ----------------------------------------------------------------------- */
-    _adaptTarget: function (s, pattern, baseTarget) {
-      var sessions = (s.sessions || [])
-        .filter(function (x) { return x.completed; })
-        .slice(-8);  // only look at recent history
-
-      /* find the last 2 sessions that worked this pattern */
-      var relevant = [];
-      for (var i = sessions.length - 1; i >= 0 && relevant.length < 2; i--) {
-        var found = (sessions[i].exercises || []).filter(function (ex) {
-          /* Accessories are excluded for the same reason era-2 add-ons are:
-             support work done on another pattern's day is not evidence about
-             how this pattern's real sessions are going. */
-          return ex.pattern === pattern && !ex.era2 && !ex.accessory;
-        })[0];
-        if (found) relevant.push(found);
-      }
-
-      if (!relevant.length) return { target: baseTarget, delta: 0, reason: "" };
-
-      var last = relevant[0];
-      var vals = (last.sets || []).map(function (st) { return Number(st.reps) || 0; }).filter(function (v) { return v > 0; });
-      if (!vals.length) return { target: baseTarget, delta: 0, reason: "" };
-
-      var avgReps = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
-      var ratio = avgReps / baseTarget;
-      var lastDiff = last.difficulty || "moderate";
-
-      /* The unit decides everything below, so it is read from the movement
-         actually prescribed rather than assumed from the pattern — core's
-         ladder is holds at L1-L4 and reps at L5-L6, so "core" alone does not
-         answer the question. */
-      var cur = engine.movementFor(pattern);
-      var isHold = !!(cur && cur.mode === "hold");
-      var step = stepFor(baseTarget, isHold);
-
-      /* 3 seconds of plank is not a floor, it is a typo waiting to happen.
-         The deload path already used `isHold ? 20 : 6`; this now agrees with
-         it instead of contradicting it two functions away. */
-      var floor = isHold ? Math.max(15, Math.round(baseTarget * 0.5 / 5) * 5)
-                         : Math.max(3, Math.round(baseTarget * 0.5));
-      var advanceAt = isHold && cur ? HOLD_ADVANCE_AT[cur.id] : null;
-
-      var delta = 0, reason = "";
-
-      if (lastDiff === "failed" || (last.sets || []).some(function (st) { return st.reps === 0; })) {
-        delta = -step;
-        reason = "failed last session";
-      } else if (ratio < 0.8) {
-        delta = -step;
-        reason = "below target last session";
-      } else if (ratio >= 1.25) {
-        /* Two steps: the target was not merely beaten, it was wrong. Creeping
-           up one band at a time from a target you already exceed by a quarter
-           just spends sessions catching up to where you already are. */
-        delta = +step * 2;
-        reason = "well past target — catching the target up";
-      } else if ((lastDiff === "easy") && ratio >= 1.0) {
-        delta = +step;
-        reason = "felt easy and hit target";
-      } else if (ratio >= 1.1) {
-        delta = +step;
-        reason = "exceeded target";
-      } else if (relevant.length >= 2) {
-        /* check 2nd-last session too */
-        var prev = relevant[1];
-        var prevVals = (prev.sets || []).map(function (st) { return Number(st.reps) || 0; }).filter(Boolean);
-        var prevAvg  = prevVals.length ? prevVals.reduce(function (a, b) { return a + b; }, 0) / prevVals.length : 0;
-        if (ratio >= 1.0 && prevAvg >= baseTarget) {
-          delta = +step;
-          reason = "hit target consistently";
-        }
-      }
-
-      var raw = baseTarget + delta;
-      var newTarget = Math.max(floor, raw);
-      var capped = false;
-      if (advanceAt && newTarget >= advanceAt) {
-        newTarget = advanceAt;
-        /* Only "capped" once you are actually AT the ceiling and trying to go
-           past it — arriving exactly on it for the first time is a normal
-           step, not a stall. */
-        capped = baseTarget >= advanceAt;
-      }
-
-      var actualDelta = newTarget - baseTarget;
-      return {
-        target: newTarget,
-        delta: actualDelta,
-        reason: actualDelta !== 0 ? reason : (capped ? "at the advance point for this movement" : ""),
-        capped: capped,
-        advanceAt: advanceAt || null
-      };
-    },
-
-    /* -----------------------------------------------------------------------
-       Adaptive set count — looks at the last 2 sessions of this day-type:
-         • Both rated "easy"   → +1 set (cap at 5)
-         • Last rated "failed" → −1 set (floor at 2)
-         • Otherwise           → base count
-       ----------------------------------------------------------------------- */
-    _adaptSets: function (s, dayType, base) {
-      var past = (s.sessions || [])
-        .filter(function (x) { return x.completed && x.type === dayType; })
-        .slice(-2);
-      if (!past.length) return base;
-      var last = past[past.length - 1];
-      if (last.difficulty === "failed") return Math.max(2, base - 1);
-      if (past.length >= 2) {
-        var allEasy = past.every(function (x) { return x.difficulty === "easy"; });
-        if (allEasy) return Math.min(5, base + 1);
-      }
-      return base;
-    },
+    /* A pain flag on an exercise: what was logged is a substitute movement, so
+       it counts toward no progression, PR, target or rep ratio. */
+    flagged: function (ex) { return !!(ex && ex.flag && ex.flag.bodyPart); },
+    /* Sharp means skip: every sharp substitution already reads "Skip ... today". */
+    skipped: function (ex) { return !!(ex && ex.flag && ex.flag.bodyPart && ex.flag.severity === "sharp"); },
 
     /* total reps performed (weighted reps count 1.5x as a rough volume proxy) */
     sessionVolume: function (session) {
       var v = 0;
       (session.exercises || []).forEach(function (ex) {
+        if (engine.skipped(ex)) return;
         (ex.sets || []).forEach(function (st) {
           var val = Number(st.value) || 0;
           if (ex.mode === "hold") v += Math.round(val / 5); // 5s ≈ 1 "rep unit"
@@ -2372,28 +2616,40 @@
       return Math.round(v);
     },
 
-    /* Persisted finalize: streak, progression, PRs, flags, push to sessions[] */
+    /* Persisted finalize: streak, PRs, flags, the prescription each exercise
+       was done at, push to sessions[] */
     finalizeSession: function (workout) {
       var s = App.getState();
       var nowISO = lib.iso();
       var session = {
         id: "s_" + Date.now(),
         dateISO: nowISO,
+        /* Decided when the workout began (#begin-session), never now: begun at
+           23:50 and finished at 00:20, it belongs to the day it began. A draft
+           from before dayKey existed falls back to the logging date. */
+        dayKey: workout.dayKey || Hub.viewDate(),
         type: workout.dayType,
         exercises: workout.exercises.map(function (ex) {
-          return {
-            /* `accessory` must persist alongside `era2`: _adaptTarget reads
-               its history out of s.sessions, so a flag that only existed on
-               the live workout object would be gone by the time it matters,
-               and support work would silently drive the real pattern's
-               targets after all. */
+          /* A sharp pain flag means the exercise was skipped: whatever was
+             typed into its sets before the flag is not a performed set. */
+          var skipped = engine.skipped(ex);
+          var out = {
             key: ex.id, pattern: ex.pattern, name: ex.name,
             era2: !!ex.era2, accessory: !!ex.accessory,
             mode: ex.mode, unit: ex.unit,
-            sets: ex.sets.map(function (st) { return { reps: num(st.value), weight: num(st.weight) }; }),
-            difficulty: ex.difficulty || "moderate",
+            sets: ex.sets.map(function (st) { return skipped ? { reps: 0, weight: 0 } : { reps: num(st.value), weight: num(st.weight) }; }),
+            /* null, not "moderate", when unrated: a saved "moderate" can't be
+               told from "didn't answer". Every reader supplies its own default. */
+            difficulty: skipped ? null : (ex.difficulty || null),
+            skipped: skipped,
             flag: ex.flag || null
           };
+          /* The prescription is copied from the draft, never rebuilt from the
+             current slot: a draft begun before the v4 upgrade has none, and
+             saves without one (T12) — it is history, never evidence. */
+          if (ex.slot) out.slot = ex.slot;
+          if (ex.rx) out.rx = rxAsLogged(ex, out.sets);
+          return out;
         }),
         warmupDone: workout.warmup.every(Boolean),
         cooldownDone: workout.cooldown.every(Boolean),
@@ -2402,23 +2658,28 @@
         completed: true,
         flags: []
       };
+      if (workout.recovery) session.recovery = workout.recovery;
       session.volume = engine.sessionVolume({ exercises: workout.exercises });
+
+      /* A loaded slot whose load isn't known yet takes the weight you just
+         logged (rxAsLogged) onto the slot itself. Left on the session alone,
+         every session said 10 kg against a slot that said unknown, so none
+         ever compared and the slot could never step up (R2-2). Stamped: it is
+         the load you chose, and a sync should carry it. */
+      session.exercises.forEach(function (ex) {
+        var rec = ex.slot && s.training.slots[ex.slot];
+        if (!rec || rec.off || !rec.setup || !rec.setup.loadMode || rec.setup.loadKg != null) return;
+        if (!ex.rx || ex.rx.exerciseId !== rec.exerciseId || ex.rx.setup.loadKg == null || ex.skipped || engine.flagged(ex)) return;
+        rec.setup.loadKg = ex.rx.setup.loadKg;
+        rec.acceptedAt = nowISO;
+      });
 
       var result = { levelUps: [], prs: [], flags: [] };
 
-      /* 1) streak */
-      engine._bumpStreak(s, session.dateISO);
+      /* 1) streak: recounted below, once the session is in the list. */
 
-      /* 2) progression per pattern-exercise */
-      workout.exercises.forEach(function (ex) {
-        if (ex.era2) return;      // era-2 accessories don't drive Era-I tier progress
-        /* Nor does full-length accessory work. Levelling your pull ladder off
-           support sets done on push day would advance a pattern you never
-           trained a dedicated session for. */
-        if (ex.accessory) return;
-        var lvl = engine._progress(s, ex);
-        if (lvl) result.levelUps.push(lvl);
-      });
+      /* 2) No points. Progression is the evidence in the saved rx (plan C2):
+         a level changes only when you accept a step (engine.decide). */
 
       /* 3) PRs. Accessories are NOT excluded here, deliberately: progression
          and target adaptation change your future program and must not be
@@ -2426,6 +2687,9 @@
          performed. If you really did hit a best on an accessory set, that
          happened. */
       workout.exercises.forEach(function (ex) {
+        /* Except a flagged one: its sets were a substitute, and a PR would be
+           filed under the original exercise's id. */
+        if (engine.flagged(ex)) return;
         var pr = engine._checkPR(s, ex, session.dateISO);
         if (pr) result.prs.push(pr);
       });
@@ -2436,7 +2700,8 @@
           var f = {
             id: "f_" + Date.now() + "_" + ex.pattern,
             dateISO: session.dateISO,
-            exerciseKey: ex.id, pattern: ex.pattern,
+            /* The exercise that hurt, not the one a pain swap moved to. */
+            exerciseKey: ex.flag.fromId || ex.id, pattern: ex.pattern,
             bodyPart: ex.flag.bodyPart, severity: ex.flag.severity,
             substitutedTo: ex.flag.substitutedTo || null
           };
@@ -2447,29 +2712,9 @@
       });
 
       s.sessions.push(session);
+      App.recountStreak(s);
       App.saveState();
       return result;
-    },
-
-    _bumpStreak: function (s, dateISO) {
-      var k = lib.dayKey(dateISO);
-      var st = s.streak;
-      if (!st.lastISO) { st.count = 1; }
-      else {
-        var diff = lib.daysBetween(st.lastISO, k);
-        if (diff === 0) { /* same day — keep count */ }
-        else if (diff <= 3) {
-          /* Allow up to 3 calendar days between sessions — the program runs
-             4 days/week with 3 rest days, so Mon→Wed (diff=2) or
-             Fri→Mon (diff=3) are both normal scheduled rest gaps. Only a
-             diff > 3 means a session was genuinely missed. */
-          st.count += 1;
-        } else {
-          st.count = 1;   // genuinely missed — reset
-        }
-      }
-      st.best = Math.max(st.best || 0, st.count);
-      st.lastISO = k;
     },
 
     /* liveStreak — call this at render time to get the *current* streak value,
@@ -2479,36 +2724,36 @@
       var st = s.streak;
       if (!st.lastISO || !st.count) return 0;
       var daysSinceLast = lib.daysBetween(st.lastISO, lib.today());
-      /* Still alive: trained today, yesterday, or within a normal rest block */
-      if (daysSinceLast <= 3) return st.count;
+      /* Still alive: within the gap your template's pace allows (App.streakGap) */
+      if (daysSinceLast <= App.streakGap(s)) return st.count;
       /* Streak is broken — hasn't trained within a rest-day-adjusted window */
       return 0;
     },
 
-    /* Rest-day gate — the day immediately after a session, and only that one
-       day, is a mandatory rest day. Derived from the last COMPLETED session's
-       actual date, never a fixed weekday: train Tuesday and Wednesday is
-       rest, whatever calendar day that lands on. That is the "relative to
-       your last session" schedule, as opposed to fixed weekdays you'd have
-       to set up and keep in sync with how you actually train.
+    /* Rest-day gate — at most the one day immediately after a session is a
+       mandatory rest day, by your template's rule (restOn). Derived from the
+       last COMPLETED session's actual date, never a fixed weekday: train
+       Tuesday and Wednesday is rest, whatever calendar day that lands on.
+       That is the "relative to your last session" schedule, as opposed to
+       fixed weekdays you'd have to set up and keep in sync with how you
+       actually train.
 
-       Deliberately a single fixed rest day, not a DAYS_PER_WEEK-derived
-       cadence — spacing sessions to average exactly 4/week needs an uneven
-       rest pattern (1-1-2), which is a schedule you'd have to be told about
-       to make sense of. One day is the same rule every time. */
+       Deliberately a single rest day, not a weekly-count cadence: the
+       template's perWeek is what attendance is measured against, and the gate
+       never blocks a day just because the week's count is reached. */
     restDayInfo: function (s) {
-      var done = engine.completedSessions();
+      var done = engine.completedSessions(), tpl = templateOf(App.getState()), today = lib.today();
       if (!done.length) return { isRest: false };
-      var lastKey = lib.dayKey(done[done.length - 1].dateISO);
-      var gap = lib.daysBetween(lastKey, lib.today());
-      /* gap 0: trained today already — that state is handled elsewhere
-         (resume/already-done), not this gate.
-         gap 1: today is the mandatory rest day.
-         gap 2+: clear to train — a longer break is your call, not a debt. */
-      if (gap !== 1) return { isRest: false };
+      var lastKey = lib.sessionDay(done[done.length - 1]);
+      /* Trained today already: doneTodayInfo's state, not this gate. Past
+         that, the template's rule decides (restOn): after any session, or
+         before repeating a day type. */
+      if (lastKey >= today || !restOn(tpl, done, today)) return { isRest: false };
       return {
         isRest: true, lastKey: lastKey,
         lastType: done[done.length - 1].type,
+        /* "switched": the last session was under another template (R3-3) */
+        rule: tpl.order.indexOf(done[done.length - 1].type) < 0 ? "switched" : tpl.rest,
         nextKey: lib.dayKey(lib.addDays(lastKey, 2))
       };
     },
@@ -2529,15 +2774,17 @@
       var done = engine.completedSessions();
       if (!done.length) return { isDone: false };
       var todayKey = lib.today();
-      var todays = done.filter(function (x) { return lib.dayKey(x.dateISO) === todayKey; });
+      var todays = done.filter(function (x) { return lib.sessionDay(x) === todayKey; });
       if (!todays.length) return { isDone: false };
+      /* Tomorrow is a rest day by the template's rule (always, except the
+         first of an Upper/Lower pair), and then the day after is next. */
+      var restTomorrow = restOn(templateOf(App.getState()), done, lib.dayKey(lib.addDays(todayKey, 1)));
       return {
         isDone: true,
         todayType: todays[todays.length - 1].type,
         count: todays.length,
-        /* Trained today, so tomorrow is the mandatory rest day and the next
-           training day is the one after it. */
-        nextKey: lib.dayKey(lib.addDays(todayKey, 2))
+        restTomorrow: restTomorrow,
+        nextKey: lib.dayKey(lib.addDays(todayKey, restTomorrow ? 2 : 1))
       };
     },
 
@@ -2564,37 +2811,148 @@
       return { dateISO: lib.parse(nextKey).toISOString(), key: nextKey, type: type, isToday: nextKey === todayKey };
     },
 
-    _progress: function (s, ex) {
-      var t = s.tiers[ex.pattern]; if (!t) return null;
-      var hit = ex.sets.filter(function (st) { return (Number(st.value) || 0) >= ex.target; }).length;
-      var ratio = ex.sets.length ? hit / ex.sets.length : 0;
-      var base = { easy: 40, moderate: 26, hard: 12, failed: 0 }[ex.difficulty || "moderate"];
-      var inc = Math.round(base * (0.5 + 0.5 * ratio));
+    /* The session on `key`, for the only days the app can stand behind (the
+       comment above): one already finished today, or the next one. Anything
+       later is your call, so it answers null. { type, done } or null. */
+    liftOn: function (key) {
+      var s = App.getState(), info = engine.doneTodayInfo(s);
+      if (key === lib.today() && info.isDone) return { type: info.todayType, done: true };
+      var n = engine.nextSession(s);
+      return n && n.key === key ? { type: n.type, done: false } : null;
+    },
 
-      /* A hold sitting at its advance point has nowhere left to go on
-         duration, so grinding out more sessions at the same number is wasted.
-         Clean sessions there accelerate the tier instead, which is the
-         "cap it and push a level-up" half of the cap: the ceiling is not a
-         dead end, it is the on-ramp to the next progression. */
-      var cap = HOLD_ADVANCE_AT[ex.id];
-      if (cap && ex.mode === "hold" && (Number(ex.target) || 0) >= cap && ratio >= 0.5 && inc > 0) {
-        inc = Math.round(inc * 1.75);
-      }
+    /* The recommendation for one slot, from every completed session (plan
+       C2). Recomputed on every call, never stored. null for a slot with no
+       prescription or one that is off. */
+    recommendFor: function (slot) {
+      var s = App.getState(), rx = s.training.slots[slot];
+      if (!rx || rx.off) return null;
+      return window.Training.recommend(s.sessions.filter(function (x) { return x.completed; }), rx,
+        { equipment: s.equipment, decisions: s.training.decisions, goal: s.profile.goal || "both" });
+    },
 
-      t.progress = lib.clamp((t.progress || 0) + inc, 0, 100);
-      if (t.progress >= 100 && t.level < 6) {
-        t.level += 1; t.progress = 0;
-        var nx = DB.byLevel(ex.pattern, t.level);
-        /* Each hold opens at half its OWN advance point, not a flat 30s.
-           Levelling into the L-Sit used to prescribe 30s against an advance
-           point of 20s — arriving at a new progression already past the
-           number that means you have finished with it. */
-        t.repsTarget = (nx && nx.mode === "hold")
-          ? holdStart(nx.id)
-          : BASE_REPS[ex.pattern];
-        return { pattern: ex.pattern, level: t.level, name: nx ? nx.name : "" };
+    /* Your answer to a slot's recommendation: "step" takes the step it
+       offers (up when ready, back when reducing), "repeat" keeps the
+       prescription. Only the choice is stored, under the evidence's key, so
+       new evidence asks again. Taking a step replaces the slot's prescription
+       with a stamped one, and a numbered ladder movement moves the old tier
+       level with it — the only way a level changes now that points are off.
+       Returns the new slot prescription, the unchanged one, or null. */
+    decide: function (slot, choice) {
+      var s = App.getState(), rec = engine.recommendFor(slot);
+      /* Nothing to answer, or "step" with no step on offer: write nothing. */
+      if (!rec || !rec.key || (choice === "step" && !rec.step)) return null;
+      /* Nothing rises inside a recovery block (D3). Stepping back is allowed. */
+      /* Today, not the logging date: the choice is made now (R3-4). */
+      if (choice === "step" && rec.action === "ready" && engine.recoveryOn(lib.today())) return null;
+      var at = lib.iso(), from = s.training.slots[slot];
+      s.training.decisions[rec.key] = { choice: choice, at: at };
+      if (choice === "step" && rec.step) {
+        var rx = rec.step.rx, name = (DB.getExercise(from.exerciseId) || {}).name || from.exerciseId;
+        rx.acceptedAt = at;
+        rx.why = (rec.action === "reduce" ? "stepped back from " : "stepped up from ") + name;
+        s.training.slots[slot] = rx;
+        var lvl = ladderLevel(slot, rx.exerciseId);
+        if (lvl && s.tiers[slot]) s.tiers[slot].level = lvl;
       }
-      return null;
+      App.saveState();
+      return s.training.slots[slot];
+    },
+
+    /* The recovery block (plan D3) active on a day (default: the day you're
+       logging to), or null. Working sets x 0.6 for 7 days; ranges and rest
+       are untouched, nothing steps up, and its sessions are never evidence.
+       It ends on its own — the first session after it is a normal one — or
+       when you end it. */
+    recoveryEnd: function (b) { return b.endedKey || lib.dayKey(lib.addDays(b.startKey, b.days)); },
+    recoveryOn: function (dayKey) {
+      var k = dayKey || Hub.viewDate();
+      return (App.getState().recoveryBlocks || []).filter(function (b) {
+        return b.startKey <= k && k < engine.recoveryEnd(b);
+      })[0] || null;
+    },
+    startRecovery: function (reason) {
+      var s = App.getState(), today = lib.today();
+      if (engine.recoveryOn(today)) return null;
+      var b = { id: "rb_" + Date.now(), startKey: today, startedISO: lib.iso(), days: TD().RECOVERY_BLOCK.days,
+                reason: reason, endedKey: null, updatedAt: lib.iso() };
+      s.recoveryBlocks.push(b);
+      App.saveState();
+      return b;
+    },
+    endRecovery: function () {
+      var b = engine.recoveryOn(lib.today());
+      if (!b) return null;
+      b.endedKey = lib.today(); b.updatedAt = lib.iso();
+      App.saveState();
+      return b;
+    },
+
+    /* Why a block might help, or null (D3): a sharp pain flag in the last
+       week, or two slots whose totals have been falling, with the latest
+       evidence in the last week. Only what came after the previous block
+       began counts, and an offer you declined stays declined until something
+       new happens (its `key`). Returns { kind, key, flag | slots }. */
+    recoveryOffer: function () {
+      var s = App.getState(), R = TD().RECOVERY_BLOCK, today = lib.today();
+      if (engine.recoveryOn(today)) return null;
+      var last = (s.recoveryBlocks || []).slice().sort(function (a, b) { return a.startedISO < b.startedISO ? 1 : -1; })[0];
+      var recent = function (day) { return lib.daysBetween(day, today) <= R.offerWindowDays; };
+      var flag = (s.flagsHistory || []).filter(function (f) {
+        return f.severity === "sharp" && recent(Hub.dayOf(f.dateISO)) && (!last || f.dateISO > last.startedISO);
+      }).pop();
+      var offer = flag ? { kind: "flag", key: "flag:" + flag.id, flag: flag } : null;
+      if (!offer) {
+        var down = Object.keys(s.training.slots).map(function (slot) {
+          var rec = engine.recommendFor(slot), e = rec && rec.action === "reduce" && rec.evidence[rec.evidence.length - 1];
+          return e && recent(e.day) && (!last || e.day > last.startKey) ? { slot: slot, day: e.day, totals: rec.evidence.map(function (x) { return x.total; }) } : null;
+        }).filter(Boolean);
+        if (down.length >= R.offerSlots) {
+          offer = { kind: "reduce", slots: down, key: "reduce:" + down.map(function (d) { return d.slot + "@" + d.day; }).sort().join(",") };
+        }
+      }
+      return offer && App.util.uiGet("rb.dismissed", "") !== offer.key ? offer : null;
+    },
+
+    /* Switch template (plan D1). The reporting period closes here and the
+       next one runs the new template, so a period has one template and one
+       denominator, and no planned-session ids or schedule revisions are ever
+       stored. A template that names the row gets a row record if you have
+       none, so the row it trains can step up; a row you left out stays out
+       (Program's Add brings it back). Returns the closed period, or null when
+       nothing changed. */
+    setTemplate: function (id) {
+      var s = App.getState();
+      if (!TEMPLATES[id] || id === templateId(s)) return null;
+      (s.prefs || (s.prefs = {})).template = id;
+      var names = TEMPLATES[id].order.some(function (d) { return DAY_PATTERNS[d].indexOf("row") >= 0; });
+      if (names && !s.training.slots.row) {
+        var first = (TD().SLOTS.row.first || []).filter(function (x) { return window.Training.owns(s.equipment, x); })[0];
+        if (first) s.training.slots.row = rxStart(first, { at: lib.iso(), why: "part of the " + TEMPLATES[id].label + " template" });
+      }
+      App.recountStreak(s);                     // the gap follows the template's pace (R3-1)
+      return App.evaluation.closePeriod("template");
+    },
+
+    /* A goal change re-ranges every slot whose range the goal sets (D2): the
+       same exercise and setup with the goal's range, stamped so a sync keeps
+       it. Holds, skills and eccentrics come back unchanged and aren't
+       touched, and neither is rest — GOAL_REST_SEC is for new profiles.
+       Doesn't save; Settings does. Returns the slots that changed. */
+    setGoal: function (goal) {
+      var s = App.getState(), changed = [], at = lib.iso();
+      if (!TD().GOAL_RANGES[goal]) return changed;
+      s.profile.goal = goal;
+      Object.keys(s.training.slots).forEach(function (slot) {
+        var rx = s.training.slots[slot], r = rx && !rx.off && rx.range && TD().rangeFor(rx.exerciseId, goal);
+        if (!r || (r.lo === rx.range[0] && r.hi === rx.range[1])) return;
+        rx = JSON.parse(JSON.stringify(rx));
+        rx.range = [r.lo, r.hi];
+        rx.acceptedAt = at;
+        s.training.slots[slot] = rx;
+        changed.push(slot);
+      });
+      return changed;
     },
 
     _checkPR: function (s, ex, dateISO) {
@@ -2632,7 +2990,7 @@
     /* nutrition: one entry per calendar day */
     todayNutrition: function () {
       var s = App.getState(); var k = lib.today();
-      var e = s.nutritionLog.filter(function (n) { return lib.dayKey(n.dateISO) === k; })[0];
+      var e = s.nutritionLog.filter(function (n) { return Hub.dayOf(n.dateISO) === k; })[0];
       if (!e) { e = { dateISO: lib.iso(), meals: [], waterL: 0 }; s.nutritionLog.push(e); }
       return e;
     },
@@ -2660,7 +3018,7 @@
       var pTarget = Number((s.profile.macros || {}).protein) || 0;
       var days = 0, sum = 0;
       (s.nutritionLog || []).forEach(function (n) {
-        if (sinceKey && lib.dayKey(n.dateISO) < sinceKey) return;
+        if (sinceKey && Hub.dayOf(n.dateISO) < sinceKey) return;
         var t = engine.nutritionTotals(n);
         if (t.kcal <= 0) return;
         var kc = lib.clamp(1 - Math.abs(t.kcal - kt) / kt, 0, 1);
@@ -2670,16 +3028,90 @@
       return { score: days ? sum / days : null, loggedDays: days };
     },
 
+    /* Planned sessions so far in a period, from the template the period ran
+       under (phase.template; a phase from before templates ran the rotation).
+       28 days of Full body ×3 plan 12, so following it exactly reads 100%. */
     expectedSessions: function (phase, loggedCount) {
       var dur = Math.min(App.util.phaseDayInfo(phase).day, phase.lengthDays);
-      var calc = Math.max(1, Math.round((DAYS_PER_WEEK / 7) * dur));
+      var perWeek = (TEMPLATES[phase.template] || TEMPLATES.rotation).perWeek;
+      var calc = Math.max(1, Math.ceil(dur * perWeek / 7));
       /* Never show x/y where x > y — if the phase just started, scale expected
          up to at least what's been logged so completion never exceeds 100%. */
       return loggedCount ? Math.max(calc, loggedCount) : calc;
     }
   };
 
-  function newSets(n) { var a = []; for (var i = 0; i < n; i++) a.push({ value: null, weight: null, done: false }); return a; }
+  function newSets(n, kg) { var a = []; for (var i = 0; i < n; i++) a.push({ value: null, weight: kg != null ? kg : null, done: false }); return a; }
+  function TD() { return window.TRAINING_DATA; }
+
+  /* A fresh prescription in the range your goal sets (plan D2). Every new
+     prescription in the running app goes through here, so no call site can
+     forget the goal. `goal` overrides the saved one: onboarding's draft and
+     the migration have their own. */
+  function rxStart(id, o, goal) {
+    var opt = {}, src = o || {};
+    Object.keys(src).forEach(function (k) { opt[k] = src[k]; });
+    opt.goal = goal || (App.getState().profile || {}).goal || "both";
+    return window.Training.startOf(id, opt);
+  }
+
+  /* The saved copy of a prescription. A loaded movement whose load isn't
+     known yet takes the weight you logged, when every logged set used the
+     same one: otherwise a 10 kg session and a 20 kg one would compare as the
+     same setup. Mixed weights leave it unknown. */
+  function rxAsLogged(ex, sets) {
+    var rx = JSON.parse(JSON.stringify(ex.rx));
+    if (rx.setup && rx.setup.loadMode && rx.setup.loadKg == null) {
+      var kgs = sets.filter(function (st) { return st.reps > 0; }).map(function (st) { return st.weight; });
+      if (kgs.length && kgs[0] > 0 && kgs.every(function (k) { return k === kgs[0]; })) rx.setup.loadKg = kgs[0];
+    }
+    return rx;
+  }
+
+  /* The nearest easier movement you own, walking back along `next` from an
+     exercise you can't do, at its hardest setup (one step below where you
+     were). null when nothing before it is possible. */
+  function nearestOwned(id, eq) {
+    var EXS = TD().EXERCISES, seen = {}, queue = [id];
+    while (queue.length) {
+      var cur = queue.shift();
+      var preds = Object.keys(EXS).filter(function (p) { return EXS[p].next.indexOf(cur) >= 0 && !seen[p]; });
+      for (var i = 0; i < preds.length; i++) {
+        seen[preds[i]] = true;
+        if (window.Training.owns(eq, preds[i])) {
+          var S = TD().SETUPS[preds[i]], hard = {};
+          if (S) hard[S.key] = S.values[S.values.length - 1].id;
+          return rxStart(preds[i], { setup: hard });
+        }
+        queue.push(preds[i]);
+      }
+    }
+    return null;
+  }
+
+  /* "a bench", "a pull-up bar and rings", "dumbbells or kettlebells" */
+  function missingGear(id, eq) {
+    var label = function (t) { return EQUIP_LABEL[t] || t; };
+    var miss = (TD().EXERCISES[id].equipment || []).filter(function (t) {
+      return Array.isArray(t) ? !t.some(function (u) { return eq[u]; }) : !eq[t];
+    }).map(function (t) { return Array.isArray(t) ? t.map(label).join(" or ") : label(t); });
+    return miss.join(" and ") || "equipment";
+  }
+
+  /* The old ladder's level for an exercise: `<pattern>_<n>` is level n; an
+     unnumbered main-path movement (Incline Push-up, Split Squat) takes the
+     level of the numbered one before it. null off the ladder. Levels are
+     history now; they keep the Progress ladder and phase snapshots honest. */
+  function ladderLevel(slot, id) {
+    var EXS = TD().EXERCISES, seen = {};
+    while (id && !seen[id]) {
+      seen[id] = true;
+      var m = new RegExp("^" + slot + "_(\\d)$").exec(id);
+      if (m) return Number(m[1]);
+      id = Object.keys(EXS).filter(function (p) { return EXS[p].slot === slot && EXS[p].next.indexOf(id) >= 0; })[0];
+    }
+    return null;
+  }
   function restRepPref(s) { return (s && s.prefs && s.prefs.restDefaultSec) || 90; }
   function restHoldPref(s) { return (s && s.prefs && s.prefs.restHoldSec) || 60; }
   function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
@@ -2696,10 +3128,11 @@
     step: 0,
     draft: null
   };
+  /* What each goal changes (plan D2), said on the card that sets it. */
   var GOALS = [
-    { id: "strength", t: "Strength", d: "Max control & harder progressions" },
-    { id: "size", t: "Size", d: "Lean mass on a clean surplus" },
-    { id: "both", t: "Both", d: "Recommended — build strength while gaining" }
+    { id: "strength", t: "Strength", d: "4–8 reps where a harder setup or load exists, else 6–12 · 150 s rest" },
+    { id: "size", t: "Size", d: "8–15 reps · 120 s rest" },
+    { id: "both", t: "Both", d: "6–12 reps · 120 s rest — the default" }
   ];
   var EQUIP = [
     { id: "pullupBar", t: "Pull-up bar" }, { id: "dumbbells", t: "Dumbbells" },
@@ -2712,14 +3145,17 @@
     onb.draft = {
       profile: JSON.parse(JSON.stringify(s.profile)),
       equipment: JSON.parse(JSON.stringify(s.equipment)),
-      benchmarks: JSON.parse(JSON.stringify(s.benchmarks))
+      benchmarks: JSON.parse(JSON.stringify(s.benchmarks)),
+      /* Preselected, visibly, on the goal step: three full-body sessions a
+         week is the plan most people can keep. Any card changes it. */
+      template: "fullbody3"
     };
   }
 
   function renderOnboarding() {
     if (!onb.draft) startDraft();
     var host = document.getElementById("onboarding");
-    var steps = [stepWelcome, stepProfile, stepGoal, stepEquip, stepTest, stepPlacement];
+    var steps = [stepWelcome, stepProfile, stepGoal, stepEquip, stepAssess, stepPlacement];
     var total = steps.length;
     var dots = "";
     for (var i = 0; i < total; i++) {
@@ -2747,7 +3183,7 @@
       '<h1 class="display h1">Build the<br>frame.</h1></div>' +
       '<p class="muted">BASALT is an adaptive, bodyweight-first training OS. You start in ' +
       '<b style="color:var(--era1)">Era I — Calisthenics Foundation</b>: pure bodyweight work to forge tendons, ' +
-      'control and clean reps. Dumbbells &amp; kettlebells unlock only once you clear the five Era I benchmarks.</p>' +
+      'control and clean reps. Loaded work with dumbbells or kettlebells is there from day one if you own them.</p>' +
       '<button class="btn btn--primary btn--lg btn--block" data-onb="next">Begin setup →</button>';
   }
 
@@ -2777,9 +3213,21 @@
         '<svg class="choice__tick ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>' +
       '</div>';
     }).join("");
+    var E = App.engine, tpl = onb.draft.template;
+    var tcards = E.TEMPLATE_ORDER.map(function (id) {
+      var o = E.TEMPLATES[id];
+      return '<div class="choice ' + (tpl === id ? "is-sel" : "") + '" data-template="' + id + '">' +
+        '<div><div class="choice__t">' + o.label + '</div>' +
+        '<div class="choice__d">' + o.short + ' — ' + o.desc + '</div></div>' +
+        '<svg class="choice__tick ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>' +
+      '</div>';
+    }).join("");
     return '<div><div class="eyebrow">Objective</div><h2 class="display h3">What are you chasing?</h2></div>' +
       '<div class="stack">' + cards + '</div>' +
-      '<p class="faint text-xs">This shapes how aggressively the evaluator advances you and how it reads your bodyweight trend.</p>' +
+      '<p class="faint text-xs">Your goal sets your rep ranges and the rest timer after rep sets. Bodyweight (gain, hold or lose) is a separate, optional setting.</p>' +
+      '<div><h2 class="display h3">How do you want to train?</h2></div>' +
+      '<div class="stack" id="onb-templates">' + tcards + '</div>' +
+      '<p class="faint text-xs">The template decides which days you train and what attendance counts against. Change either later in Settings and Program.</p>' +
       '<div class="row" style="gap:var(--sp-3)">' +
         '<button class="btn btn--ghost" data-onb="back">Back</button>' +
         '<button class="btn btn--primary grow" data-onb="next">Continue →</button>' +
@@ -2795,7 +3243,7 @@
       '</label>';
     }).join("");
     return '<div><div class="eyebrow">Inventory</div><h2 class="display h3">What do you have?</h2></div>' +
-      '<p class="muted text-sm">Era I is bodyweight regardless — this just tunes substitutions and the Era II toolkit you unlock later.</p>' +
+      '<p class="muted text-sm">Your program only prescribes movements this gear allows. Without a pull-up bar, rows carry your pulling.</p>' +
       '<div class="grid grid-2">' + cards + '</div>' +
       '<div class="row" style="gap:var(--sp-3)">' +
         '<button class="btn btn--ghost" data-onb="back">Back</button>' +
@@ -2803,64 +3251,93 @@
       '</div>';
   }
 
-  function stepTest() {
-    var b = onb.draft.benchmarks;
-    var rows = Object.keys(b).map(function (k) {
-      var x = b[k];
-      return '<div class="card" style="padding:var(--sp-4)">' +
-        '<div class="row between"><div class="grow"><div class="drow__title">' + x.label + '</div>' +
-        '<div class="drow__sub">target ' + x.target + ' ' + x.metric + (x.altTarget ? " (or " + x.altTarget + " alt)" : "") + '</div></div>' +
-        stepperHtml("bench-" + k, x.current, 0, 200) + '</div></div>';
+  /* ---- Assessment (plan C4) ----
+     Per slot: "the hardest of these you can do for 6 clean reps (or the
+     hold) without pain", from that slot's main path for the equipment you
+     own, plus "Not sure". The answer becomes the starting prescription at the
+     bottom of its range. It is unverified — nobody watched you do it — until
+     the first comparable session; the Workout card says so. The Era I
+     benchmarks place nothing now: they stay as achievements in Program. */
+  var ASSESS_SLOTS = ["push", "row", "pull", "squat", "hinge", "core", "shoulder", "dip"];
+
+  /* A slot's main path you can do, easiest first: from its entry points
+     along `next`, stopping at the first movement your equipment can't
+     cover. Loaded movements and optional branches are never offered. */
+  function assessPath(slot, eq) {
+    var EXS = TD().EXERCISES, out = [], queue = TD().SLOTS[slot].first.slice();
+    while (queue.length) {
+      var id = queue.shift(), e = EXS[id];
+      if (out.indexOf(id) >= 0 || e.slot !== slot || e.branch !== "main" || e.loadMode ||
+          !window.Training.owns(eq, id)) continue;
+      out.push(id);
+      queue = queue.concat(e.next);
+    }
+    return out;
+  }
+
+  /* What "6 clean reps (or the hold)" means for one movement: the bottom of
+     its range. */
+  function assessBar(id) {
+    var r = TD().rangeFor(id);
+    return r.unit === "sec" ? r.lo + " s hold" : r.lo + " clean reps" + (r.perSide ? " per side" : "");
+  }
+
+  function stepAssess() {
+    var eq = onb.draft.equipment, a = onb.draft.assess || (onb.draft.assess = {});
+    var rows = ASSESS_SLOTS.map(function (slot) {
+      var label = TD().SLOTS[slot].label, path = assessPath(slot, eq);
+      if (!path.length) {
+        return '<div class="card" style="padding:var(--sp-3) var(--sp-4)"><div class="drow__title">' + label + '</div>' +
+          '<div class="drow__sub">' + esc(TD().SLOTS[slot].none || "Nothing on this slot fits your equipment.") + '</div></div>';
+      }
+      var cur = a[slot] || "";
+      var opts = opt("", "Not sure", cur) +
+        path.map(function (id) { return opt(id, DB.getExercise(id).name + " · " + assessBar(id), cur); }).join("") +
+        (TD().SLOTS[slot].optional ? opt("off", "Leave " + label.toLowerCase() + "s out", cur) : "");
+      return field(label, '<select class="select" data-assess="' + slot + '">' + opts + '</select>');
     }).join("");
-    return '<div><div class="eyebrow">Fitness test</div><h2 class="display h3">Where do you stand?</h2></div>' +
-      '<p class="muted text-sm">Log honest current bests. Clearing all five graduates you to Era II. Leave at 0 if untested — you can update anytime in <b>Program</b>.</p>' +
+    return '<div><div class="eyebrow">Assessment</div><h2 class="display h3">What can you do today?</h2></div>' +
+      '<p class="muted text-sm">For each one, pick the hardest you can do for the reps or hold shown, with clean form and no pain. ' +
+        'Not sure starts you at the easiest. Every answer is unverified until you log it — the app can\'t see your form, so it takes your word and checks it against your first session.</p>' +
       '<div class="stack">' + rows + '</div>' +
       '<div class="row" style="gap:var(--sp-3)">' +
         '<button class="btn btn--ghost" data-onb="back">Back</button>' +
-        '<button class="btn btn--primary grow" data-onb="next">See my placement →</button>' +
+        '<button class="btn btn--primary grow" data-onb="next">See my program →</button>' +
       '</div>';
   }
 
-  /* Map fitness-test results to a starting level (1–6) per movement pattern.
-     Patterns without a direct test inherit from the closest tested pattern. */
-  function computePlacement(b) {
-    function num(k) { return Number(b[k] && b[k].current) || 0; }
-    function tier(val, cuts) {            // cuts ascending; returns 1..6
-      var lvl = 1; for (var i = 0; i < cuts.length; i++) { if (val >= cuts[i]) lvl = i + 2; } return Math.min(lvl, 6);
-    }
-    var push = tier(num("pushups"),   [5, 15, 25, 35, 45]);   // wall→pseudo-planche
-    var pull = tier(num("pull"),      [1, 3, 6, 10, 14]);     // dead-hang→archer
-    var core = tier(num("lsit"),      [10, 20, 30, 45, 60]);  // plank→dragon (sec proxy)
-    var squat = tier(num("bulgarian"),[5, 10, 15, 20, 25]);   // bw squat→weighted pistol
-    return {
-      push: push,
-      pull: Math.max(1, pull),
-      squat: squat,
-      hinge: Math.max(1, Math.min(squat, 3)),   // posterior chain tracks lower-body base, capped
-      core: core,
-      shoulder: Math.max(1, Math.min(push, 4)), // vertical press tracks push, capped at HSPU-negative
-      dip: Math.max(1, Math.min(push, 4))       // dip strength tracks push, bench available
-    };
+  /* The starting prescription per slot from the answers. A slot with no
+     answer starts at its first movement; dips can be left out, as a stamped
+     record so a sync can't bring the slot back. Pull without a bar still
+     gets its first rung, so a bar bought later has somewhere to start; the
+     builder swaps it for the row until then. */
+  function assessedSlots(d, at) {
+    var eq = d.equipment, a = d.assess || {}, out = {};
+    ASSESS_SLOTS.forEach(function (slot) {
+      var path = assessPath(slot, eq), pick = a[slot];
+      if (pick === "off") { out[slot] = { off: true, acceptedAt: at, why: "left out at setup" }; return; }
+      var id = path.indexOf(pick) >= 0 ? pick : (path[0] || TD().SLOTS[slot].first[0]);
+      var why = path.indexOf(pick) >= 0 ? "your assessment — unverified until you log it"
+              : path.length ? "not sure at setup — the first movement" : "needs equipment you didn't have at setup";
+      out[slot] = rxStart(id, { why: why, at: at }, d.profile.goal);
+    });
+    return out;
   }
 
   function stepPlacement() {
-    var b = onb.draft.benchmarks;
-    var place = computePlacement(b);
-    onb.draft._placement = place;
-    var labels = { push: "Push", pull: "Pull", squat: "Squat", hinge: "Hinge", core: "Core", shoulder: "Shoulder", dip: "Dip" };
-    var grad = Object.keys(b).every(function (k) { return (Number(b[k].current) || 0) >= b[k].target; });
-    var rows = Object.keys(place).map(function (p) {
-      var lvl = place[p];
-      var ex = (window.DB && DB.byLevel(p, lvl)) || null;
+    var slots = assessedSlots(onb.draft, null);
+    var rows = ASSESS_SLOTS.map(function (slot) {
+      var rx = slots[slot], label = TD().SLOTS[slot].label;
+      var owned = rx && !rx.off && window.Training.owns(onb.draft.equipment, rx.exerciseId);
+      var body = !rx || rx.off ? "Left out" : !owned ? esc(TD().SLOTS[slot].none || "Needs equipment you don't have") :
+        esc(DB.getExercise(rx.exerciseId).name) + ' <span class="faint mono">' + rx.sets + ' × ' + rx.range[0] + '–' + rx.range[1] +
+        (rx.unit === "sec" ? " s" : "") + '</span>';
       return '<div class="card" style="padding:var(--sp-3) var(--sp-4)">' +
-        '<div class="row between"><div><div class="drow__title">' + labels[p] + '</div>' +
-        '<div class="drow__sub">' + (ex ? esc(ex.name) : "Level " + lvl) + '</div></div>' +
-        '<span class="badge badge--primary">L' + lvl + ' / 6</span></div></div>';
+        '<div class="row between"><div><div class="drow__title">' + label + '</div>' +
+        '<div class="drow__sub">' + body + '</div></div></div></div>';
     }).join("");
-    return '<div><div class="eyebrow">Placement</div><h2 class="display h3">Your starting tiers</h2></div>' +
-      '<p class="muted text-sm">Based on your test, the OS places each movement pattern at the right rung. You can re-test or adjust any tier later in <b>Program</b>.</p>' +
-      '<div class="badge ' + (grad ? "badge--era2" : "badge--era1") + '" style="align-self:flex-start"><span class="dot"></span>' +
-        (grad ? "All benchmarks cleared — starting in Era II" : "Starting in Era I — Calisthenics Foundation") + '</div>' +
+    return '<div><div class="eyebrow">Your program</div><h2 class="display h3">Where you start</h2></div>' +
+      '<p class="muted text-sm">Each movement starts at the bottom of its range. It steps up when two sessions on different days reach the top of the range and felt easy or just right — and you say yes.</p>' +
       '<div class="stack">' + rows + '</div>' +
       '<div class="row" style="gap:var(--sp-3)">' +
         '<button class="btn btn--ghost" data-onb="back">Back</button>' +
@@ -2884,6 +3361,9 @@
     body.querySelectorAll("[data-goal]").forEach(function (c) {
       c.addEventListener("click", function () { onb.draft.profile.goal = c.dataset.goal; renderOnboarding(); });
     });
+    body.querySelectorAll("[data-template]").forEach(function (c) {
+      c.addEventListener("click", function () { onb.draft.template = c.dataset.template; renderOnboarding(); });
+    });
     body.querySelectorAll("[data-equip]").forEach(function (c) {
       c.addEventListener("click", function (e) {
         e.preventDefault();
@@ -2891,10 +3371,8 @@
         renderOnboarding();
       });
     });
-    wireSteppers(body, function (id, val) {
-      if (id.indexOf("bench-") === 0) {
-        var key = id.slice(6); onb.draft.benchmarks[key].current = val;
-      }
+    body.querySelectorAll("[data-assess]").forEach(function (sel) {
+      sel.addEventListener("change", function () { onb.draft.assess[sel.dataset.assess] = sel.value; });
     });
   }
 
@@ -2916,24 +3394,32 @@
     /* recompute simple BMI + targets from entered stats */
     var hM = (Number(d.profile.heightCm) || 0) / 100;
     if (hM > 0) d.profile.bmi = lib.round((Number(d.profile.weightKg) || 0) / (hM * hM), 1);
-    Object.keys(d.benchmarks).forEach(function (k) {
-      var x = d.benchmarks[k]; x.complete = (Number(x.current) || 0) >= x.target;
-    });
-    /* graduate immediately if they already cleared everything */
-    var grad = Object.keys(d.benchmarks).every(function (k) { return d.benchmarks[k].complete; });
 
-    /* apply test-based tier placement */
-    var place = d._placement || computePlacement(d.benchmarks);
-    var baseState = App.getState();
-    var tiers = JSON.parse(JSON.stringify(baseState.tiers));
-    Object.keys(place).forEach(function (p) {
-      if (tiers[p]) { tiers[p].level = place[p]; tiers[p].progress = 0; }
+    /* The assessment writes the prescriptions. Tier levels follow them as
+       history — the Progress ladder and phase snapshots still read levels. */
+    var at = lib.iso();
+    var slots = assessedSlots(d, at);
+    var tiers = JSON.parse(JSON.stringify(App.getState().tiers));
+    Object.keys(tiers).forEach(function (p) {
+      var rx = slots[p], lvl = rx && !rx.off ? ladderLevel(p, rx.exerciseId) : null;
+      if (!lvl) return;
+      tiers[p].level = lvl; tiers[p].progress = 0;
+      /* A level above 1 starts its target the way a level-up did, so the L1
+         plank's 30 s can't leak into reps (A5). */
+      var mv = DB.byLevel(p, lvl);
+      if (lvl > 1) tiers[p].repsTarget = (mv && mv.mode === "hold") ? holdStart(mv.id) : BASE_REPS[p];
     });
 
-    var patch = { profile: d.profile, equipment: d.equipment, benchmarks: d.benchmarks, era: grad ? 2 : 1, tiers: tiers };
+    /* The template and the goal's rest go in with the profile: the first
+       period runs the template you chose, and a new profile's rest follows
+       its goal (GOAL_REST_SEC). */
+    var template = App.engine.TEMPLATES[d.template] ? d.template : "rotation";
+    var patch = { profile: d.profile, equipment: d.equipment, benchmarks: d.benchmarks, era: 1, tiers: tiers,
+                  training: { slots: slots, decisions: {}, assessment: { at: at, answers: d.assess || {} } },
+                  prefs: { template: template, restDefaultSec: TD().GOAL_REST_SEC[d.profile.goal] || 120 },
+                  currentPhase: { template: template } };
     onb.draft = null; onb.step = 0;
     App.completeOnboarding(patch);
-    if (grad) App.toast("All benchmarks cleared — you start in Era II!", "success", 4200);
   }
 
   /* small onboarding html helpers */
@@ -3014,7 +3500,7 @@
           '<p class="faint text-xs" style="margin:4px 0 0;max-width:48ch">' +
             esc(sess.sub || "A run is on your plan for today — fit it in before or after your lift.") + '</p></div>' +
         '<button class="btn btn--secondary btn--sm" data-go-run type="button">Open run \u2192</button>' +
-      '</div></div>';
+      '</div>' + run.clashHtml(run.clashFor(next.item)) + '</div>';
   }
 
   /* Skill-in-Today: a low-key nudge to train a long-term skill fresh, early in
@@ -3047,6 +3533,26 @@
      than hidden, because a genuinely flexible schedule beats a rigid one
      that argues with you (PLAN discussion, 2026-08-26): this only ever
      blocks the single day right after a session, and you can always say no. */
+  /* Why today is a rest day, in the words of your template's rule. */
+  function restReason(restInfo) {
+    var next = engine.recommendedDayType();
+    if (restInfo.rule === "sameType") {
+      return DAY_LABEL[next] + " and " + DAY_LABEL[restInfo.lastType] + " ran back to back, so a rest day comes before " +
+        DAY_LABEL[next] + " again.";
+    }
+    if (restInfo.rule === "switched") {
+      return "You trained " + (DAY_LABEL[restInfo.lastType] || "a session") + " yesterday under your previous template, so today rests before " +
+        DAY_LABEL[next] + " starts the new one.";
+    }
+    return "You trained " + (DAY_LABEL[restInfo.lastType] || "a session") + " yesterday, and your template rests the day after each session.";
+  }
+  /* When the next session is, after training today. */
+  function nextAfterToday(doneInfo, rec) {
+    return doneInfo.restTomorrow
+      ? "Next up is " + (DAY_LABEL[rec] || "") + " on " + lib.fmtDate(doneInfo.nextKey) + " — tomorrow is your rest day."
+      : "Next up is " + (DAY_LABEL[rec] || "") + " tomorrow — your template lets it follow today's session straight away.";
+  }
+
   function renderRestDay(el, s, restInfo) {
     var done = engine.completedSessions();
     var last = done[done.length - 1];
@@ -3055,12 +3561,12 @@
 
     el.innerHTML =
       head("Workout", "Session engine", "Resting today") +
+      recoveryHtml(s) +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Rest day</div>' +
         '<h2 class="display h2">Next exercise day is ' + esc(whenLabel) + '</h2>' +
-        '<p class="muted text-sm" style="max-width:46ch">' +
-          'You trained ' + esc(DAY_LABEL[restInfo.lastType] || "") + ' yesterday. One rest day between ' +
-          'sessions is part of the program, not a delay — this is where the adaptation actually happens.' +
+        '<p class="muted text-sm" style="max-width:46ch">' + esc(restReason(restInfo)) +
+          ' It\'s part of the program, not a delay — this is where the adaptation actually happens.' +
         '</p></div>' +
         '<span class="badge"><span class="dot"></span>rest</span></div>' +
         '<button class="btn btn--ghost btn--sm" id="rest-train-anyway" type="button">Train anyway →</button>' +
@@ -3068,6 +3574,7 @@
       (last ? lastSessionCard(last) : "") +
       streakStripCard(s);
 
+    wireRecovery(el);
     var anyway = document.getElementById("rest-train-anyway");
     if (anyway) anyway.addEventListener("click", function () {
       App.util.uiSet(restOverrideKey(), true);
@@ -3086,24 +3593,27 @@
     var done = engine.completedSessions();
     var last = done[done.length - 1];
     var rec = engine.recommendedDayType();
-    var nextWhen = lib.fmtDate(doneInfo.nextKey);
 
     el.innerHTML =
       head("Workout", "Session engine", "Done for today") +
+      recoveryHtml(s) +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Done today</div>' +
         '<h2 class="display h2">You trained ' + esc(DAY_LABEL[doneInfo.todayType] || "") + ' today</h2>' +
         '<p class="muted text-sm" style="max-width:46ch">' +
-          'Next up is ' + esc(DAY_LABEL[rec] || "") + ' on ' + esc(nextWhen) + ' — tomorrow is your rest day. ' +
+          esc(nextAfterToday(doneInfo, rec)) + ' ' +
           (doneInfo.count > 1 ? 'You have logged ' + doneInfo.count + ' sessions today. ' : '') +
           'Nothing more is required of you today.' +
-        '</p></div>' +
+        '</p>' +
+        (last ? '<p class="text-sm mono" data-done-counts style="margin:var(--sp-2) 0 0">' + countsText(exerciseCounts(last.exercises)) + '</p>' : '') +
+        '</div>' +
         '<span class="badge badge--primary"><span class="dot"></span>complete</span></div>' +
         '<button class="btn btn--ghost btn--sm" id="done-train-anyway" type="button">Train again anyway →</button>' +
       '</div>' +
       (last ? lastSessionCard(last) : "") +
       streakStripCard(s);
 
+    wireRecovery(el);
     var anyway = document.getElementById("done-train-anyway");
     if (anyway) anyway.addEventListener("click", function () {
       App.util.uiSet(doneOverrideKey(), true);
@@ -3126,12 +3636,14 @@
     var rec = engine.recommendedDayType();
     var done = engine.completedSessions();
     var last = done[done.length - 1];
-    var segBtns = ROTATION.map(function (d) {
+    var segBtns = engine.template().order.map(function (d) {
       return '<button class="seg__btn ' + (d === rec ? "is-active" : "") + '" data-day="' + d + '">' + DAY_LABEL[d] + '</button>';
     }).join("");
 
     el.innerHTML =
       head("Workout", "Session engine", rec ? DAY_LABEL[rec] + " is up next" : "Let's train") +
+      recoveryHtml(s) +
+      upgradeCardHtml(s) +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Recommended</div>' +
         '<h2 class="display h2" id="today-title">' + DAY_LABEL[rec] + '</h2>' +
@@ -3141,7 +3653,7 @@
         '<div class="vol-mode-row mt-4"><div class="field__label mb-2">Intensity</div><div class="vol-mode-grid" id="vol-mode-grid">' +
           Object.keys(VOLUME_MODES).map(function (k) {
             var m = VOLUME_MODES[k];
-            var cur = (s.prefs && s.prefs.volumeMode) || "standard";
+            var cur = volumeModeOf(s.prefs && s.prefs.volumeMode);
             return '<button class="vol-mode-btn ' + (k === cur ? "is-active" : "") + '" data-volmode="' + k + '" type="button">' +
               '<span class="vol-mode-btn__label">' + m.label + '</span>' +
               '<span class="vol-mode-btn__desc">' + m.desc + '</span>' +
@@ -3171,56 +3683,57 @@
       skillReminderCard(s, rec) +
       (last ? lastSessionCard(last) : "") +
       streakStripCard(s);
+    if (App.run && App.run.wireNotes) App.run.wireNotes(el);
 
     var chosen = {
-      day: rec, overrides: {},
-      volumeMode: (s.prefs && s.prefs.volumeMode) || "standard",
+      day: rec, overrides: {}, workout: null,
+      volumeMode: volumeModeOf(s.prefs && s.prefs.volumeMode),
       sessionLength: (s.prefs && s.prefs.sessionLength) || "focused"
     };
     function previewMissing(ex) {
       return (ex.equipment || []).filter(function (e) { return !s.equipment[e]; });
     }
-    function previewMovement(p) {
-      if (chosen.overrides[p]) {
-        var ov = DB.getExercise(chosen.overrides[p]);
-        if (ov) return ov;
-      }
-      return engine.movementFor(p);
-    }
     function renderPreview() {
-      /* Both the pattern count and the time estimate derive from this list,
-         so switching length updates the "~N min" badge with no separate
-         estimate logic to keep in step. */
-      var pats = engine.patternsFor(chosen.day, chosen.sessionLength);
-      var accPat = chosen.sessionLength === "full" ? engine.DAY_ACCESSORY[chosen.day] : null;
-      var mode = (engine.VOLUME_MODES || {})[chosen.volumeMode] || { sets: 0, reps: 0, restMul: 1 };
-      var baseSetCount = 3 + mode.sets;
-      var restMin = Math.round((90 * (mode.restMul || 1)) / 60 * 10) / 10;
-      var estMins = Math.round(pats.length * (baseSetCount * 2.5 + restMin * baseSetCount));
+      /* The preview IS the workout Begin starts: one buildWorkout call whose
+         object Begin saves as the draft, so the two can't disagree about a
+         prescription (T17). Rebuilt on every change of day, mode, length or
+         swap. */
+      var w = chosen.workout = engine.buildWorkout(chosen.day, chosen.volumeMode, chosen.sessionLength, chosen.overrides);
+      var restMin = Math.round(restRepPref(s) / 60 * 10) / 10;
+      var estMins = Math.round(w.exercises.length * (w.setCount * 2.5 + restMin * w.setCount));
+      /* The lifting card's half of the A13 note: the run planned for today,
+         against the day being previewed rather than the recommended one. */
+      var todaysRun = App.run && App.run.isActive() ? App.run.nextRun() : null;
+      var clash = todaysRun && todaysRun.item.key === lib.today() ? App.run.clashFor(todaysRun.item, chosen.day) : null;
       document.getElementById("today-preview").innerHTML =
+        (clash ? App.run.clashHtml(clash) : "") +
         '<div class="card card--glass"><div class="card__head"><div class="card__title">Today\'s movements</div>' +
-        '<span class="badge">' + pats.length + ' patterns · ~' + estMins + ' min</span></div>' +
-        pats.map(function (p, i) {
-          var isAcc = accPat != null && i === pats.length - 1;
-          var m = previewMovement(p);
-          var missing = previewMissing(m);
-          var baseTarget = (s.tiers[p] && s.tiers[p].repsTarget) || 8;
-          var dispTarget = baseTarget + mode.reps;
+        '<span class="badge">' + w.exercises.length + ' movements · ~' + estMins + ' min</span></div>' +
+        w.exercises.map(function (ex) {
+          var missing = previewMissing(ex);
           var warn = missing.length ? ' <span class="badge badge--warn" style="padding:1px 7px">needs gear</span>' : "";
-          var ovTag = chosen.overrides[p] ? ' <span class="badge badge--secondary" style="padding:1px 7px">swapped</span>' : "";
+          var ovTag = ex.swapped ? ' <span class="badge badge--secondary" style="padding:1px 7px">swapped</span>' : "";
           /* Marked in the UI as well as in the data — an accessory that
              looked identical to primary work would leave you wondering why
-             your ladder never moved. */
-          var accTag = isAcc ? ' <span class="badge" style="padding:1px 7px" title="Support work — does not affect your ladder or rep targets">accessory</span>' : "";
-          return '<div class="kv" style="align-items:center"><span class="kv__k">' + cap(p) + ' · L' + s.tiers[p].level + '</span>' +
+             it sits outside the day's usual movements. */
+          var accTag = ex.accessory ? ' <span class="badge" style="padding:1px 7px" title="Full length\'s extra movement">accessory</span>' : "";
+          return '<div class="kv" style="align-items:center" data-pv-ex="' + esc(ex.id) + '" data-pv-rx="' + esc(JSON.stringify(ex.rx)) + '">' +
+            '<span class="kv__k">' + esc(TD().SLOTS[ex.slot].label) + (ex.level ? ' · L' + ex.level : '') + '</span>' +
             '<span class="kv__v" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">' +
-            esc(m.name) + ' <span class="faint text-xs mono">' + baseSetCount + '×' + dispTarget + '</span>' +
+            esc(ex.name) + ' <span class="faint text-xs mono">' + rangeText(ex) + '</span>' +
             warn + ovTag + accTag +
-            '<button class="btn btn--ghost btn--sm" data-pvswap="' + p + '" type="button" style="padding:2px 10px">Swap</button></span></div>';
-        }).join("") + '</div>';
+            '<button class="btn btn--ghost btn--sm" data-pvswap="' + ex.slot + '" type="button" style="padding:2px 10px">Swap</button></span></div>' +
+            (ex.note ? '<p class="faint text-xs" data-pv-note style="margin:0 0 var(--sp-2)">' + esc(ex.note) + '</p>' : "") +
+            rxLinesHtml(ex, true);
+        }).join("") + '</div>' +
+        rowOfferHtml(App.getState(), chosen.day);
       document.querySelectorAll("[data-pvswap]").forEach(function (b) {
         b.addEventListener("click", function () { openPreviewSwap(b.dataset.pvswap, chosen, renderPreview); });
       });
+      var pv = document.getElementById("today-preview");
+      if (clash) App.run.wireNotes(pv);
+      wireDecide(pv, null, renderPreview);
+      wireRowOffer(pv, renderPreview);
     }
     renderPreview();
 
@@ -3228,12 +3741,11 @@
     function renderAllDays() {
       var box = document.getElementById("all-days-preview");
       if (!box) return;
-      box.innerHTML = ROTATION.map(function (d) {
-        var pats = engine.patternsFor(d, chosen.sessionLength);
-        var moves = pats.map(function (p) {
-          var m = engine.movementFor(p);
-          return '<div class="kv"><span class="kv__k">' + cap(p) + ' · L' + s.tiers[p].level + '</span>' +
-            '<span class="kv__v">' + esc(m.name) + '</span></div>';
+      box.innerHTML = engine.template().order.map(function (d) {
+        var pats = engine.buildWorkout(d, chosen.volumeMode, chosen.sessionLength).exercises;
+        var moves = pats.map(function (ex) {
+          return '<div class="kv"><span class="kv__k">' + esc(TD().SLOTS[ex.slot].label) + (ex.level ? ' · L' + ex.level : '') + '</span>' +
+            '<span class="kv__v">' + esc(ex.name) + '</span></div>';
         }).join("");
         return '<div class="card card--glass mt-2">' +
           '<div class="card__head"><div class="card__title">' + DAY_LABEL[d] + (d === rec ? ' <span class="badge badge--primary" style="padding:1px 7px">next up</span>' : "") + '</div>' +
@@ -3294,18 +3806,12 @@
       st.prefs.sessionLength = chosen.sessionLength;
       App.saveState();
 
-      var workout = engine.buildWorkout(chosen.day, chosen.volumeMode, chosen.sessionLength);
-      Object.keys(chosen.overrides).forEach(function (p) {
-        var alt = DB.getExercise(chosen.overrides[p]);
-        if (!alt) return;
-        workout.exercises.forEach(function (ex) {
-          if (ex.pattern === p && !ex.era2) {
-            ex.id = alt.id; ex.name = alt.name; ex.mode = alt.mode; ex.unit = alt.unit;
-            ex.equipment = alt.equipment || []; ex.cues = alt.cues || []; ex.mistakes = alt.mistakes || [];
-            ex.readiness = alt.readiness || ""; ex.injury = alt.injury || ""; ex.swapped = true;
-          }
-        });
-      });
+      /* The previewed object itself, swaps included — not a second build. */
+      var workout = chosen.workout;
+      workout.startedISO = lib.iso();
+      /* The training day is fixed here, once: the logging date (rollover and
+         backfill already applied), not whatever day it is when you finish. */
+      workout.dayKey = Hub.viewDate();
       setWorkout(workout);
       App.refresh();
       App.toast(DAY_LABEL[chosen.day] + " · " +
@@ -3313,6 +3819,9 @@
         ((engine.VOLUME_MODES[chosen.volumeMode] || {}).label || "") +
         " started. Warm up first.", "info");
     });
+
+    wireUpgradeCard(el);
+    wireRecovery(el);
 
     /* Running-in-Today + skill-reminder buttons */
     var goRun = el.querySelector("[data-go-run]");
@@ -3325,18 +3834,12 @@
   }
 
   /* Preview swap: choose an alternative movement before the session starts. */
-  function openPreviewSwap(pattern, chosen, rerender) {
+  function openPreviewSwap(slot, chosen, rerender) {
     var s = App.getState();
-    var all = (DB.listByPattern ? DB.listByPattern(pattern) : []).filter(function (alt) {
-      return alt.era !== 2 || s.era === 2;
-    });
+    var all = engine.slotOptions(slot);
     function missingFor(ex) { return (ex.equipment || []).filter(function (e) { return !s.equipment[e]; }); }
-    all.sort(function (a, b) {
-      var am = missingFor(a).length, bm = missingFor(b).length;
-      if ((am === 0) !== (bm === 0)) return am === 0 ? -1 : 1;
-      return (a.level || 99) - (b.level || 99);
-    });
-    var current = chosen.overrides[pattern] || (engine.movementFor(pattern) || {}).id;
+    var defId = ((engine.prescriptionFor(slot) || {}).rx || {}).exerciseId;
+    var current = chosen.overrides[slot] || defId;
     var rows = all.map(function (alt) {
       var missing = missingFor(alt);
       var doable = missing.length === 0;
@@ -3344,13 +3847,13 @@
       var tag = isCur ? '<span class="badge badge--primary" style="padding:2px 8px">current</span>'
         : (doable ? '<span class="badge badge--success" style="padding:2px 8px">ready</span>'
                   : '<span class="badge badge--warn" style="padding:2px 8px">needs ' + missing.map(function (m) { return (window.EQUIP_LABEL_GLOBAL && window.EQUIP_LABEL_GLOBAL[m]) || m; }).join(", ") + '</span>');
-      var lvl = alt.level ? ("L" + alt.level) : "E2";
       return '<button class="swap-opt' + (isCur ? " is-current" : "") + (doable ? "" : " is-locked") + '" data-pvswapto="' + alt.id + '" type="button">' +
-        '<span class="swap-opt__lvl">' + lvl + '</span>' +
+        '<span class="swap-opt__lvl">' + swapLevel(alt) + '</span>' +
         '<span class="swap-opt__main"><span class="swap-opt__name">' + App.util.escapeHtml(alt.name) + '</span>' +
-        '<span class="swap-opt__sub">' + (alt.mode === "hold" ? "timed hold" : "reps") + '</span></span>' + tag +
+        '<span class="swap-opt__sub">' + swapSub(alt) + '</span></span>' + tag +
       '</button>';
     }).join("");
+    var pattern = TD().SLOTS[slot].label.toLowerCase();
 
     ensureSwapModal();
     var body = document.getElementById("pvswap-body");
@@ -3359,9 +3862,8 @@
     document.getElementById("pvswap-title").textContent = "Swap " + pattern.charAt(0).toUpperCase() + pattern.slice(1) + " movement";
     body.querySelectorAll("[data-pvswapto]").forEach(function (b) {
       b.addEventListener("click", function () {
-        var defId = (engine.movementFor(pattern) || {}).id;
-        if (b.dataset.pvswapto === defId) delete chosen.overrides[pattern];
-        else chosen.overrides[pattern] = b.dataset.pvswapto;
+        if (b.dataset.pvswapto === defId) delete chosen.overrides[slot];
+        else chosen.overrides[slot] = b.dataset.pvswapto;
         App.closeModal("modal-pvswap");
         if (rerender) rerender();
       });
@@ -3399,8 +3901,6 @@
     var modeLabel = ((engine.VOLUME_MODES || {})[w.volumeMode] || {}).label || "";
     var adaptNotes = [];
     if (modeLabel && w.volumeMode !== "standard") adaptNotes.push(modeLabel + " intensity selected");
-    if (w.setCountDelta > 0) adaptNotes.push("+" + w.setCountDelta + " set from last session");
-    if (w.setCountDelta < 0) adaptNotes.push(Math.abs(w.setCountDelta) + " fewer set — take it steady");
     w.exercises.forEach(function (ex) {
       if (ex.targetDelta > 0) adaptNotes.push(cap(ex.pattern) + " target ▲" + ex.targetDelta);
       if (ex.targetDelta < 0) adaptNotes.push(cap(ex.pattern) + " target ▼" + Math.abs(ex.targetDelta));
@@ -3412,8 +3912,20 @@
         '</div>'
       : "";
 
+    /* The draft outlives the backfill bar (the logging date resets on reload)
+       and midnight, so the screen itself says where this workout will land. */
+    var dayNote = (w.dayKey && w.dayKey !== lib.today())
+      ? '<div class="wh-advice wh-advice--warn mt-4" role="status">' +
+          '<div><div class="wh-advice__title">Saving to ' + esc(Hub.prettyDate(w.dayKey)) + ' · ' + esc(Hub.relDay(w.dayKey)) + '</div>' +
+          '<p class="wh-advice__body">This workout began on that day, so that\'s where it\'s filed. Discard it to log one for today instead.</p></div>' +
+        '</div>'
+      : "";
+
     el.innerHTML =
       head("Workout", DAY_LABEL[w.dayType], "Log every set — the OS adapts from this") +
+      dayNote +
+      recoveryHtml(s, true) +
+      upgradeCardHtml(s) +
       adaptBanner +
       /* warmup */
       section("Warm-up", warm.length + " drills", checklist(warm, w.warmup, "warm")) +
@@ -3441,7 +3953,9 @@
 
   function exerciseBlock(ex, i, s) {
     var unit = ex.mode === "hold" ? "sec" : "reps";
-    var showW = (s.era === 2) || ex.era2;
+    /* Loaded work always gets a weight input, whatever the Era (plan C3). */
+    var loadMode = (TD().EXERCISES[ex.id] || {}).loadMode;
+    var showW = !!loadMode || (s.era === 2) || ex.era2;
     var isHold = ex.mode === "hold";
     var sets = ex.sets.map(function (st, j) {
       var holdBtn = isHold ? '<button class="mini-timer mini-timer--hold" data-holdtimer="' + i + "-" + j + '" type="button" title="Time this hold" aria-label="Start hold timer">' +
@@ -3454,7 +3968,8 @@
           (showW ? '<span class="stepper stepper--sm" data-wt="' + i + "-" + j + '" data-min="0" data-max="200">' +
             '<button class="stepper__btn" data-wstep="-2.5" type="button">–</button>' +
             '<input class="stepper__inp" type="number" value="' + (st.weight == null ? "" : st.weight) + '" placeholder="kg" inputmode="decimal">' +
-            '<button class="stepper__btn" data-wstep="2.5" type="button">+</button></span>' : "") +
+            '<button class="stepper__btn" data-wstep="2.5" type="button">+</button></span>' +
+            (loadMode ? '<span class="faint text-xs">' + (loadMode === "perHand" ? "kg per hand" : "kg total") + '</span>' : "") : "") +
           holdBtn +
         '</div>' +
         '<button class="setrow__done ' + (st.done ? "is-on" : "") + '" data-donebtn="' + i + "-" + j + '" type="button">' +
@@ -3462,42 +3977,50 @@
       '</div>';
     }).join("");
 
-    var diff = ["easy", "moderate", "hard", "failed"].map(function (d) {
-      return '<button class="diff-btn ' + (ex.difficulty === d ? "is-on" : "") + '" data-diff="' + i + '" data-d="' + d + '">' + cap(d === "moderate" ? "just right" : d) + '</button>';
+    /* "moderate" is the stored value of Just right. A blank saves as null and
+       "Not sure" as "unsure": both read as unknown effort, never evidence. */
+    var diff = EFFORTS.map(function (d) {
+      return '<button class="diff-btn ' + (ex.difficulty === d[0] ? "is-on" : "") + '" data-diff="' + i + '" data-d="' + d[0] + '" type="button" aria-pressed="' + (ex.difficulty === d[0]) + '">' + d[1] + '</button>';
     }).join("");
 
     var flagged = ex.flag && ex.flag.bodyPart;
-    var deltaTag = "";
-    if (ex.targetDelta && ex.targetDelta !== 0) {
-      var up = ex.targetDelta > 0;
-      deltaTag = ' <span style="color:' + (up ? "var(--success)" : "var(--warn)") + ';font-weight:700">' +
-        (up ? "▲" : "▼") + " " + Math.abs(ex.targetDelta) + " " + (up ? "more" : "less") +
-        (ex.targetReason ? " · " + ex.targetReason : "") + "</span>";
-    }
+    var skipped = engine.skipped(ex);
+    /* A skipped exercise shows the substitution's advice where the set inputs
+       and the original cues were: logging into it would be logging pain. */
+    var skipSub = skipped ? DB.substitute(ex.pattern, ex.flag.bodyPart, "sharp", s.era) : null;
+    var skipCue = skipSub ? skipSub.cue : "Rest it today; do gentle pain-free mobility only.";
+    var cueHtml = skipped
+      ? '<p style="margin:0">' + esc(skipCue) + '</p>'
+      : '<ul style="margin:0;padding-left:18px;display:grid;gap:6px">' + ex.cues.map(function (c) { return "<li>" + esc(c) + "</li>"; }).join("") + '</ul>' +
+        (ex.mistakes.length ? '<p class="mt-4" style="color:var(--warn)"><b>Avoid:</b> ' + esc(ex.mistakes[0]) + '</p>' : "");
+    /* Prescription first: exercise, setup, sets × range (C5). A draft from
+       before v4 has one target and no prescription. */
+    var setup = ex.rx ? setupText(ex.rx) : "";
     return '<div class="exq ' + (flagged ? "is-flagged" : "") + '" data-block="' + i + '">' +
       '<div class="exq__top"><div><div class="exq__name">' + esc(ex.name) + '</div>' +
-        '<div class="exq__meta">' + cap(ex.pattern) + (ex.era2 ? " · ERA II" : " · LEVEL " + ex.level) +
-        ' · TARGET ' + ex.target + ' ' + unit + ' × ' + ex.sets.length + deltaTag +
+        '<div class="exq__meta">' + esc(ex.slot ? TD().SLOTS[ex.slot].label : cap(ex.pattern)) +
+        (setup ? ' · ' + esc(setup) : "") +
+        (ex.range ? ' · ' + rangeText(ex) : ' · TARGET ' + ex.target + ' ' + unit + ' × ' + ex.sets.length) +
         ' · REST ' + (ex.restSec || 90) + 's</div>' +
         '<button class="exq__rest" data-rest="' + i + '" type="button" title="Start rest timer">' +
           '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>Rest</button></div>' +
-        (ex.era2 ? '<span class="badge badge--era2">E2</span>' : '<span class="badge badge--era1">E1</span>') +
       '</div>' +
       '<div class="exq__body stack">' +
-        (flagged ? '<div class="badge badge--warn" style="align-self:flex-start"><span class="dot"></span>Swapped: ' + esc(ex.flag.substitutedTo || "modified") + '</div>' : "") +
+        (skipped ? '<div class="badge badge--warn" style="align-self:flex-start"><span class="dot"></span>Skipped today · ' + esc(prettyPart(ex.flag.bodyPart)) + '</div>' + '<p class="muted text-sm" style="margin:0">' + esc(skipCue) + '</p>'
+          : flagged ? '<div class="badge badge--warn" style="align-self:flex-start"><span class="dot"></span>Swapped: ' + esc(ex.flag.substitutedTo || "modified") + '</div>' : "") +
         (ex.swapped ? '<div class="badge badge--secondary" style="align-self:flex-start"><span class="dot"></span>Swapped movement</div>' : "") +
-        '<div>' + sets + '</div>' +
+        (ex.note ? '<p class="muted text-sm" data-ex-note style="margin:0">' + esc(ex.note) + '</p>' : "") +
+        (skipped ? "" : rxLinesHtml(ex, false)) +
+        (skipped ? "" : '<div>' + sets + '</div>') +
         '<div class="collapsible" data-coach="' + i + '"><button class="collapsible__head" data-collapsible type="button" aria-expanded="false">' +
           'Form cues &amp; coaching' +
           '<svg class="collapsible__chev ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>' +
           '<div class="collapsible__body"><div class="collapsible__inner"><div class="collapsible__pad">' +
-            '<ul style="margin:0;padding-left:18px;display:grid;gap:6px">' + ex.cues.map(function (c) { return "<li>" + esc(c) + "</li>"; }).join("") + '</ul>' +
-            (ex.mistakes.length ? '<p class="mt-4" style="color:var(--warn)"><b>Avoid:</b> ' + esc(ex.mistakes[0]) + '</p>' : "") +
-            (ex.readiness ? '<p class="mt-2 faint text-xs">' + esc(ex.readiness) + '</p>' : "") +
+            cueHtml +
           '</div></div></div>' +
         '</div>' +
         '<div class="row between wrap" style="gap:var(--sp-3)">' +
-          '<div><div class="field__label mb-2">How did it feel?</div><div class="diff-grp">' + diff + '</div></div>' +
+          (skipped ? "" : '<div><div class="field__label mb-2">How did it feel?</div><div class="diff-grp">' + diff + '</div></div>') +
           '<button class="btn btn--ghost btn--sm" data-guide="' + i + '" data-exid="' + ex.id + '" type="button">' +
             '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>' +
             'How to do this</button>' +
@@ -3610,10 +4133,16 @@
       b.addEventListener("click", function () {
         var ei = +b.dataset.diff;
         w.exercises[ei].difficulty = b.dataset.d;
-        el.querySelectorAll('[data-diff="' + ei + '"]').forEach(function (x) { x.classList.toggle("is-on", x === b); });
+        el.querySelectorAll('[data-diff="' + ei + '"]').forEach(function (x) {
+          x.classList.toggle("is-on", x === b); x.setAttribute("aria-pressed", String(x === b));
+        });
         setWorkout(w);
       });
     });
+    /* Step up / Repeat, and the one-time upgrade card */
+    wireDecide(el, w, function () { App.refresh(); });
+    wireUpgradeCard(el);
+    wireRecovery(el);
     /* exercise guide modal */
     el.querySelectorAll("[data-guide]").forEach(function (b) {
       b.addEventListener("click", function () { openGuideModal(b.dataset.exid); });
@@ -3654,12 +4183,11 @@
     }
 
     var prog = App.PROGRESSIONS[ex.pattern] || {};
-    var levelLabel = ex.level ? ("Level " + ex.level + " · " + (prog.label || ex.pattern)) : ("Era II · " + (prog.label || ex.pattern));
     var modeStr = ex.mode === "hold" ? "Timed hold (" + ex.unit + ")" : "Reps-based (" + ex.unit + ")";
     var equipStr = (ex.equipment && ex.equipment.length) ? ex.equipment.join(", ") : "Bodyweight only";
 
     document.getElementById("guide-pattern").textContent = (prog.label || ex.pattern).toUpperCase();
-    document.getElementById("guide-level-badge").textContent = ex.level ? ("L" + ex.level) : "E2";
+    document.getElementById("guide-level-badge").textContent = swapLevel(ex);
     document.getElementById("guide-title").textContent = ex.name;
     document.getElementById("guide-sub").textContent = modeStr + "  ·  " + equipStr;
 
@@ -3695,11 +4223,13 @@
       mistakesWrap.style.display = "none";
     }
 
-    // Readiness
+    /* When to step up: the generated rule, never the DB's readiness prose,
+       which predates the ranges and would contradict the card (A12). */
     var readinessWrap = document.getElementById("guide-readiness-wrap");
     var readinessTxt = document.getElementById("guide-readiness");
-    if (ex.readiness) {
-      readinessTxt.textContent = ex.readiness;
+    var rule = window.Training && window.TRAINING_DATA.EXERCISES[exId] ? ruleText(rxStart(exId)) : null;
+    if (rule) {
+      readinessTxt.textContent = rule;
       readinessWrap.style.display = "";
     } else {
       readinessWrap.style.display = "none";
@@ -3743,15 +4273,9 @@
     if (panel.getAttribute("data-open") === "1") { panel.innerHTML = ""; panel.removeAttribute("data-open"); return; }
     panel.setAttribute("data-open", "1");
 
-    var all = (DB.listByPattern ? DB.listByPattern(ex.pattern) : []).filter(function (alt) {
-      return alt.era !== 2 || App.getState().era === 2;   // hide Era-II tools until graduated
-    });
-    // Sort: doable (no missing gear) first, then by level/name
-    all.sort(function (a, b) {
-      var am = equipNeeded(a).length, bm = equipNeeded(b).length;
-      if ((am === 0) !== (bm === 0)) return am === 0 ? -1 : 1;
-      return (a.level || 99) - (b.level || 99);
-    });
+    /* The slot's movements, owned first. A draft from before v4 has no slot;
+       its pattern is the slot it trained. */
+    var all = engine.slotOptions(ex.slot || ex.pattern);
 
     var rows = all.map(function (alt) {
       var missing = equipNeeded(alt);
@@ -3760,11 +4284,10 @@
       var tag = isCurrent ? '<span class="badge badge--primary" style="padding:2px 8px">current</span>'
         : (doable ? '<span class="badge badge--success" style="padding:2px 8px">ready</span>'
                   : '<span class="badge badge--warn" style="padding:2px 8px">needs ' + missing.map(function (m) { return EQUIP_LABEL[m] || m; }).join(", ") + '</span>');
-      var lvl = alt.level ? ("L" + alt.level) : "E2";
       return '<button class="swap-opt' + (isCurrent ? " is-current" : "") + (doable ? "" : " is-locked") + '" data-swapto="' + i + "|" + alt.id + '" type="button"' + (isCurrent ? " disabled" : "") + '>' +
-        '<span class="swap-opt__lvl">' + lvl + '</span>' +
+        '<span class="swap-opt__lvl">' + swapLevel(alt) + '</span>' +
         '<span class="swap-opt__main"><span class="swap-opt__name">' + esc(alt.name) + '</span>' +
-        '<span class="swap-opt__sub">' + (alt.mode === "hold" ? "timed hold" : "reps") + '</span></span>' +
+        '<span class="swap-opt__sub">' + swapSub(alt) + '</span></span>' +
         tag +
       '</button>';
     }).join("");
@@ -3773,7 +4296,7 @@
       '<div class="card card--glass stack mt-2" style="border-color:rgba(204,0,0,.25)">' +
         '<div class="row between"><div class="field__label">Swap ' + cap(ex.pattern) + ' movement</div>' +
           '<button class="btn btn--ghost btn--sm" data-swapclose="' + i + '" type="button">Close</button></div>' +
-        '<p class="faint text-xs" style="margin:0">Movements you can do with your current equipment are marked <b style="color:var(--success)">ready</b>. Swapping keeps your ' + cap(ex.pattern) + ' progression on track.</p>' +
+        '<p class="faint text-xs" style="margin:0">Movements you can do with your current equipment are marked <b style="color:var(--success)">ready</b>. A swapped movement starts at the bottom of its own range, and what you log counts as its history, not the original\'s.</p>' +
         '<div class="swap-list">' + rows + '</div>' +
       '</div>';
 
@@ -3789,22 +4312,39 @@
 
   function doSwap(i, newId, w) {
     var alt = DB.getExercise ? DB.getExercise(newId) : window.EXERCISE_DB[newId];
-    if (!alt) { App.toast("Couldn't find that movement.", "warn"); return; }
+    if (!alt || !TD().EXERCISES[newId]) { App.toast("Couldn't find that movement.", "warn"); return; }
     var ex = w.exercises[i];
-    // Replace the movement but keep pattern, sets, target & rest so progression still works.
-    ex.id = alt.id;
-    ex.name = alt.name;
-    ex.mode = alt.mode;
-    ex.unit = alt.unit;
-    ex.equipment = alt.equipment || [];
-    ex.cues = alt.cues || [];
-    ex.mistakes = alt.mistakes || [];
-    ex.readiness = alt.readiness || "";
-    ex.injury = alt.injury || "";
+    /* A real id with its own prescription: the sets you log belong to the
+       movement you did, at the bottom of its range. Keeping the old target
+       turned 8 reps into 8 seconds; keeping the old id filed the history
+       under a movement you didn't do. */
+    applyMovement(ex, rxStart(newId, { why: "swapped for this session" }));
     ex.swapped = true;
+    ex.note = "";
     setWorkout(w);
     App.refresh();
     App.toast("Swapped to " + alt.name + ".", "success");
+  }
+
+  /* Point a workout exercise at another movement and prescription, keeping
+     its slot, set count, rest, rating and flag. */
+  var MOVEMENT_FIELDS = ["id", "name", "pattern", "level", "mode", "unit", "equipment", "cues", "mistakes",
+                         "readiness", "injury", "rx", "range", "target", "targetDelta", "targetReason"];
+  function applyMovement(ex, rx) {
+    var db = DB.getExercise(rx.exerciseId);
+    rx.sets = ex.sets.length;
+    ex.id = rx.exerciseId; ex.name = db.name; ex.pattern = db.pattern || ex.pattern;
+    ex.level = db.level || null; ex.mode = db.mode; ex.unit = db.unit;
+    ex.equipment = db.equipment || []; ex.cues = db.cues || []; ex.mistakes = db.mistakes || [];
+    ex.readiness = db.readiness || ""; ex.injury = db.injury || "";
+    ex.rx = rx; ex.range = rx.range;
+    ex.target = rx.range[0] != null ? rx.range[0] : rx.range[1];
+    ex.targetDelta = 0; ex.targetReason = "";
+  }
+  function snapshotMovement(ex) {
+    var o = {};
+    MOVEMENT_FIELDS.forEach(function (k) { if (k in ex) o[k] = JSON.parse(JSON.stringify(ex[k])); });
+    return o;
   }
 
   function openFlagPanel(i, w) {
@@ -3823,31 +4363,60 @@
             field("How bad?", '<select class="select" id="flag-sev-' + i + '">' +
               ["mild", "moderate", "sharp"].map(function (sv) { return opt(sv, cap(sv), f.severity); }).join("") + '</select>') +
           '</div>' +
-          (sub ? '<div class="card" style="padding:var(--sp-3)"><div class="drow__sub">SAFE SWAP</div>' +
+          (sub ? '<div class="card" style="padding:var(--sp-3)"><div class="drow__sub">' + (f.severity === "sharp" ? "Suggested — skip it" : "Suggested swap") + '</div>' +
             '<div class="drow__title">' + esc(sub.name) + '</div><p class="muted text-xs mt-2">' + esc(sub.cue) + '</p></div>' : "") +
           '<div class="row" style="gap:var(--sp-2)">' +
-            '<button class="btn btn--secondary btn--sm grow" id="flag-apply-' + i + '">Apply swap</button>' +
+            '<button class="btn btn--secondary btn--sm grow" id="flag-apply-' + i + '">' + (f.severity === "sharp" ? "Skip it today" : "Apply swap") + '</button>' +
             (ex.flag ? '<button class="btn btn--ghost btn--sm" id="flag-clear-' + i + '">Clear</button>' : "") +
           '</div>' +
         '</div>';
       document.getElementById("flag-bp-" + i).addEventListener("change", function (e) { f.bodyPart = e.target.value; draw(); });
       document.getElementById("flag-sev-" + i).addEventListener("change", function (e) { f.severity = e.target.value; draw(); });
       document.getElementById("flag-apply-" + i).addEventListener("click", function () {
+        restoreMovement();   // re-flagging starts from the movement that hurt
         var sub2 = DB.substitute(ex.pattern, f.bodyPart, f.severity, App.getState().era);
         ex.flag = { bodyPart: f.bodyPart, severity: f.severity, substitutedTo: sub2 ? sub2.name : null };
-        if (sub2) { ex.name = sub2.name; }
+        /* A substitute that is a real exercise you can do becomes that
+           exercise, at the bottom of its range, so its sets are its history
+           (plan C3, T15). They still aren't evidence for a step: a flagged
+           exercise never is (C2). Any other substitute keeps the original
+           id with the substitute's name and cue. Sharp means skip, so the
+           exercise keeps its own name: the saved record says which movement
+           was skipped, not "Skip push pattern". */
+        var toId = sub2 && f.severity !== "sharp" && TD().SUBSTITUTION_IDS[sub2.name];
+        if (toId && toId !== ex.id && window.Training.owns(App.getState().equipment, toId)) {
+          ex.unswapped = snapshotMovement(ex);
+          ex.flag.fromId = ex.id;
+          applyMovement(ex, rxStart(toId, { why: "pain swap from " + ex.name }));
+        } else if (sub2 && f.severity !== "sharp") { ex.name = sub2.name; } else { restoreName(); }
         setWorkout(w); App.refresh();
-        App.toast("Swapped to a joint-friendly variation.", "warn");
+        App.toast(f.severity === "sharp" ? "Skipping this exercise today." : "Swapped to a joint-friendly variation.", "warn");
       });
       var clr = document.getElementById("flag-clear-" + i);
-      if (clr) clr.addEventListener("click", function () { ex.flag = null; setWorkout(w); App.refresh(); });
+      if (clr) clr.addEventListener("click", function () { restoreMovement(); ex.flag = null; restoreName(); setWorkout(w); App.refresh(); });
+    }
+    /* A relabel keeps the id, so the DB still knows the real name. */
+    function restoreName() { var base = DB.getExercise && DB.getExercise(ex.id); if (base) ex.name = base.name; }
+    /* A real-id pain swap is undone from the snapshot taken before it. */
+    function restoreMovement() {
+      if (!ex.unswapped) return;
+      var o = ex.unswapped;
+      Object.keys(o).forEach(function (k) { ex[k] = o[k]; });
+      delete ex.unswapped;
     }
     draw();
   }
 
   function completeSession(w) {
+    /* Read-only: refuse before finalizing, so the logged sets stay in the
+       draft (a separate key) instead of being cleared after a save that
+       never happened. */
+    if (App.readOnly()) {
+      App.toast("Fitness is read-only on this device — this workout wasn't saved. Your sets stay in the draft.", "danger", 6000);
+      return;
+    }
     /* require at least one logged value */
-    var any = w.exercises.some(function (ex) { return ex.sets.some(function (st) { return Number(st.value) > 0; }); });
+    var any = w.exercises.some(function (ex) { return !engine.skipped(ex) && ex.sets.some(function (st) { return Number(st.value) > 0; }); });
     if (!any) { App.toast("Log at least one set before completing.", "warn"); return; }
 
     var res = engine.finalizeSession(w);
@@ -3861,9 +4430,10 @@
       App.toast("Level up! " + cap(l.pattern) + " → L" + l.level + " · " + l.name, "success", 4600);
     });
     var grad = engine.checkGraduation();
-    if (grad) App.toast("Era II unlocked — weighted tools are live.", "success", 5000);
+    if (grad) App.toast("Era II reached — all five benchmarks cleared.", "success", 5000);
 
-    App.toast("Session logged. " + (res.prs.length || res.levelUps.length ? "Strong work." : "Recovery counts too."), "info");
+    App.toast("Session logged" + (w.dayKey && w.dayKey !== lib.today() ? " " + Hub.dayWord(w.dayKey) : "") + ": " +
+      countsText(exerciseCounts(w.exercises)) + ".", "info");
 
     /* WELLNESS HUB INTEGRATION
        Tell the hub a workout just landed so the fitness streak, the dashboard
@@ -3877,6 +4447,297 @@
   }
 
   /* ---- Today html helpers ---- */
+  /* "3 × 6–12 reps", "3 × 10–20 s", "3 × 6–12 reps /side". A draft from before v4 has
+     one target and no range. */
+  function rangeText(ex) {
+    var n = ex.sets.length, r = ex.range;
+    if (!r) return n + " × " + ex.target;
+    var sec = (ex.rx ? ex.rx.unit === "sec" : ex.mode === "hold") ? " s" : " reps";
+    var side = (TD().rangeFor(ex.id) || {}).perSide ? " /side" : "";
+    var body = r[0] != null ? r[0] + "–" + r[1] : r[1] != null ? "up to " + r[1] : "attempts";
+    return n + " × " + body + sec + side;
+  }
+  /* The left tag in the swap lists: the ladder level, KG for loaded work,
+     a dash for the unnumbered movements (Incline Push-up, the rows). */
+  function swapLevel(alt) {
+    var e = TD().EXERCISES[alt.id];
+    return alt.level ? "L" + alt.level : (e && e.loadMode ? "KG" : "—");
+  }
+  function swapSub(alt) {
+    var e = TD().EXERCISES[alt.id] || {};
+    return (alt.mode === "hold" ? "timed hold" : "reps") +
+      (e.loadMode ? " · loaded, " + (e.loadMode === "perHand" ? "kg per hand" : "kg total") : "") +
+      (e.branch === "skill" ? " · optional" : "");
+  }
+
+  /* ---- The prescription card (plan C5) ----
+     Every line is read from Training.recommend, recomputed on each render;
+     nothing here is stored except the choice a Step up / Repeat button makes
+     through engine.decide. */
+
+  /* "Table height (~75 cm)", "Knees bent", "12.5 kg per hand" — or "". */
+  function setupText(rx) {
+    var S = TD().SETUPS[rx.exerciseId], st = rx.setup || {}, out = [];
+    if (S) {
+      var v = S.values.filter(function (x) { return x.id === st[S.key]; })[0];
+      if (v) out.push(v.label + (S.key === "surface" ? " height" : "") + (v.cm ? " (~" + v.cm + " cm)" : ""));
+    }
+    if (st.loadMode) out.push(st.loadKg != null ? st.loadKg + " kg " + (st.loadMode === "perHand" ? "per hand" : "total") : "load not set yet");
+    return out.join(" · ");
+  }
+  /* "3 × 12", "3 × 20 s": every set at the top of the range. */
+  function topText(rx) { return rx.sets + " × " + rx.range[1] + (rx.unit === "sec" ? " s" : ""); }
+  function stepText(step) {
+    if (step.kind === "movement") return (DB.getExercise(step.rx.exerciseId) || {}).name || step.rx.exerciseId;
+    return setupText(step.rx).toLowerCase();
+  }
+  var NUM_WORD = ["no", "one", "two", "three", "four", "five"];
+  var EFFORTS = [["easy", "Easy"], ["moderate", "Just right"], ["hard", "Hard"], ["failed", "Failed"], ["unsure", "Not sure"]];
+
+  /* The rule as a sentence, from the same constants recommend() uses, so the
+     card can't disagree with the decision (A12). null where there's no top. */
+  function ruleText(rx) {
+    if (!rx || !rx.range || rx.range[1] == null) return null;
+    return "Step up after " + (NUM_WORD[TD().EVIDENCE_SESSIONS] || TD().EVIDENCE_SESSIONS) + " days at " + topText(rx) +
+      ", rated easy or just right. A rule of thumb from your own logs, not a test — it can't see your form.";
+  }
+
+  /* The slot's recommendation, when this workout exercise IS the slot's
+     prescription. A swap, a pain swap or an equipment fallback is a
+     different prescription: it shows its history, never an offer. The slot's
+     own set count is what's compared, so an Extended session still shows the
+     standard prescription's evidence. */
+  function cardRec(ex) {
+    if (!ex.slot || !ex.rx || ex.swapped || engine.flagged(ex)) return null;
+    var stored = App.getState().training.slots[ex.slot];
+    if (!stored || stored.off || stored.exerciseId !== ex.rx.exerciseId ||
+        JSON.stringify(stored.setup || {}) !== JSON.stringify(ex.rx.setup || {})) return null;
+    return engine.recommendFor(ex.slot);
+  }
+
+  /* The reason line, and the Step / Repeat buttons when there's a step to
+     take and you haven't answered this evidence yet. */
+  function reasonHtml(rec, rx, slot) {
+    var top = topText(rx), N = TD().EVIDENCE_SESSIONS, line = "", ask = null;
+    var days = rec.evidence.map(function (e) { return lib.fmtShort(e.day); });
+    var stored = App.getState().training.slots[slot] || {};
+    switch (rec.why) {
+      case "ready":
+        line = "Ready: " + top + " on " + days.join(" and ");
+        if (rec.decision) line += " — you chose to repeat. Your next session asks again.";
+        else if (rec.step) { line += " — step up to " + stepText(rec.step) + "?"; ask = "Step up"; }
+        else {
+          line += " — the end of this path.";
+          if (rec.options.length) line += " Optional next: " + rec.options.map(function (id) { return (DB.getExercise(id) || {}).name || id; }).join(", ") + ", from Swap.";
+          if (rec.unowned.length) line += " " + rec.unowned.map(function (id) { return (DB.getExercise(id) || {}).name + " needs " + missingGear(id, App.getState().equipment); }).join("; ") + ".";
+        }
+        break;
+      case "declining":
+        line = "Your totals fell " + rec.evidence.map(function (e) { return e.total; }).join(" → ") + " over your last " + rec.evidence.length + " sessions";
+        if (rec.decision) line += " — you chose to repeat. Your next session asks again.";
+        else { line += " — step back to " + stepText(rec.step) + "?"; ask = "Step back"; }
+        break;
+      case "below-top": line = "Repeat: set " + (rec.belowSet + 1) + " below " + rec.hi + (rx.unit === "sec" ? " s" : ""); break;
+      case "one-session": line = "Repeat: " + rec.atTop + " of " + N + " at " + top; break;
+      case "same-day": line = "Repeat: your sessions at " + top + " were on one day — the next one needs another day"; break;
+      case "effort": line = "Repeat: " + top + " reached, but not rated easy or just right each time"; break;
+      case "no-standard": line = "This skill names no number to step up from — move on when it feels owned."; break;
+      case "no-load": line = "Log the weight you use: a step up needs to know the load, so sessions without one don't count."; break;
+      default:
+        line = /^your assessment/.test(stored.why || "")
+          ? "Unverified: you chose this at setup. Your first session here confirms it."
+          : "Repeat: no session at this prescription yet";
+    }
+    /* Nothing rises inside a recovery block (D3): the evidence stands, the
+       offer waits. */
+    if (ask === "Step up" && engine.recoveryOn(lib.today())) {
+      line = line.replace(/ — step up to.*$/, " — the step waits until your recovery block ends.");
+      ask = null;
+    }
+    return '<p class="text-sm" data-rx-reason style="margin:0">' + esc(line) + '</p>' +
+      (ask ? '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap">' +
+        '<button class="btn btn--primary btn--sm" data-decide="' + slot + '" data-choice="step" type="button">' + ask + '</button>' +
+        '<button class="btn btn--ghost btn--sm" data-decide="' + slot + '" data-choice="repeat" type="button">Repeat</button></div>' : "");
+  }
+
+  /* The card's lines under the exercise name: last comparable sets with
+     their date, the reason, and (full) the rule. `compact` is the preview row. */
+  function rxLinesHtml(ex, compact) {
+    if (!ex.rx || !ex.rx.range) return "";
+    var rec = cardRec(ex);
+    var hist = rec ? rec.history : window.Training.comparable(engine.completedSessions(), ex.rx);
+    var last = hist[hist.length - 1];
+    var lastLine = last
+      ? "Last: " + last.values.join(" / ") + (ex.rx.unit === "sec" ? " s" : "") + " · " + lib.fmtShort(last.day) +
+        (rec && rec.why === "below-top" ? " — aim to add a rep." : "")
+      : "";
+    var slotRx = rec ? App.getState().training.slots[ex.slot] : ex.rx;
+    if (compact) return rec ? '<div class="faint" data-pv-reason style="margin:0 0 var(--sp-2)">' + reasonHtml(rec, slotRx, ex.slot) + '</div>' : "";
+    var rule = ruleText(slotRx);
+    return '<div class="stack" data-rx-lines style="gap:var(--sp-2)">' +
+      (lastLine ? '<p class="muted text-sm mono" data-rx-last style="margin:0">' + esc(lastLine) + '</p>' : "") +
+      (rec ? reasonHtml(rec, slotRx, ex.slot)
+           : ex.swapped || engine.flagged(ex) ? '<p class="faint text-xs" style="margin:0">Swapped for this session — logged as this movement\'s history. If your program reaches it, these sessions count.</p>' : "") +
+      (rule ? '<p class="faint text-xs" data-rx-rule style="margin:0">' + esc(rule) + '</p>' : "") +
+    '</div>';
+  }
+
+  /* Step / Repeat. In a workout, a step applies to today only while nothing
+     is logged on that exercise; otherwise it starts with your next session,
+     so logged sets are never re-filed under a movement you didn't do. */
+  function wireDecide(root, w, after) {
+    root.querySelectorAll("[data-decide]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var slot = b.dataset.decide, choice = b.dataset.choice;
+        var rec = engine.recommendFor(slot);
+        var next = engine.decide(slot, choice);
+        if (!next) return;
+        var msg = choice === "repeat" ? "Repeating " + ((DB.getExercise(next.exerciseId) || {}).name || "") + " — new sessions will ask again."
+          : (rec.action === "reduce" ? "Stepped back to " : "Stepped up to ") + stepText(rec.step) + ".";
+        if (w && choice === "step") {
+          var later = false;
+          w.exercises.forEach(function (ex) {
+            if (ex.slot !== slot || ex.swapped || engine.flagged(ex)) return;
+            if (ex.sets.some(function (st) { return Number(st.value) > 0; })) { later = true; return; }
+            applyMovement(ex, JSON.parse(JSON.stringify(next)));
+            var kg = next.setup && next.setup.loadKg;
+            if (kg != null) ex.sets.forEach(function (st) { st.weight = kg; });
+          });
+          setWorkout(w);
+          if (later) msg += " It starts next session — this one keeps the sets you've logged.";
+        }
+        App.toast(msg, "success", 4200);
+        if (after) after();
+      });
+    });
+  }
+
+  /* Complete, partial and skipped, counted separately (C5): a set counts as
+     done when it holds a value above 0. Skipped means a sharp pain flag or
+     nothing logged at all. Takes saved exercises ({ reps }) or a draft's
+     ({ value }). */
+  function exerciseCounts(exercises) {
+    var c = { complete: 0, partial: 0, skipped: 0 };
+    (exercises || []).forEach(function (ex) {
+      var sets = ex.sets || [];
+      var n = sets.filter(function (st) { return Number(st.reps != null ? st.reps : st.value) > 0; }).length;
+      if (ex.skipped || engine.skipped(ex) || !n) c.skipped++;
+      else if (n < sets.length) c.partial++;
+      else c.complete++;
+    });
+    return c;
+  }
+  function countsText(c) { return c.complete + " complete · " + c.partial + " partial · " + c.skipped + " skipped"; }
+
+  /* C6: the first workout after the v4 upgrade gets one card, until you
+     dismiss it on this device. Only a migrated save has "carried over"
+     slots; a new profile set up by the assessment never sees it. */
+  var UPGRADE_SEEN_KEY = "v4.upgradeSeen";
+  function upgradeCardHtml(s) {
+    var slots = s.training.slots, migrated = Object.keys(slots).some(function (k) { return /^carried over/.test((slots[k] || {}).why || ""); });
+    if (!migrated || App.util.uiGet(UPGRADE_SEEN_KEY, false)) return "";
+    var item = function (b, t) { return '<li><b>' + b + '</b> ' + t + '</li>'; };
+    return '<div class="wh-advice wh-advice--info mt-4" data-upgrade-card role="status"><div>' +
+      '<div class="wh-advice__title">Workouts progress differently now</div>' +
+      '<ul class="wh-advice__body" style="margin:var(--sp-2) 0;padding-left:18px;display:grid;gap:6px">' +
+        item("Targets are ranges.", "Every movement is 3 sets: 6–12 reps for most, 3–6 for negatives, or a hold range, not one number. Aim to add a rep; the top of the range is the finish line.") +
+        item("A step up needs evidence.", "Two sessions on different days with every set at the top, rated easy or just right — then the card asks, and you choose. Points no longer move anything.") +
+        item("Your old sessions don't count as evidence.", "They didn't save the prescription they were done at, and an old \"just right\" can't be told from no answer. They stay in your history.") +
+        (s.era === 2
+          ? item("One thing did change.", "The Era II movement that was added to the end of each session is gone. Loaded movements are in every slot's Swap list instead, for any equipment you own.")
+          : item("Nothing in your program changed.", "Each movement is the one you were already on.")) +
+      '</ul>' +
+      '<button class="btn btn--ghost btn--sm" data-upgrade-ok type="button">Got it</button></div></div>';
+  }
+  function wireUpgradeCard(el) {
+    var b = el.querySelector("[data-upgrade-ok]");
+    if (b) b.addEventListener("click", function () {
+      App.util.uiSet(UPGRADE_SEEN_KEY, true);
+      var card = el.querySelector("[data-upgrade-card]");
+      if (card) card.remove();
+    });
+  }
+
+  /* Recovery block (plan D3), always visible while one is on: it changes
+     your sets without a prompt on each workout, so it gets a persistent
+     banner, and ending it is one click, not a dialog. With no block, the
+     offer card appears after a sharp flag or two slots trending down, with
+     the numbers that triggered it and a "Not now" that holds until
+     something new happens. `plain` is the in-workout banner: the sets are
+     already built, so it offers no buttons. */
+  function recoveryHtml(s, plain) {
+    var R = TD().RECOVERY_BLOCK, b = engine.recoveryOn(lib.today()), icon = '<span class="wh-advice__ic"></span>';
+    if (b) {
+      var day = lib.daysBetween(b.startKey, lib.today()) + 1, lastKey = lib.dayKey(lib.addDays(engine.recoveryEnd(b), -1));
+      return '<div class="wh-advice wh-advice--warn mt-4" data-rb-banner role="status"><div>' +
+        '<div class="wh-advice__title">Recovery block · day ' + day + ' of ' + b.days + '</div>' +
+        '<p class="wh-advice__body" style="margin:var(--sp-2) 0">Working sets are cut to ' + Math.round(R.setFactor * 100) + '% (3 become 2) until ' + esc(lib.fmtShort(lastKey)) +
+          '. Movements, ranges and rest are unchanged, nothing steps up, and these sessions don\'t count as evidence. The first session after it is a normal one.</p>' +
+        (plain ? "" : '<button class="btn btn--ghost btn--sm" data-rb-end type="button">End block now</button>') + '</div></div>';
+    }
+    var o = plain ? null : engine.recoveryOffer();
+    if (!o) return "";
+    var why = o.kind === "flag"
+      ? 'You flagged sharp ' + esc(prettyPart(o.flag.bodyPart).toLowerCase()) + ' pain on ' + esc(lib.fmtShort(Hub.dayOf(o.flag.dateISO))) + '.'
+      : 'Your totals have fallen over the last three sessions on ' + o.slots.map(function (d) {
+          var rx = s.training.slots[d.slot];
+          return esc((DB.getExercise(rx.exerciseId) || {}).name || d.slot) + ' (' + d.totals.join(' → ') + ')';
+        }).join(' and ') + '.';
+    return '<div class="wh-advice wh-advice--info mt-4" data-rb-offer role="status"><div>' +
+      '<div class="wh-advice__title">Start a ' + R.days + '-day recovery block?</div>' +
+      '<p class="wh-advice__body" style="margin:var(--sp-2) 0">' + why + ' A block cuts working sets to ' + Math.round(R.setFactor * 100) + '% for ' + R.days +
+        ' days (3 become 2) so you can recover. Movements, ranges and rest stay, nothing steps up, and the sessions don\'t count as evidence. It is a product rule, not a diagnosis: the app can\'t see pain you don\'t log.</p>' +
+      '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap"><button class="btn btn--secondary btn--sm" data-rb-start="' + o.kind + '" type="button">Start the block</button>' +
+      '<button class="btn btn--ghost btn--sm" data-rb-no="' + esc(o.key) + '" type="button">Not now</button></div></div></div>';
+  }
+  function wireRecovery(el) {
+    var go = function (sel, fn) { var b = el.querySelector(sel); if (b) b.addEventListener("click", fn); };
+    go("[data-rb-start]", function () {
+      var b = engine.startRecovery(this.dataset.rbStart);
+      if (b) App.toast("Recovery block started for " + b.days + " days. End it any time from the banner.", "success", 4800);
+      App.refresh();
+    });
+    go("[data-rb-no]", function () { App.util.uiSet("rb.dismissed", this.dataset.rbNo); App.refresh(); });
+    go("[data-rb-end]", function () { engine.endRecovery(); App.toast("Recovery block ended. Your next session is a normal one.", "info"); App.refresh(); });
+  }
+
+  /* An optional slot (the row, the dip) on or off. Off is a stamped record,
+     never a deleted key: the sync union would bring a deleted key back. */
+  function setSlotOn(slot, on, why) {
+    var s = App.getState(), at = lib.iso(), eq = s.equipment;
+    if (!on) { s.training.slots[slot] = { off: true, acceptedAt: at, why: why || "left out" }; App.saveState(); return true; }
+    var id = TD().SLOTS[slot].first.filter(function (x) { return window.Training.owns(eq, x); })[0];
+    if (!id) return false;
+    s.training.slots[slot] = rxStart(id, { at: at, why: why || "added" });
+    App.saveState();
+    return true;
+  }
+
+  /* C6: the row is offered, not added. Shown on a pull day while the row has
+     no record and you own the bar (without one, the row already replaces the
+     pull). Ticked by default; nothing is written until you save. */
+  function rowOfferHtml(s, day) {
+    if (day !== "pull" || s.training.slots.row || !engine.prescriptionFor("pull")) return "";
+    var id = TD().SLOTS.row.first.filter(function (x) { return window.Training.owns(s.equipment, x); })[0];
+    if (!id) return "";
+    var rx = rxStart(id), name = (DB.getExercise(id) || {}).name || id;
+    return '<div class="card mt-4 stack" data-row-offer>' +
+      '<div class="card__title">Add a row to your pull days?</div>' +
+      '<p class="muted text-sm" style="margin:0">Pull-ups pull down from overhead. A row pulls toward your chest — the other half of pulling, and nothing on your plan trains it now. It adds one movement to pull days: ' +
+        esc(name) + ', ' + esc(setupText(rx).toLowerCase()) + ', ' + rx.sets + ' × ' + rx.range[0] + '–' + rx.range[1] + '.</p>' +
+      '<label class="row" style="gap:var(--sp-2);align-items:center"><input type="checkbox" id="row-offer-tick" checked> <span class="text-sm">Add ' + esc(name) + ' to pull days</span></label>' +
+      '<div class="row" style="gap:var(--sp-2);align-items:center;flex-wrap:wrap"><button class="btn btn--secondary btn--sm" id="row-offer-save" type="button">Save choice</button>' +
+      '<span class="faint text-xs">Either way, change it later in Program.</span></div></div>';
+  }
+  function wireRowOffer(el, after) {
+    var b = el.querySelector("#row-offer-save");
+    if (b) b.addEventListener("click", function () {
+      var on = el.querySelector("#row-offer-tick").checked;
+      setSlotOn("row", on, on ? "added on a pull day" : "left out on a pull day");
+      App.toast(on ? "Row added to pull days." : "Row left out. Add it any time in Program.", "info");
+      if (after) after();
+    });
+  }
   function head(eyebrow, kicker, title) {
     return '<div class="page-head"><div class="eyebrow">' + eyebrow + '</div>' +
       '<h1 class="display h2">' + title + '</h1></div>';
@@ -3908,14 +4769,14 @@
   }
   function lastSessionCard(last) {
     return '<div class="card mt-4"><div class="card__head"><div class="card__title">Last session</div>' +
-      '<span class="badge">' + lib.relTime(last.dateISO) + '</span></div>' +
+      '<span class="badge">' + lib.relTime(lib.sessionDay(last)) + '</span></div>' +
       '<div class="kv"><span class="kv__k">' + DAY_LABEL[last.type] + '</span>' +
       '<span class="kv__v">' + (last.exercises || []).length + ' movements · vol ' + (last.volume || 0) + '</span></div></div>';
   }
   function streakStripCard(s) {
     var days = 21, today = lib.today();
     var doneKeys = {};
-    s.sessions.forEach(function (x) { if (x.completed) doneKeys[lib.dayKey(x.dateISO)] = (doneKeys[lib.dayKey(x.dateISO)] || 0) + 1; });
+    s.sessions.forEach(function (x) { if (x.completed) doneKeys[lib.sessionDay(x)] = (doneKeys[lib.sessionDay(x)] || 0) + 1; });
     var cells = "";
     for (var i = days - 1; i >= 0; i--) {
       var k = lib.dayKey(lib.addDays(today, -i));
@@ -3957,6 +4818,35 @@
   App.ui.confirm = ensureConfirm;
   App.ui.cap = cap;
   App.ui.eraBadge = eraBadge;
+  App.ui.exerciseCounts = exerciseCounts;
+  App.ui.countsText = countsText;
+  App.ui.setupText = setupText;
+  App.ui.topText = topText;
+  App.ui.ruleText = ruleText;
+  App.ui.setSlotOn = setSlotOn;
+  App.ui.slotStatus = slotStatus;
+  App.ui.recoveryHtml = recoveryHtml;
+  App.ui.wireRecovery = wireRecovery;
+  App.ui.restReason = restReason;
+  App.ui.nextAfterToday = nextAfterToday;
+
+  /* One slot's evidence in a few words, for Program and the Progress
+     ladders: "1 of 2 at 3 × 12", "ready to step up", "left out". */
+  function slotStatus(slot) {
+    var s = App.getState(), rx = s.training.slots[slot];
+    if (!rx) return slot === "row" ? "not on your plan — offered on a pull day" : "no prescription";
+    if (rx.off) return "left out";
+    var pr = engine.prescriptionFor(slot);
+    if (!pr) return "needs equipment you don't have";
+    if (pr.rx.exerciseId !== rx.exerciseId) return "an easier movement until you have the gear";
+    var rec = engine.recommendFor(slot);
+    if (!rec || rx.range[1] == null) return "no number to step up from";
+    if (rec.why === "no-load") return "log the weight you use — no load set yet";
+    if (rec.action === "ready") return rec.decision ? "at the top — you chose to repeat" : !rec.step ? "at the top — end of the path" : "ready to step up — see Workout";
+    if (rec.action === "reduce") return rec.decision ? "totals falling — you chose to repeat" : "totals falling — see Workout";
+    if (rec.why === "no-history" && /^your assessment/.test(rx.why || "")) return "unverified — chosen at setup";
+    return rec.atTop + " of " + TD().EVIDENCE_SESSIONS + " at " + topText(rx);
+  }
 
   /* ======================================================================
      MOUNT (after the core's own DOMContentLoaded registration)
@@ -4273,7 +5163,8 @@
   }
 
   /* Weight-gain pace — normalises the recent weigh-in trend to kg/week and
-     reads it against the user's goal. For a clean bulk the sweet spot is
+     reads it against your bodyweight direction (Settings, plan D2) — not the
+     training goal, which used to stand in for it. For a clean bulk the sweet spot is
      roughly +0.25 to +0.5 kg/week: faster usually means added fat, while flat
      or negative means under-eating. Returns null until there are two weigh-ins
      at least a day apart. */
@@ -4288,19 +5179,25 @@
     var days = lib.daysBetween(ref.dateISO, latest.dateISO);
     if (days < 1) return null;
     var perWk = lib.round((latest.kg - ref.kg) / days * 7, 2);
-    var goal = (s.profile && s.profile.goal) || "both";
-    var bulk = (goal === "size" || goal === "both");
-    if (bulk) {
+    var dir = s.profile && s.profile.weightDirection;
+    if (!dir) return { kgWk: perWk, color: "", text: "No bodyweight direction set — choose gain, hold or lose in Settings to have this pace judged." };
+    if (dir === "lose") {
+      if (perWk >  0.1) return { kgWk: perWk, color: "warn",    text: "Gaining while you aim to lose — check the intake." };
+      if (perWk > -0.2) return { kgWk: perWk, color: "warn",    text: "Barely moving — a slightly bigger deficit would start the loss." };
+      if (perWk >= -0.7) return { kgWk: perWk, color: "success", text: "A steady loss pace that protects strength. Hold this." };
+      return { kgWk: perWk, color: "warn", text: "Dropping fast — ease the deficit to protect strength." };
+    }
+    if (dir === "gain") {
       if (perWk <= -0.1) return { kgWk: perWk, color: "danger",  text: "Losing weight on a bulk — add ~250 kcal/day." };
       if (perWk <   0.1) return { kgWk: perWk, color: "warn",    text: "Barely moving — nudge the surplus up to start gaining." };
       if (perWk <=  0.5) return { kgWk: perWk, color: "success", text: "Ideal lean-gain pace. Hold this." };
       if (perWk <= 0.75) return { kgWk: perWk, color: "warn",    text: "A touch fast — fine for a hard gainer, but watch the mirror." };
       return { kgWk: perWk, color: "danger", text: "Gaining fast — likely some fat. Trim the surplus a little." };
     }
-    /* strength-only / recomp / cut goals: holding bodyweight is the win */
-    if (perWk >  0.3) return { kgWk: perWk, color: "warn", text: "Gaining quicker than your goal calls for." };
+    /* hold: a steady bodyweight is the win */
+    if (perWk >  0.3) return { kgWk: perWk, color: "warn", text: "Gaining quicker than holding weight calls for." };
     if (perWk < -0.7) return { kgWk: perWk, color: "warn", text: "Dropping fast — ease the deficit to protect strength." };
-    return { kgWk: perWk, color: "success", text: "Bodyweight steady — on track for your goal." };
+    return { kgWk: perWk, color: "success", text: "Bodyweight steady — on track for holding weight." };
   }
 
   /* Small coloured strip that explains the gain pace under the bodyweight widget. */
@@ -4334,12 +5231,12 @@
   }
   function completedThisWeek(s) {
     var wk = weekStartKey(lib.today());
-    return engine.completedSessions().filter(function (x) { return weekStartKey(x.dateISO) === wk; }).length;
+    return engine.completedSessions().filter(function (x) { return weekStartKey(lib.sessionDay(x)) === wk; }).length;
   }
 
   function completedThisPhase(s) {
-    var start = s.currentPhase.startISO;
-    return engine.completedSessions().filter(function (x) { return lib.daysBetween(start, x.dateISO) >= 0; }).length;
+    var start = Hub.dayOf(s.currentPhase.startISO);
+    return engine.completedSessions().filter(function (x) { return lib.daysBetween(start, lib.sessionDay(x)) >= 0; }).length;
   }
 
   /* ======================================================================
@@ -4349,7 +5246,7 @@
     kg = lib.round(kg, 1);
     if (!(kg > 0)) { App.toast("Enter a valid bodyweight.", "warn"); return; }
     var s = App.getState(), k = lib.today();
-    var todayEntry = s.bodyweightLog.filter(function (b) { return lib.dayKey(b.dateISO) === k; })[0];
+    var todayEntry = s.bodyweightLog.filter(function (b) { return Hub.dayOf(b.dateISO) === k; })[0];
     if (todayEntry) todayEntry.kg = kg;
     else s.bodyweightLog.push({ dateISO: lib.iso(), kg: kg });
     s.profile.weightKg = kg;                  // keep profile in sync (used by Nutrition/Eval)
@@ -4362,7 +5259,7 @@
     hours = lib.round(hours, 1);
     if (!(hours > 0)) { App.toast("Enter your sleep hours.", "warn"); return; }
     var s = App.getState(), k = lib.today();
-    var entry = s.sleepLog.filter(function (x) { return lib.dayKey(x.dateISO) === k; })[0];
+    var entry = s.sleepLog.filter(function (x) { return Hub.dayOf(x.dateISO) === k; })[0];
     if (entry) { entry.hours = hours; entry.quality = quality; }
     else s.sleepLog.push({ dateISO: lib.iso(), hours: hours, quality: quality });
     App.saveState();
@@ -4388,6 +5285,7 @@
     var g = s.goals.filter(function (x) { return x.id === id; })[0];
     if (!g) return;
     g[field] = !g[field];
+    g.updatedAt = new Date().toISOString();   // sync: the newer edit wins (R1-3)
     App.saveState();
     App.refresh();
   }
@@ -4460,7 +5358,7 @@
   function heatStrip(s, days) {
     var today = lib.today(), per = {};
     s.sessions.forEach(function (x) {
-      if (x.completed) { var k = lib.dayKey(x.dateISO); per[k] = (per[k] || 0) + 1; }
+      if (x.completed) { var k = lib.sessionDay(x); per[k] = (per[k] || 0) + 1; }
     });
     var cells = "";
     for (var i = days - 1; i >= 0; i--) {
@@ -4482,7 +5380,7 @@
       'Log every set honestly. The OS reads your reps and difficulty to decide when to make things harder.',
       (hasBar ? 'Anything you can\'t do? Use <b>Swap exercise</b> to pick an alternative for the same muscle group.'
               : 'No pull-up bar yet? When you swap a pull or dip, bar-free options like rows and chair dips show as <b>ready</b>.'),
-      'Weigh in weekly and log sleep — both feed your monthly Phase Report Card.'
+      'Weigh in weekly — the trend is charted in your phase review, reported and never graded.'
     ];
     /* Day-one guidance sits BELOW the real call to action, and is folded: the "Up next"
        card owns the one action on this screen, and a second "Start your first session"
@@ -4532,7 +5430,9 @@
         util.statTile("Phase day", dayInfo.day + "/" + phase.lengthDays, dayInfo.remaining + " days to report card") +
         util.statTile("Streak", String(engine.liveStreak(s)), (s.streak.best ? "best " + s.streak.best + " 🔥" : (engine.liveStreak(s) > 0 ? "keep going" : "start one today"))) +
         util.statTile("Bodyweight", (bw == null ? "—" : bw) + '<small>kg</small>', bw == null ? "not logged yet" : (bwDelta == null ? "log to track trend" : (bwDelta > 0 ? "+" + bwDelta + " kg/wk" : (bwDelta < 0 ? bwDelta + " kg/wk" : "holding steady")))) +
-        util.statTile("This week", weekN + "/" + engine.DAYS_PER_WEEK, weekN >= engine.DAYS_PER_WEEK ? "target hit ✔" : "sessions logged") +
+        /* On pace at the whole sessions the template plans a week: the
+           rotation's 3.5 is 3, the fewest a full week holds at every other day. */
+        util.statTile("This week", String(weekN), (weekN >= Math.floor(engine.template().perWeek) ? "on pace ✔ · " : "sessions · ") + engine.template().short) +
       '</div>' +
 
       /* ---- phase progress + era panel ---- */
@@ -4585,8 +5485,7 @@
         '<div class="row between wrap">' +
           '<div><div class="eyebrow">Done today</div>' +
           '<h2 class="display h2" style="margin-top:var(--sp-1)">You trained ' + esc(engine.DAY_LABEL[doneInfo.todayType] || "") + ' today</h2>' +
-          '<p class="muted text-sm" style="max-width:50ch">Next up is ' + esc(engine.DAY_LABEL[rec] || "") +
-            ' on ' + esc(lib.fmtDate(doneInfo.nextKey)) + ' — tomorrow is your rest day.</p></div>' +
+          '<p class="muted text-sm" style="max-width:50ch">' + esc(ui.nextAfterToday(doneInfo, rec)) + '</p></div>' +
           '<span class="badge badge--primary"><span class="dot"></span>complete</span>' +
         '</div>' +
         '<button class="btn btn--ghost btn--lg btn--block" data-go="today">Open Workout →</button>' +
@@ -4606,7 +5505,7 @@
         '<div class="row between wrap">' +
           '<div><div class="eyebrow">Resting today</div>' +
           '<h2 class="display h2" style="margin-top:var(--sp-1)">Next up: ' + esc(engine.DAY_LABEL[rec]) + ' ' + esc(whenLabel) + '</h2>' +
-          '<p class="muted text-sm" style="max-width:50ch">You trained ' + esc(engine.DAY_LABEL[restInfo.lastType] || "") + ' yesterday. One rest day between sessions is part of the program.</p></div>' +
+          '<p class="muted text-sm" style="max-width:50ch">' + esc(ui.restReason(restInfo)) + '</p></div>' +
           '<span class="badge"><span class="dot"></span>rest</span>' +
         '</div>' +
         '<button class="btn btn--ghost btn--lg btn--block" data-go="today">Train anyway →</button>' +
@@ -4619,9 +5518,9 @@
       ? (wip.exercises || []).map(function (ex) {
           return '<span class="chip">' + ui.cap(ex.pattern) + ' · ' + esc(ex.name) + "</span>";
         })
-      : engine.patternsFor(rec, (s.prefs && s.prefs.sessionLength) || "focused").map(function (p) {
-          var m = engine.movementFor(p);
-          return '<span class="chip">' + ui.cap(p) + ' · ' + esc(m.name) + "</span>";
+      : engine.slotsFor(rec, (s.prefs && s.prefs.sessionLength) || "focused").map(function (it) {
+          var m = window.DB.getExercise(it.rx.exerciseId) || {};
+          return '<span class="chip">' + esc(window.TRAINING_DATA.SLOTS[it.slot].label) + ' · ' + esc(m.name || it.rx.exerciseId) + "</span>";
         })
     ).join("");
 
@@ -4658,14 +5557,15 @@
       '<div class="progress__meta mt-4"><span>Sessions completed</span><span><b>' + phaseN + "</b> / " + expected + " expected</span></div>" +
       '<div class="progress progress--cyan progress--thin metric-bar"><div class="progress__bar" style="width:' + cadencePct + '%"></div></div>' +
       '<p class="muted text-xs mt-2">' +
-        (onTrack ? "On pace for this phase — keep the cadence steady." : "A little behind pace — aim for " + engine.DAYS_PER_WEEK + " sessions this week to catch up.") +
+        (onTrack ? "On pace for this phase — keep the cadence steady." :
+          "A little behind pace — " + engine.template().label + " plans " + engine.template().short + ".") +
       '</p>' +
       '<div class="divider"></div>' +
       '<div class="row between"><div class="field__label">Last 4 weeks</div>' +
         '<span class="badge badge--primary"><span class="dot"></span>' + engine.liveStreak(s) + " day streak</span></div>" +
       '<div class="mt-2">' + heatStrip(s, 28) + "</div>" +
-      '<p class="faint text-xs mt-4">A Phase Report Card auto-generates at day ' + phase.lengthDays +
-        ', grading completion, rep ratios, bodyweight trend and recovery — then advances, consolidates or deloads you.</p>' +
+      '<p class="faint text-xs mt-4">A phase report is ready at day ' + phase.lengthDays +
+        ': attendance, progress per movement and recovery, as three separate readings with their sample sizes and no overall grade. Closing it changes nothing in your program.</p>' +
     '</div>';
   }
 
@@ -4673,16 +5573,14 @@
   function eraPanel(s) {
     if (s.era === 2) {
       var owned = Object.keys(s.equipment).filter(function (k) { return k !== "nothing" && s.equipment[k]; });
-      var acc = engine.era2Accessory(engine.recommendedDayType());
       var chips = owned.length
         ? owned.map(function (k) { return '<span class="chip">' + ui.cap(k) + "</span>"; }).join("")
         : '<span class="chip">bodyweight only</span>';
       return '<div class="card">' +
         '<div class="card__head"><div class="card__title">Era II toolkit</div>' +
           '<span class="badge badge--era2"><span class="dot"></span>unlocked</span></div>' +
-        '<p class="muted text-sm">Weighted overload is live. The engine slots an accessory into eligible sessions when your gear allows.</p>' +
+        '<p class="muted text-sm">All five Era I benchmarks cleared. Loaded movements are in every Swap list for the gear you own — at any Era.</p>' +
         '<div class="field__label mt-4 mb-2">Available equipment</div><div class="chips">' + chips + "</div>" +
-        (acc ? '<div class="kv mt-4"><span class="kv__k">Next accessory</span><span class="kv__v">' + esc(acc.name) + "</span></div>" : "") +
       '</div>';
     }
     var keys = Object.keys(s.benchmarks);
@@ -5042,7 +5940,7 @@
     for (var i = weeks - 1; i >= 0; i--) keys.push(lib.dayKey(lib.addDays(thisMon, -7 * i)));
     var byWeek = {};
     done.forEach(function (x) {
-      var wk = weekStartKey(x.dateISO);
+      var wk = weekStartKey(lib.sessionDay(x));
       byWeek[wk] = (byWeek[wk] || 0) + (Number(x.volume) || 0);
     });
     return { keys: keys, data: keys.map(function (k) { return byWeek[k] || 0; }) };
@@ -5055,7 +5953,7 @@
     kg = lib.round(kg, 1);
     if (!(kg > 0)) { App.toast("Enter a valid bodyweight.", "warn"); return; }
     var s = App.getState(), k = lib.today();
-    var todayEntry = (s.bodyweightLog || []).filter(function (b) { return lib.dayKey(b.dateISO) === k; })[0];
+    var todayEntry = (s.bodyweightLog || []).filter(function (b) { return Hub.dayOf(b.dateISO) === k; })[0];
     if (todayEntry) todayEntry.kg = kg;
     else s.bodyweightLog.push({ dateISO: lib.iso(), kg: kg });
     s.profile.weightKg = kg;                       // keep profile in sync (Nutrition/Eval read it)
@@ -5067,7 +5965,7 @@
     hours = lib.round(hours, 1);
     if (!(hours > 0)) { App.toast("Enter your sleep hours.", "warn"); return; }
     var s = App.getState(), k = lib.today();
-    var entry = (s.sleepLog || []).filter(function (x) { return lib.dayKey(x.dateISO) === k; })[0];
+    var entry = (s.sleepLog || []).filter(function (x) { return Hub.dayOf(x.dateISO) === k; })[0];
     if (entry) { entry.hours = hours; entry.quality = quality; }
     else s.sleepLog.push({ dateISO: lib.iso(), hours: hours, quality: quality });
     App.saveState();
@@ -5087,7 +5985,7 @@
     if (!any) { App.toast("Enter at least one measurement.", "warn"); return; }
     var rec = { dateISO: lib.iso() };
     MEAS_KEYS.forEach(function (m) { rec[m.k] = Number(vals[m.k]) > 0 ? lib.round(Number(vals[m.k]), 1) : null; });
-    var todayEntry = (s.measurements || []).filter(function (x) { return lib.dayKey(x.dateISO) === k; })[0];
+    var todayEntry = (s.measurements || []).filter(function (x) { return Hub.dayOf(x.dateISO) === k; })[0];
     if (todayEntry) {
       MEAS_KEYS.forEach(function (m) { if (rec[m.k] != null) todayEntry[m.k] = rec[m.k]; });
       todayEntry.dateISO = rec.dateISO;
@@ -5156,25 +6054,31 @@
       var t = s.tiers[p] || { level: 1, progress: 0 };
       var prog = App.PROGRESSIONS[p] || { label: ui.cap(p), levels: [], era2: [] };
       var cur = engine.movementFor(p);
-      var nextEx = (t.level < 6) ? DB.byLevel(p, t.level + 1) : null;
-      var nextName = nextEx ? nextEx.name : "Top of ladder";
+      /* The next step on the slot's path (plan C3), not the next numbered
+         level: Incline Push-up sits between L1 and L2, and the hinge path
+         ends at L3 with Nordic work optional. */
+      var TDX = window.TRAINING_DATA.EXERCISES;
+      var nexts = cur && TDX[cur.id] ? TDX[cur.id].next : [];
+      var nextName = nexts.length ? nexts.map(function (id) { return (DB.getExercise(id) || {}).name || id; }).join(" or ") : "";
 
-      /* 6 calisthenics rungs */
+      /* 6 calisthenics rungs. Levels are history now; a rung off the main
+         path is marked optional. */
       var rungs = "";
       for (var lvl = 1; lvl <= 6; lvl++) {
         var ex = DB.byLevel(p, lvl);
         var nm = ex ? ex.name : (prog.levels[lvl - 1] || ("Level " + lvl));
         var cls = lvl < t.level ? "is-done" : (lvl === t.level ? "is-current" : "is-locked");
+        var opt = ex && TDX[ex.id] && TDX[ex.id].branch === "skill";
         rungs += '<div class="rung ' + cls + '"><span class="rung__lvl">L' + lvl + '</span>' +
-          '<span class="rung__name">' + esc(nm) + '</span>' +
+          '<span class="rung__name">' + esc(nm) + (opt ? ' <span class="faint text-xs">· optional</span>' : '') + '</span>' +
           (lvl === t.level ? '<span class="badge badge--primary" style="padding:2px 7px">now</span>' : '') + '</div>';
       }
-      /* optional Era II unlock rungs (dashed) */
-      (prog.era2 || []).forEach(function (nm2) {
-        var unlocked = s.era === 2;
-        rungs += '<div class="rung is-era2 ' + (unlocked ? "is-unlocked" : "is-locked") + '">' +
-          '<span class="rung__lvl">E2</span><span class="rung__name">' + esc(nm2) + '</span>' +
-          '<span class="badge ' + (unlocked ? "badge--era2" : "") + '" style="padding:2px 7px">' + (unlocked ? "unlocked" : "locked") + '</span></div>';
+      /* Loaded movements: no Era gate, only equipment (plan C3). */
+      (DB.era2Addons(p) || []).forEach(function (a) {
+        var owned = window.Training.owns(s.equipment, a.id);
+        rungs += '<div class="rung is-era2 ' + (owned ? "is-unlocked" : "is-locked") + '">' +
+          '<span class="rung__lvl">KG</span><span class="rung__name">' + esc(a.name) + '</span>' +
+          '<span class="badge ' + (owned ? "badge--era2" : "") + '" style="padding:2px 7px">' + (owned ? "in Swap" : "needs gear") + '</span></div>';
       });
 
       return '<div class="card stack' + (stalls[p] ? " is-stalled" : "") + '">' +
@@ -5182,10 +6086,11 @@
           (stalls[p] ? ' <span class="badge badge--warn badge--stall" title="No level gain across the last 2 phases"><span class="dot"></span>Plateau</span>' : '') +
           '</div>' +
           '<span class="badge badge--primary">L' + t.level + ' / 6</span></div>' +
-        '<div><div class="tier-card__cur">' + esc(cur ? cur.name : nextName) + '</div>' +
-          '<div class="tier-card__nxt">' + (t.level < 6 ? ("Next unlock: " + esc(nextName)) : "Mastered \u2014 ladder complete") + '</div></div>' +
-        '<div class="progress"><div class="progress__bar" style="width:' + lib.clamp(t.progress || 0, 0, 100) + '%"></div></div>' +
-        '<div class="progress__meta" style="margin-bottom:0"><span>progress to L' + Math.min(t.level + 1, 6) + '</span><b>' + lib.clamp(t.progress || 0, 0, 100) + '%</b></div>' +
+        '<div><div class="tier-card__cur">' + esc(cur ? cur.name : "") + '</div>' +
+          '<div class="tier-card__nxt">' + (nextName ? "Next step: " + esc(nextName) : "End of the main path") + '</div></div>' +
+        /* Evidence, not points: points stopped in Stage 2, so a bar of them
+           would sit still forever. */
+        '<p class="text-sm" data-ladder-status style="margin:0">' + esc(ui.slotStatus(p)) + '</p>' +
         (stalls[p] ? '<p class="faint text-xs" style="margin:0;color:var(--warn)">Stalled 2+ phases — try an accessory, extra set, or drop a level to rebuild clean volume.</p>' : '') +
         '<div class="ladder">' + rungs + '</div>' +
       '</div>';
@@ -5250,7 +6155,7 @@
     var log = s.sleepLog || [];
     var keys = lastNDayKeys(14);
     var byDay = {};
-    log.forEach(function (x) { byDay[lib.dayKey(x.dateISO)] = x; });
+    log.forEach(function (x) { byDay[Hub.dayOf(x.dateISO)] = x; });
     var hours = keys.map(function (k) { return byDay[k] ? byDay[k].hours : 0; });
     var loggedHours = hours.filter(function (h) { return h > 0; });
     var avgH = loggedHours.length ? lib.round(lib.sum(loggedHours) / loggedHours.length, 1) : 0;
@@ -5288,7 +6193,8 @@
      ==================================================================== */
   function notesArchiveCard(s) {
     var q = (uiState.noteSearch || "").trim().toLowerCase();
-    var DAY_LABEL = { push: "Push", pull: "Pull", legs: "Legs & Hips", fullbody: "Full Body & Core" };
+    var DAY_LABEL = { push: "Push", pull: "Pull", legs: "Legs & Hips", fullbody: "Full Body & Core",
+                      fullA: "Full Body A", fullB: "Full Body B", upper: "Upper", lower: "Lower" };
     var withNotes = (s.sessions || []).filter(function (x) {
       return x.completed && x.notes && x.notes.trim();
     }).slice().sort(function (a, b) { return new Date(b.dateISO) - new Date(a.dateISO); });
@@ -5316,7 +6222,7 @@
           : matched.map(function (x) {
               return '<div class="note-item"><div class="note-item__head">' +
                 '<span class="note-item__day">' + (DAY_LABEL[x.type] || cap(x.type || "Session")) + '</span>' +
-                '<span class="note-item__date mono">' + lib.fmtShort(x.dateISO) + ' \u00b7 ' + lib.relTime(x.dateISO) + '</span></div>' +
+                '<span class="note-item__date mono">' + lib.fmtShort(lib.sessionDay(x)) + ' \u00b7 ' + lib.relTime(lib.sessionDay(x)) + '</span></div>' +
                 '<p class="note-item__body">' + hl(x.notes) + '</p></div>';
             }).join(""));
 
@@ -5379,7 +6285,7 @@
     return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] + " " +
            d.getDate() + " " + MONTH_NAMES[d.getMonth()].slice(0, 3);
   }
-  function typeCls(t) { return t === "legs" ? "is-legs" : (t === "fullbody" ? "is-full" : ""); }
+  function typeCls(t) { return t === "legs" || t === "lower" ? "is-legs" : (t === "fullbody" || t === "fullA" || t === "fullB" ? "is-full" : ""); }
 
   /* The single most-asked question of this page, answered before the grid
      rather than under it. */
@@ -5405,10 +6311,15 @@
     push:     "cal-day--trained",
     pull:     "cal-day--trained",
     legs:     "cal-day--trained cal-day--easy",
-    fullbody: "cal-day--trained cal-day--hard"
+    fullbody: "cal-day--trained cal-day--hard",
+    fullA:    "cal-day--trained cal-day--hard",
+    fullB:    "cal-day--trained cal-day--hard",
+    upper:    "cal-day--trained",
+    lower:    "cal-day--trained cal-day--easy"
   };
   var DAY_TYPE_LABEL = {
-    push: "Push", pull: "Pull", legs: "Legs", fullbody: "Full"
+    push: "Push", pull: "Pull", legs: "Legs", fullbody: "Full",
+    fullA: "Full A", fullB: "Full B", upper: "Upper", lower: "Lower"
   };
   var MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   var DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -5420,7 +6331,7 @@
     // Index sessions by day key
     var byDay = {};
     sessions.forEach(function (sess) {
-      var k = lib.dayKey(sess.dateISO);
+      var k = lib.sessionDay(sess);
       if (!byDay[k]) byDay[k] = [];
       byDay[k].push(sess);
     });
@@ -5564,10 +6475,11 @@
       body = '<div class="empty-mini">No sessions logged yet. Finish a workout in Workout and it\'ll appear here to review, edit or remove.</div>';
     } else {
       body = '<div class="sess-log">' + done.map(function (x) {
-        var dayLabel = ({ push: "Push", pull: "Pull", legs: "Legs", fullbody: "Full Body" })[x.type] || cap(x.type || "session");
+        var dayLabel = ({ push: "Push", pull: "Pull", legs: "Legs", fullbody: "Full Body",
+                          fullA: "Full Body A", fullB: "Full Body B", upper: "Upper", lower: "Lower" })[x.type] || cap(x.type || "session");
         return '<div class="sess-log__row" data-sid="' + esc(x.id) + '">' +
           '<div class="grow"><div class="sess-log__t">' + dayLabel + '</div>' +
-            '<div class="sess-log__s">' + lib.relTime(x.dateISO) + ' · ' + (x.exercises || []).length + ' movements · vol ' + (x.volume || 0) +
+            '<div class="sess-log__s">' + lib.relTime(lib.sessionDay(x)) + ' · ' + (x.exercises || []).length + ' movements · vol ' + (x.volume || 0) +
             (x.notes ? ' · has notes' : '') + '</div></div>' +
           '<div class="row" style="gap:6px">' +
             '<button class="btn btn--ghost btn--sm" data-sview="' + esc(x.id) + '" type="button">View</button>' +
@@ -5592,6 +6504,7 @@
   function sessionDetailHtml(sess) {
     if (!sess) return '<div class="empty-mini">Session not found.</div>';
     var DIFF_C = { easy: "var(--success)", moderate: "var(--secondary)", hard: "var(--warn)", failed: "var(--danger)" };
+    var DIFF_L = { moderate: "just right", unsure: "not sure" };
     var exs = (sess.exercises || []);
     var rows = exs.length ? exs.map(function (ex) {
       var unit = (ex.mode === "hold" || ex.unit === "sec") ? "sec" : "reps";
@@ -5600,27 +6513,29 @@
         var wt  = (st.weight != null && st.weight !== "" && Number(st.weight) > 0) ? (" × " + st.weight + " kg") : "";
         return '<span class="setpill"><b>S' + (j + 1) + '</b> ' + esc(String(rep)) + ' ' + unit + wt + '</span>';
       }).join("");
-      var d = ex.difficulty || "moderate";
-      var dLabel = d === "moderate" ? "just right" : d;
+      /* Without a saved prescription, "moderate" is unknown (plan C6): the
+         build before Stage 1 saved it for a blank rating. */
+      var d = !ex.rx && ex.difficulty === "moderate" ? "legacy" : ex.difficulty;
+      var dLabel = !d ? (ex.skipped ? "skipped" : "not rated") : d === "legacy" ? "unknown — older log" : (DIFF_L[d] || d);
       var diff = '<span class="mono" style="color:' + (DIFF_C[d] || "var(--text-300)") + ';font-size:var(--fs-2xs);text-transform:uppercase;letter-spacing:.05em">' + esc(dLabel) + '</span>';
       var flag = (ex.flag && ex.flag.bodyPart)
         ? '<span class="badge badge--warn" style="padding:1px 7px;margin-left:6px"><span class="dot"></span>' + esc(ex.flag.bodyPart) + (ex.flag.severity ? " · " + esc(ex.flag.severity) : "") + '</span>' : "";
       return '<div class="sdet-ex">' +
         '<div class="row between" style="gap:var(--sp-2)"><div class="sdet-ex__name">' + esc(ex.name || cap(ex.pattern || "Movement")) +
           (ex.era2 ? ' <span class="faint text-xs">· Era II</span>' : '') + flag + '</div>' + diff + '</div>' +
-        '<div class="sdet-sets">' + (sets || '<span class="faint text-xs">no sets logged</span>') + '</div>' +
+        '<div class="sdet-sets">' + (ex.skipped ? '<span class="faint text-xs">skipped — pain flag</span>' : (sets || '<span class="faint text-xs">no sets logged</span>')) + '</div>' +
       '</div>';
     }).join("") : '<div class="empty-mini">No exercise data was captured for this session.</div>';
 
     var meta = [];
-    meta.push((exs.length) + " movements");
+    meta.push(ui.countsText(ui.exerciseCounts(exs)));
     meta.push("vol " + (sess.volume || 0));
     if (sess.warmupDone)   meta.push("warm-up ✓");
     if (sess.cooldownDone) meta.push("cool-down ✓");
 
     return '<div class="card card--glass stack mt-2 sdet">' +
       '<div class="row between wrap"><div class="eyebrow">Logged session</div>' +
-        '<span class="faint text-xs mono">' + lib.relTime(sess.dateISO) + '</span></div>' +
+        '<span class="faint text-xs mono">' + lib.relTime(lib.sessionDay(sess)) + '</span></div>' +
       '<div class="faint text-xs mono" style="margin-top:-4px">' + meta.join(" · ") + '</div>' +
       rows +
       (sess.notes ? '<div class="sdet-notes"><span class="field__label">Notes</span><p class="text-sm" style="margin:4px 0 0;color:var(--text-200)">' + esc(sess.notes) + '</p></div>' : '') +
@@ -5645,6 +6560,7 @@
         ui.confirm("Delete this session?", "This permanently removes the logged session and its volume from your history. This can't be undone.", "Delete", "danger", function () {
           var st = App.getState();
           st.sessions = (st.sessions || []).filter(function (x) { return x.id !== id; });
+          App.recountStreak(st);
           App.saveState();
           App.toast("Session deleted.", "info");
           App.refresh();
@@ -5678,6 +6594,7 @@
             var v = parseInt(document.getElementById("se-vol-" + id).value, 10);
             if (v >= 0 && v <= 9999) target.volume = v;
             target.notes = document.getElementById("se-notes-" + id).value;
+            target.updatedAt = new Date().toISOString();   // sync: the newer edit wins (R1-3)
             App.saveState();
             App.toast("Session updated.", "success");
             App.refresh();
@@ -5878,7 +6795,7 @@
     var slog = s.sleepLog || [];
     var keys = lastNDayKeys(14);
     var byDay = {};
-    slog.forEach(function (x) { byDay[lib.dayKey(x.dateISO)] = x; });
+    slog.forEach(function (x) { byDay[Hub.dayOf(x.dateISO)] = x; });
     var hours = keys.map(function (k) { return byDay[k] ? byDay[k].hours : 0; });
     if (hours.some(function (h) { return h > 0; })) {
       var colors = hours.map(function (h) { return h === 0 ? "rgba(240,222,180,.05)" : (h >= 7 ? THEME.success : THEME.warn); });
@@ -5967,8 +6884,8 @@
 /* ===== BASALT script block 6 (source lines 6438-7313) ===== */
 /* ============================================================================
    IRONFRAME — PART 6
-   The intelligence layer: phase evaluation, the animated Report Card, phase
-   advancement (advance / consolidate / deload), the Era-transition flow, plus
+   The intelligence layer: the three-section phase report, closing a period,
+   the Era-transition flow, plus
    the Program control view that completes the navigation. Backup / restore /
    reset already ship in Part 1 (wireSettings) — this part wires what remained.
    ========================================================================== */
@@ -5986,7 +6903,7 @@
   var esc    = (lib && lib.esc) || function (s) { return String(s); };
 
   var PATTERNS = (DB && DB.PATTERNS) || ["push", "pull", "squat", "hinge", "core", "shoulder", "dip"];
-  var REF_TARGET = { push: 12, pull: 8, squat: 14, hinge: 14, core: 30, shoulder: 6, dip: 8 };
+  var TDATA = window.TRAINING_DATA;
   var DIFF_NUM = { easy: 1, moderate: 2, hard: 3, failed: 4 };
 
   /* ----------------------------------------------------------------------
@@ -6073,13 +6990,11 @@
   function cap(s) { return String(s).charAt(0).toUpperCase() + String(s).slice(1); }
   function prettyPart(p) { return ({ lowerBack: "lower back", hipFlexor: "hip flexor" })[p] || p; }
   function r1(n) { return lib.round(n, 1); }
-  function inPhase(startKey, dateISO) {
-    /* Use local date parts to avoid UTC-offset misclassification in UTC+ timezones.
-       "2026-06-02T18:30:00.000Z" is June 3 in IST — new Date(iso).getDate() is correct,
-       but new Date(iso).toISOString().slice(0,10) is UTC and could be June 2. */
-    var d = new Date(dateISO);
-    var lk = d.getFullYear() + "-" + (d.getMonth() < 9 ? "0" : "") + (d.getMonth() + 1) + "-" + (d.getDate() < 10 ? "0" : "") + d.getDate();
-    return lib.daysBetween(startKey, lk) >= 0;
+  function inPhase(startKey, v) {
+    /* v is a record's timestamp or a session's day key. Hub.dayOf takes the
+       local day with the rollover applied, never the UTC slice:
+       "2026-06-02T18:30:00.000Z" is 3 June in IST, not 2 June. */
+    return lib.daysBetween(startKey, Hub.dayOf(v)) >= 0;
   }
 
   /* ----------------------------------------------------------------------
@@ -6095,308 +7010,177 @@
     var slope = (n * sxy - sx * sy) / d;
     return { slope: slope, intercept: (sy - slope * sx) / n };
   }
-  function isBulk(s) { return ((s.profile && s.profile.goal) || "both") !== "strength"; }
-
-  function weightScore(s, perWk) {
-    if (perWk == null) return 0.5;
-    if (!isBulk(s)) return lib.clamp(1 - Math.abs(perWk) / 0.35, 0, 1);  // strength: hold weight
-    return lib.clamp(1 - Math.abs(perWk - 0.3) / 0.45, 0, 1);            // clean bulk: ~+0.3 kg/wk ideal
-  }
-  function diffScore(avg) { if (!avg) return 0.5; return lib.clamp(1 - Math.abs(avg - 2.3) / 1.1, 0, 1); } // moderate→hard sweet spot
-  function sleepScore(h) {
-    if (!h) return 0.5;
-    if (h >= 7 && h <= 9) return 1;
-    if (h < 7) return lib.clamp(1 - (7 - h) / 3, 0, 1);
-    return lib.clamp(1 - (h - 9) / 3, 0.2, 1);
-  }
-  function gradeFor(score) { return score >= 88 ? "S" : score >= 76 ? "A" : score >= 63 ? "B" : score >= 50 ? "C" : "D"; }
-  /* Grade ramp: gold → green → aqua → orange → red, resolved from the active
-     palette rather than pinned to Gruvbox. Two names for one thing because
-     both are called from separate parts of this file. */
-  var GRADE_VAR = { S: "--yellow-bright", A: "--green-bright", B: "--aqua-bright",
-                    C: "--orange-bright", D: "--red-bright" };
-  var GRADE_FALLBACK = { S: "#fabd2f", A: "#b8bb26", B: "#8ec07c", C: "#fe8019", D: "#fb4934" };
-  function gradeColor(g) {
-    if (!GRADE_VAR[g]) return "#928374";
-    var v = "";
-    try { v = getComputedStyle(document.documentElement).getPropertyValue(GRADE_VAR[g]).trim(); } catch (e) {}
-    return v || GRADE_FALLBACK[g];
-  }
-  function gradeHex(g) { return gradeColor(g); }
-
+  /* The phase report has no grade (plan D5). Three sections, each with its
+     own sample size, so you can judge how far to trust each one:
+       adherence    sessions attended out of the template's planned sessions
+       performance  per slot: comparable sessions this period, steps taken
+       recovery     pain flags, exercises rated Failed, recovery blocks
+     Bodyweight is reported beside them and feeds nothing. Nothing here
+     changes a target: prescriptions move only on their own evidence. */
   function evaluate(s) {
     var phase = s.currentPhase;
-    var startKey = lib.dayKey(phase.startISO);
+    var startKey = Hub.dayOf(phase.startISO);
     var dayInfo = util.phaseDayInfo(phase);
+    var all = (s.sessions || []).filter(function (x) { return x.completed; });
+    var sess = all.filter(function (x) { return inPhase(startKey, lib.sessionDay(x)); });
 
-    var sess = (s.sessions || []).filter(function (x) { return x.completed && inPhase(startKey, x.dateISO); });
-
-    /* 1 · completion */
+    /* 1 · adherence */
     var expected = engine.expectedSessions(phase, sess.length);
-    var completionRate = expected ? sess.length / expected : 0;
-    var subCompletion = lib.clamp(completionRate, 0, 1);
+    var tpl = engine.TEMPLATES[phase.template] || engine.TEMPLATES.rotation;
 
-    /* 2 · rep ratio vs prescribed target */
-    var rSum = 0, rN = 0;
+    /* 2 · performance — comparable sessions are the ones the step rule would
+       count (same exercise, setup and sets, as prescribed), so this reads
+       against today's prescription: sessions before a step, and sessions
+       inside a recovery block, aren't in it, and neither is an exercise
+       with nothing logged on it. Steps count up and back. */
+    var decisions = s.training.decisions || {};
+    var slots = Object.keys(TDATA.SLOTS).map(function (slot) {
+      var rx = s.training.slots[slot];
+      if (!rx || rx.off) return null;
+      var n = window.Training.comparable(all, rx).filter(function (e) { return e.day >= startKey && e.total > 0; }).length;
+      var steps = Object.keys(decisions).filter(function (k) {
+        var ex = TDATA.EXERCISES[k.split("|")[0]], d = decisions[k];
+        return d.choice === "step" && ex && ex.slot === slot && inPhase(startKey, d.at);
+      }).length;
+      return { slot: slot, rx: rx, comparable: n, steps: steps };
+    }).filter(Boolean);
+
+    /* 3 · recovery — effort is rated per exercise, not per set, so "failed"
+       counts exercises. */
+    var rated = 0, failed = 0;
     sess.forEach(function (x) {
       (x.exercises || []).forEach(function (ex) {
-        if (ex.era2) return;
-        var tier = s.tiers[ex.pattern];
-        var target = (tier && tier.repsTarget) || REF_TARGET[ex.pattern] || 10;
-        if (ex.mode === "hold") target = Math.max(target, 30);
-        var vals = (ex.sets || []).map(function (st) { return Number(st.reps) || 0; }).filter(function (v) { return v > 0; });
-        if (!vals.length) return;
-        var avg = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
-        rSum += lib.clamp(avg / target, 0, 1.5); rN++;
+        if (ex.skipped || !DIFF_NUM[ex.difficulty]) return;
+        rated++; if (ex.difficulty === "failed") failed++;
       });
     });
-    var avgRepsRatio = rN ? rSum / rN : 0;
-    /* sub-score clamps at 1.0; raw ratio can exceed 1 (over-performing) but we
-       don't reward that — it just means it's time to advance */
-    var subReps = rN ? lib.clamp(avgRepsRatio, 0, 1) : 0;
+    var parts = {}, flagN = 0, sharp = 0;
+    (s.flagsHistory || []).filter(function (f) { return inPhase(startKey, f.dateISO); }).forEach(function (f) {
+      parts[f.bodyPart] = (parts[f.bodyPart] || 0) + 1; flagN++;
+      if (f.severity === "sharp") sharp++;
+    });
+    var today = lib.today();
+    /* Every block that overlaps the period, counted by its days inside it: a
+       block running when a period closes belongs to both (R3-2). */
+    var blocks = (s.recoveryBlocks || []).filter(function (b) {
+      return engine.recoveryEnd(b) > startKey && engine.recoveryEnd(b) > b.startKey;
+    }).map(function (b) {
+      var from = b.startKey > startKey ? b.startKey : startKey;
+      return { id: b.id, startKey: b.startKey, reason: b.reason,
+               days: Math.min(lib.daysBetween(from, engine.recoveryEnd(b)), lib.daysBetween(from, today) + 1) };
+    });
+    var blockSessions = sess.filter(function (x) { return x.recovery; }).length;
 
-    /* minimum-data ramp: rep ratio only counts fully once 3+ sessions are logged.
-       Prevents a single bad day from triggering a premature deload recommendation. */
-    var dataConfidence = Math.min(sess.length / 3, 1);
-    subReps = subReps * dataConfidence + 0.5 * (1 - dataConfidence);
-
-    /* 3 · weight trend — linear regression on in-phase weigh-ins */
+    /* Bodyweight: reported, never graded. Linear regression on in-phase weigh-ins. */
     var pts = [];
     (s.bodyweightLog || []).forEach(function (b) {
-      var k = lib.dayKey(b.dateISO);
-      if (inPhase(startKey, b.dateISO)) pts.push({ x: lib.daysBetween(startKey, k), y: Number(b.kg) || 0 });
+      if (inPhase(startKey, b.dateISO)) pts.push({ x: lib.daysBetween(startKey, Hub.dayOf(b.dateISO)), y: Number(b.kg) || 0 });
     });
     pts.sort(function (a, b) { return a.x - b.x; });
     var lr = pts.length >= 2 ? linreg(pts) : null;
-    var weightTrend = lr ? lr.slope * 7 : null;             // kg / week
-    var subWeight = weightScore(s, weightTrend);
-
-    /* 4 · difficulty — prefer exercise-level rating, fall back to session-level so
-       the metric isn't perpetually "not rated" when only the session is rated. */
-    var dSum = 0, dN = 0, failed = 0;
-    sess.forEach(function (x) {
-      var sessD = x.difficulty;
-      var exWithRating = 0;
-      (x.exercises || []).forEach(function (ex) {
-        var d = DIFF_NUM[ex.difficulty];
-        if (d) { dSum += d; dN++; exWithRating++; if (ex.difficulty === "failed") failed++; }
-      });
-      /* no exercise-level ratings — count session-level difficulty once per session */
-      if (!exWithRating && sessD && DIFF_NUM[sessD]) {
-        dSum += DIFF_NUM[sessD]; dN++; if (sessD === "failed") failed++;
-      }
-    });
-    var avgDifficulty = dN ? dSum / dN : 0;
-    var subDiff = dN ? diffScore(avgDifficulty) : 0.5;
-
-    /* 5 · sleep */
-    var hrs = (s.sleepLog || []).filter(function (z) { return inPhase(startKey, z.dateISO); })
-      .map(function (z) { return Number(z.hours) || 0; }).filter(function (h) { return h > 0; });
-    var avgSleep = hrs.length ? hrs.reduce(function (a, b) { return a + b; }, 0) / hrs.length : 0;
-    var subSleep = hrs.length ? sleepScore(avgSleep) : 0.5;
-
-    /* 6 · plateau flags */
-    var flags = [];
-    if (sess.length && completionRate < 0.6) {
-      flags.push({ title: "Inconsistent attendance",
-        body: "Logged " + sess.length + " of ~" + expected + " planned sessions. Aim for " + engine.DAYS_PER_WEEK + "/week so the stimulus stays continuous." });
-    }
-    if (rN && avgRepsRatio < 0.8) {
-      flags.push({ title: "Rep targets slipping",
-        body: "Average reps sit below prescribed. Add rest between sets, or drop one level on the stalling pattern to rebuild clean volume." });
-    }
-    if (dN && (avgDifficulty >= 3.1 || failed >= 3)) {
-      flags.push({ title: "Over-reaching",
-        body: "Most sets felt hard or failed. Trim volume ~20% next block and bank an extra rest day — strength is built in recovery." });
-    }
-    if (weightTrend != null && pts.length >= 3 && isBulk(s) && weightTrend <= 0.03) {
-      flags.push({ title: "Bodyweight stalled",
-        body: "No upward trend despite a surplus target. Add ~150–250 kcal/day, mostly carbs around training, and re-check in a week." });
-    }
-    if (hrs.length && avgSleep < 6.5) {
-      flags.push({ title: "Under-recovering",
-        body: "Average sleep " + r1(avgSleep) + "h. Protecting 7–9h does more for progress than any extra set." });
-    }
-    var partCount = {};
-    (s.flagsHistory || []).filter(function (f) { return inPhase(startKey, f.dateISO); })
-      .forEach(function (f) { partCount[f.bodyPart] = (partCount[f.bodyPart] || 0) + 1; });
-    Object.keys(partCount).forEach(function (bp) {
-      if (partCount[bp] >= 2) {
-        flags.push({ title: "Recurring " + prettyPart(bp) + " flag",
-          body: "Flagged " + partCount[bp] + "× this phase. Keep the joint-friendly swap and add light prehab before loading it again." });
-      }
-    });
-
-    /* cross-phase plateau: if a pattern's tier level hasn't changed in the last
-       3 consecutive phase-history entries, it's genuinely stuck — flag it with
-       a targeted prescription rather than a generic deload. */
-    var hist = (s.phaseHistory || []).filter(function (h) { return h.tierLevels; });
-    if (hist.length >= 2) {
-      PATTERNS.forEach(function (p) {
-        var snapshots = hist.slice(-3).map(function (h) { return h.tierLevels[p]; }).filter(function (v) { return typeof v === "number"; });
-        var currentLevel = (s.tiers[p] || {}).level || 1;
-        snapshots.push(currentLevel);
-        if (snapshots.length >= 3) {
-          var allSame = snapshots.every(function (v) { return v === snapshots[0]; });
-          if (allSame && snapshots[0] < 6) {
-            /* only flag if not already flagged by rep-ratio check */
-            var alreadyFlagged = flags.some(function (f) { return /Rep targets/.test(f.title); });
-            if (!alreadyFlagged) {
-              flags.push({
-                title: cap(p) + " pattern stalled",
-                body: p + " has been at Level " + currentLevel + " for " + snapshots.length + " phases. Try adding extra volume (one more set per session), reducing rest by 15 seconds, or swapping to the next variation to break the adaptation plateau."
-              });
-            }
-          }
-        }
-      });
-    }
-
-    /* score — era-aware weighted blend.
-       Sleep gets more weight than a generic formula would give it — for a
-       58kg athlete in a caloric surplus, sleep IS the adaptation mechanism.
-       Flags penalise 3pts each; flag count is capped at 4 to avoid cliff-edges. */
-    var W = { completion: 0.28, reps: 0.24, weight: 0.14, diff: 0.14, sleep: 0.20 };
-    var raw = subCompletion * W.completion + subReps * W.reps + subWeight * W.weight + subDiff * W.diff + subSleep * W.sleep;
-    var score = lib.clamp(Math.round(raw * 100) - Math.min(flags.length, 4) * 3, 0, 100);
-    var grade = gradeFor(score);
-    var recommendation = recommendAction(score, avgDifficulty, failed, flags, dN, dataConfidence);
 
     return {
-      score: score, grade: grade, recommendation: recommendation, sampleSize: sess.length,
-      expected: expected, dayInfo: dayInfo, points: pts, trendLine: lr,
-      dataConfidence: dataConfidence,
-      metrics: { completionRate: completionRate, avgRepsRatio: avgRepsRatio, weightTrend: weightTrend, avgDifficulty: avgDifficulty, avgSleep: avgSleep, hasReps: rN > 0, hasDiff: dN > 0, hasSleep: hrs.length > 0 },
-      subs: { completion: subCompletion, reps: subReps, weight: subWeight, diff: subDiff, sleep: subSleep },
-      plateauFlags: flags
+      sampleSize: sess.length, expected: expected, dayInfo: dayInfo, points: pts, trendLine: lr,
+      weightTrend: lr ? lr.slope * 7 : null,                      // kg / week
+      adherence: { attended: sess.length, planned: expected, rate: expected ? sess.length / expected : 0, template: tpl },
+      performance: { slots: slots, comparable: slots.reduce(function (a, r) { return a + r.comparable; }, 0),
+                     steps: slots.reduce(function (a, r) { return a + r.steps; }, 0) },
+      recovery: { flags: flagN, sharp: sharp, parts: parts, rated: rated, failed: failed,
+                  blocks: blocks, blockSessions: blockSessions, sessions: sess.length }
     };
   }
 
-  function recommendAction(score, avgDiff, failed, flags, dN, dataConfidence) {
-    var overreach = (dN && (avgDiff >= 3.1 || failed >= 3)) || flags.some(function (f) { return /Over-reaching|Under-recovering/.test(f.title); });
-    var criticalFlags = flags.filter(function (f) { return /Over-reaching|Under-recovering|Recurring/.test(f.title); }).length;
-    /* never deload if we don't have enough data — at least 3 sessions needed */
-    if ((dataConfidence || 1) < 0.67) return "consolidate";
-    if (overreach || score < 50) return "deload";
-    /* advance at 70+ with no critical health flags — was 78, which was too hard to reach */
-    if (score >= 70 && criticalFlags === 0) return "advance";
-    return "consolidate";
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
+
+  /* One section of the report: a heading, its sample size, one row per line
+     (left text, right figure) and the limit of what it can say. */
+  function sectionHTML(key, title, sample, rows, note) {
+    return '<div class="rc-section" data-ev-section="' + key + '"><div class="rc-section__h">' + title + '</div>' +
+      '<p class="rc-sub" data-ev-sample style="margin-bottom:var(--sp-2)">' + sample + '</p>' +
+      '<div class="rc-diff">' + rows.map(function (r) {
+        return '<div class="rc-diff__row" style="flex-wrap:wrap"><span style="flex:1 1 14ch">' + r[0] + '</span><span class="mono" style="margin-left:auto;text-align:right">' + r[1] + '</span></div>';
+      }).join("") + '</div>' +
+      '<p class="faint text-xs" style="margin:var(--sp-2) 0 0">' + note + '</p></div>';
   }
 
-  /* metric display rows (label, raw value string, sub-score 0-1, colour) */
-  function metricRows(ev) {
-    var m = ev.metrics, sub = ev.subs;
-    return [
-      { l: "Completion", v: Math.min(Math.round(m.completionRate * 100), 100) + "% · " + ev.sampleSize + "/" + ev.expected, p: sub.completion },
-      { l: "Rep ratio", v: m.hasReps ? (m.avgRepsRatio > 1 ? "above target ✔" : Math.round(m.avgRepsRatio * 100) + "% of target") : "no sets", p: sub.reps },
-      { l: "Weight trend", v: m.weightTrend == null ? "need 2 weigh-ins" : (m.weightTrend >= 0 ? "+" : "") + r1(m.weightTrend) + " kg/wk", p: sub.weight },
-      { l: "Difficulty", v: m.hasDiff ? diffLabel(m.avgDifficulty) : "not rated", p: sub.diff },
-      { l: "Sleep", v: m.hasSleep ? r1(m.avgSleep) + " h avg" : "not logged", p: sub.sleep }
-    ];
-  }
-  function diffLabel(a) {
-    if (a < 1.6) return "too easy";
-    if (a < 2.4) return "dialled in";
-    if (a < 3.1) return "challenging";
-    return "brutal";
-  }
-  function subColor(p) { return p >= 0.8 ? "var(--success)" : p >= 0.6 ? "var(--secondary)" : p >= 0.4 ? "var(--warn)" : "var(--danger)"; }
+  function sectionsHTML(ev, s) {
+    var a = ev.adherence, p = ev.performance, r = ev.recovery, phase = s.currentPhase;
+    var partial = ev.dayInfo.day < phase.lengthDays;
+    var adh = sectionHTML("adherence", "Adherence",
+      plural(a.planned, "session") + " planned · day " + ev.dayInfo.day + " of " + phase.lengthDays + (a.planned < 3 ? " — too few to say much" : ""),
+      [["Sessions attended", a.attended + " of " + a.planned],
+       ["Plan", esc(a.template.label) + " · " + esc(a.template.short)]],
+      partial ? "Planned is counted up to today, so a period part-way through is read against fewer sessions." : "Planned comes from the template this period ran under.");
 
-  function coachFeedback(ev, s) {
-    var rows = metricRows(ev).filter(function (r) { return !/need|no sets|not /.test(r.v); });
-    rows.sort(function (a, b) { return b.p - a.p; });
-    var best = rows[0], worst = rows[rows.length - 1];
-    var open;
-    if (ev.score >= 90) open = "Outstanding phase — this is a peak block.";
-    else if (ev.score >= 80) open = "Strong, well-executed phase.";
-    else if (ev.score >= 68) open = "Solid work with clear room to sharpen.";
-    else if (ev.score >= 55) open = "A mixed phase — the signal is in the gaps.";
-    else open = "A tough phase, and that's useful data.";
-    var parts = [open];
-    if (best && best !== worst) parts.push(best.l.toLowerCase() + " was your anchor (" + best.v + ")");
-    if (worst && best !== worst) parts.push("the lever to pull is " + worst.l.toLowerCase() + " (" + worst.v + ")");
-    var rec = { advance: "You've earned a step up — Phase " + (s.currentPhase.number + 1) + " adds load.",
-                consolidate: "Repeat the block to lock in these levels before pushing.",
-                deload: "Back off next block, recover hard, then resume the climb." }[ev.recommendation];
-    return parts.join("; ") + ". " + rec;
+    var perf = sectionHTML("performance", "Performance",
+      plural(p.comparable, "comparable session") + " this period · " + plural(p.steps, "step") + " taken",
+      p.slots.length ? p.slots.map(function (x) {
+        var setup = ui.setupText ? ui.setupText(x.rx) : "";
+        return [esc(((DB.getExercise(x.rx.exerciseId) || {}).name || x.rx.exerciseId) + (setup ? " · " + setup : "")) + ' <span class="faint text-xs">' + esc(cap(x.slot)) + '</span>',
+                x.comparable + " comparable · " + plural(x.steps, "step")];
+      }) : [["No prescriptions yet", "—"]],
+      "Comparable means the same exercise, setup and sets, done as prescribed: sessions before a step, flagged or skipped, or inside a recovery block aren't counted. Steps count both up and back. This isn't a grade, and it can't see your form.");
+
+    var partList = Object.keys(r.parts).map(function (k) { return esc(prettyPart(k)) + " ×" + r.parts[k]; }).join(", ");
+    var rec = sectionHTML("recovery", "Recovery",
+      plural(r.rated, "rated exercise") + " in " + plural(r.sessions, "session"),
+      [["Pain flags", r.flags + (r.flags ? " · " + plural(r.sharp, "sharp", "sharp") + (partList ? " · " + partList : "") : "")],
+       ["Exercises rated Failed", r.failed + " of " + r.rated],
+       ["Recovery blocks", r.blocks.length + (r.blocks.length ? " · " + plural(r.blocks.reduce(function (n, b) { return n + b.days; }, 0), "day") + " · " + plural(r.blockSessions, "session") + " at reduced sets" : "")]],
+      "Effort is rated per exercise, not per set, so Failed counts exercises. Pain and effort are self-reports: the app can't see pain you don't log or measure recovery.");
+    return adh + perf + rec;
   }
 
   /* ----------------------------------------------------------------------
-     3. PHASE ADVANCEMENT — generate + save the next phase.
+     3. CLOSING A PERIOD — generate + save the next phase.
      -------------------------------------------------------------------- */
-  function actionLabel(a) { return { advance: "Advance", consolidate: "Consolidate", deload: "Deload" }[a] || cap(a); }
-  function actionBlurb(s, a) {
-    var n = s.currentPhase.number + 1;
-    return {
-      advance: "Phase " + n + " nudges targets up a step where you're hitting them — one rep on low counts, five seconds on a short hold, more once the numbers get bigger — and keeps your hard-won levels. Progressive overload, continued.",
-      consolidate: "Phase " + n + " repeats your current movements and targets but tightens rest ~20% — more density to bank the adaptation before reaching for the next level.",
-      deload: "Phase " + n + " is a back-off block: working sets drop ~40% and rep targets ease, same movements at lighter intent. Recover, then resume."
-    }[a];
+  /* "Phase N", plus a note for a save that was mid-deload when recovery
+     blocks replaced the 28-day deload: that phase still runs its volume. */
+  function phaseTag(phase) {
+    return "Phase " + phase.number + ((Number(phase.volumeFactor) || 1) < 1 ? " · deload from before recovery blocks" : "");
   }
 
-  function applyAdvancement(action) {
+  /* Closes the current period into phaseHistory and opens the next. The entry
+     keeps the template the period ran under, what it planned and what you
+     attended, so its attendance never changes afterwards (P3), and the three
+     sections' counts. `closedBy` is "report" at the end of a period, or
+     "template" when switching template closed it early (engine.setTemplate).
+     The next period runs the template you're on now. It changes no
+     prescription: closing a period is reporting, not progression (D5). A
+     phase saved before this build can carry a deload volumeFactor, and a
+     template switch keeps it; a report never creates one. */
+  function closePeriod(closedBy) {
     var s = App.getState();
     var ev = evaluate(s);
     var phase = s.currentPhase;
 
     var entry = {
       number: phase.number,
-      score: ev.score,
-      grade: ev.grade,
-      action: action,
-      metrics: {
-        completionRate: r1(ev.metrics.completionRate),
-        avgRepsRatio: r1(ev.metrics.avgRepsRatio),
-        weightTrend: ev.metrics.weightTrend == null ? null : r1(ev.metrics.weightTrend),
-        avgDifficulty: r1(ev.metrics.avgDifficulty),
-        avgSleep: r1(ev.metrics.avgSleep)
-      },
+      template: phase.template || "rotation",
+      attended: ev.sampleSize,
+      planned: ev.expected,
+      startISO: phase.startISO,
+      closedBy: closedBy,
+      comparable: ev.performance.comparable,
+      steps: ev.performance.steps,
+      flags: ev.recovery.flags,
+      failed: ev.recovery.failed,
+      rated: ev.recovery.rated,
+      blocks: ev.recovery.blocks.length,
       tierLevels: (function () { var o = {}; PATTERNS.forEach(function (p) { o[p] = (s.tiers[p] || {}).level || 1; }); return o; })(),
-      plateaus: ev.plateauFlags.map(function (f) { return f.title; }),
-      feedback: coachFeedback(ev, s),
       endedISO: lib.iso()
     };
     s.phaseHistory.push(entry);
 
-    /* apply action to the training targets */
-    var canOverload = ev.metrics.avgRepsRatio >= 0.9;
-    var volumeFactor = 1;
-    var wasDeload = phase.action === "deload";   // recovering from a deload — be gentler
-    PATTERNS.forEach(function (p) {
-      var t = s.tiers[p]; if (!t) return;
-      var cur = engine.movementFor(p);
-      var isHold = cur && cur.mode === "hold";
-      if (action === "advance" && canOverload) {
-        /* Holds used to be excluded here outright (`&& !isHold`), which left
-           the per-session +1s as their ONLY upward path — the four-weekly
-           evaluator bumped every reps pattern and silently stepped over every
-           hold. They advance on their own banded step now, and stop at their
-           own advance point rather than a REF_TARGET-derived number that was
-           never expressed in seconds. */
-        var step = engine.stepFor(t.repsTarget || REF_TARGET[p] || 10, isHold);
-        var bump = wasDeload ? step * 2 : step;   // recover faster out of a deload
-        var capTo = isHold
-          ? (engine.HOLD_ADVANCE_AT[cur && cur.id] || ((t.repsTarget || 30) + step))
-          : (REF_TARGET[p] || 10) + 6;
-        t.repsTarget = Math.min((t.repsTarget || REF_TARGET[p] || 10) + bump, capTo);
-      } else if (action === "deload") {
-        /* Deload: ease rep targets ~30% (was 40%) and only halve progress (not wipe it).
-           Gentler reduction means faster recovery in the following phase. */
-        t.progress = Math.round((t.progress || 0) * 0.6);   // was 0.5 — keeps more progress
-        var base = t.repsTarget || REF_TARGET[p] || 10;
-        t.repsTarget = Math.max(isHold ? 20 : 6, Math.round(base * 0.75));  // was 0.7
-      }
-    });
-    if (action === "deload") volumeFactor = 0.6;        // ~40% fewer working sets
-    else if (action === "consolidate") volumeFactor = 1; // density handled via shorter rest
-
-    s.currentPhase = { number: phase.number + 1, startISO: lib.iso(), lengthDays: 28, action: action, weighIns: [], volumeFactor: volumeFactor };
+    var carry = closedBy === "template";
+    s.currentPhase = { number: phase.number + 1, startISO: lib.iso(), lengthDays: 28, action: carry ? (phase.action || "start") : "start",
+                       weighIns: [], volumeFactor: carry ? Number(phase.volumeFactor) || 1 : 1, template: engine.templateId() };
     App.saveState();
     return entry;
   }
 
   /* ----------------------------------------------------------------------
-     4. PHASE REPORT CARD modal — animated reveal + advancement controls.
+     4. PHASE REPORT modal.
      -------------------------------------------------------------------- */
   function ensureReportModal() {
     var m = document.getElementById("modal-report");
@@ -6409,125 +7193,29 @@
     return m;
   }
 
-  function phaseDiffHTML(s) {
-    var hist = (s.phaseHistory || []).filter(function (h) { return h.tierLevels; });
-    if (!hist.length) return "";   // need a prior phase to diff against
-    var prev = hist[hist.length - 1].tierLevels;
-    var changes = [];
-    PATTERNS.forEach(function (p) {
-      var was = prev[p];
-      var now = (s.tiers[p] || {}).level || 1;
-      if (typeof was === "number" && now !== was) {
-        var up = now > was;
-        var nm = (engine.movementFor(p) || {}).name || "";
-        changes.push('<div class="rc-diff__row">' +
-          '<span class="rc-diff__arrow" style="color:' + (up ? "var(--success)" : "var(--warn)") + '">' + (up ? "▲" : "▼") + '</span>' +
-          '<span class="grow">' + cap(p) + ' L' + was + ' → <b>L' + now + '</b>' + (nm ? ' · ' + esc(nm) : "") + '</span></div>');
-      }
-    });
-    // sessions logged this phase
-    var phaseStart = s.currentPhase && s.currentPhase.startISO;
-    var sessThisPhase = phaseStart ? engine.completedSessions().filter(function (x) {
-      return lib.daysBetween(phaseStart, x.dateISO) >= 0;
-    }).length : 0;
-
-    var body = changes.length
-      ? '<div class="rc-diff">' + changes.join("") + '</div>'
-      : '<div class="rc-flag" style="border-left-color:var(--secondary);background:var(--secondary-soft)"><div class="rc-flag__b">No tier level changes this phase — you held your ground. Consistency now sets up the next jump.</div></div>';
-
-    return '<div class="rc-section"><div class="rc-section__h">What changed this phase</div>' +
-      '<p class="rc-sub" style="margin-bottom:var(--sp-2)">' + sessThisPhase + ' session' + (sessThisPhase === 1 ? "" : "s") + ' logged since the last report card.</p>' +
-      body + '</div>';
-  }
-
   function reportHTML(ev, s) {
     var phase = s.currentPhase;
-    var range = keyLabel(lib.dayKey(phase.startISO)) + " → " + keyLabel(lib.today());
-    var g = ev.grade, gc = gradeColor(g);
-
-    var rows = metricRows(ev).map(function (r) {
-      var c = subColor(r.p);
-      return '<div class="ev-metric">' +
-        '<span class="ev-metric__l">' + r.l + '</span>' +
-        '<span class="ev-bar"><span class="ev-bar__fill" data-w="' + Math.round(r.p * 100) + '" style="--c:' + c + '"></span></span>' +
-        '<span class="ev-metric__v">' + r.v + '</span></div>';
-    }).join("");
-
-    var flags = ev.plateauFlags.length
-      ? '<div class="rc-section"><div class="rc-section__h">Plateau interventions</div>' +
-          ev.plateauFlags.map(function (f) {
-            return '<div class="rc-flag"><div class="rc-flag__t">' + esc(f.title) + '</div><div class="rc-flag__b">' + esc(f.body) + '</div></div>';
-          }).join("") + '</div>'
-      : '<div class="rc-section"><div class="rc-flag" style="border-left-color:var(--success);background:var(--success-soft)">' +
-          '<div class="rc-flag__t" style="color:var(--success)">No plateaus detected</div>' +
-          '<div class="rc-flag__b">Recovery, volume and progression are all tracking. Keep stacking clean reps.</div></div></div>';
+    var range = keyLabel(Hub.dayOf(phase.startISO)) + " → " + keyLabel(lib.today());
 
     var era = (s.era === 2)
-      ? '<div class="rc-section"><div class="rc-era"><div class="rc-era__t">Era II · Hybrid Strength active</div>' +
-          '<p class="text-sm muted" style="margin-top:4px">All Era I benchmarks cleared — weighted overload tools are unlocked and now seed your sessions automatically.</p></div></div>'
+      ? '<div class="rc-section"><div class="rc-era"><div class="rc-era__t">Era II · Hybrid Strength reached</div>' +
+          '<p class="text-sm muted" style="margin-top:4px">All Era I benchmarks cleared — an achievement. Loaded movements are in every slot\'s Swap list for any equipment you own.</p></div></div>'
       : '';
 
-    var rec = ev.recommendation;
-    var seg = ["advance", "consolidate", "deload"].map(function (a) {
-      return '<button class="seg__btn ' + (a === rec ? "is-active" : "") + '" data-rc-act="' + a + '">' + actionLabel(a) + '</button>';
-    }).join("");
-
-    var next =
-      '<div class="rc-section"><div class="rc-section__h">Next phase preview</div>' +
-        '<div class="rc-next">' +
-          '<div class="row between wrap" style="align-items:flex-start;gap:var(--sp-2)">' +
-            '<div><div class="rc-sub">Recommended</div><div class="rc-next__act" style="color:' + gradeColor(g) + '">' + actionLabel(rec) + ' → Phase ' + (phase.number + 1) + '</div></div>' +
-            '<span class="badge badge--' + (rec === "advance" ? "success" : rec === "deload" ? "warn" : "primary") + '">' + actionLabel(rec) + '</span>' +
-          '</div>' +
-          '<p class="text-sm muted mt-2" id="rc-blurb">' + esc(actionBlurb(s, rec)) + '</p>' +
-          '<div class="field__label mt-4 mb-2">Override the call</div>' +
-          '<div class="seg rc-actionseg" id="rc-seg">' + seg + '</div>' +
-        '</div></div>';
-
     return '<div class="modal__head">' +
-        '<div><div class="eyebrow">Phase ' + phase.number + ' · ' + range + '</div>' +
-        '<h3 class="display h3">Phase Report Card</h3></div>' +
+        '<div><div class="eyebrow">' + phaseTag(phase) + ' · ' + range + '</div>' +
+        '<h3 class="display h3">Phase report</h3></div>' +
         '<button class="modal__close" data-close aria-label="Close">' +
           '<svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>' +
         '</button></div>' +
-
-      '<div class="rc-head">' +
-        '<div class="ring rc-ring" id="rc-ring" style="--p:0;--c:' + gc + '"><div class="ring__in">' +
-          '<div class="ring__v" id="rc-score-num" style="color:' + gc + '">0</div>' +
-          '<div class="ring__l">score</div></div></div>' +
-        '<div class="rc-grade" style="color:' + gc + '">' + g + '</div>' +
-        '<div class="rc-sub">' + ev.sampleSize + ' session' + (ev.sampleSize === 1 ? "" : "s") + ' graded · day ' + ev.dayInfo.day + '/' + phase.lengthDays +
-          (ev.dataConfidence < 1 ? ' · <span style="color:var(--warn)">partial data — grade provisional</span>' : '') + '</div>' +
-      '</div>' +
-
-      '<div class="rc-section"><div class="rc-section__h">Metric breakdown</div><div class="ev-mgrid">' + rows + '</div></div>' +
-      phaseDiffHTML(s) +
-      '<div class="rc-section"><div class="rc-section__h">Coach feedback</div><div class="rc-fb">' + esc(coachFeedback(ev, s)) + '</div></div>' +
-      flags + era + next +
-
+      '<p class="muted text-sm" style="margin:0">Three separate readings, each with its sample size. There is no overall grade: they measure different things.</p>' +
+      sectionsHTML(ev, s) + era +
+      '<div class="rc-section"><div class="rc-section__h">Closing this phase</div>' +
+        '<p class="text-sm muted" style="margin:0">Phase ' + (phase.number + 1) + ' runs under ' + esc(engine.template().label) + '. Nothing in your program changes: every prescription keeps its range and steps up on its own evidence, when you say yes.</p></div>' +
       '<div class="modal__foot">' +
         '<button class="btn btn--ghost" data-close>Not yet</button>' +
         '<button class="btn btn--primary" id="rc-apply">Begin Phase ' + (phase.number + 1) + ' →</button>' +
       '</div>';
-  }
-
-  function animateReport(dlg, ev) {
-    var ring = dlg.querySelector("#rc-ring");
-    if (ring) ring.style.setProperty("--p", ev.score);
-    dlg.querySelectorAll(".ev-bar__fill").forEach(function (el) {
-      el.style.width = (Number(el.dataset.w) || 0) + "%";
-    });
-    var numEl = dlg.querySelector("#rc-score-num");
-    if (numEl) {
-      var start = null, dur = 750, target = ev.score;
-      function step(ts) {
-        if (start == null) start = ts;
-        var t = Math.min((ts - start) / dur, 1);
-        numEl.textContent = Math.round(target * (1 - Math.pow(1 - t, 3)));
-        if (t < 1) requestAnimationFrame(step); else numEl.textContent = target;
-      }
-      requestAnimationFrame(step);
-    }
   }
 
   function openReportCard() {
@@ -6538,60 +7226,60 @@
     var dlg = m.querySelector(".modal__dialog");
     dlg.innerHTML = reportHTML(ev, s);
 
-    var chosen = { action: ev.recommendation };
-    dlg.querySelectorAll("[data-rc-act]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        chosen.action = b.dataset.rcAct;
-        dlg.querySelectorAll("[data-rc-act]").forEach(function (x) { x.classList.toggle("is-active", x === b); });
-        var blurb = dlg.querySelector("#rc-blurb");
-        if (blurb) blurb.textContent = actionBlurb(s, chosen.action);
-      });
-    });
     var applyBtn = dlg.querySelector("#rc-apply");
     if (applyBtn) {
       applyBtn.addEventListener("click", function () {
-        var a = chosen.action;
-        applyAdvancement(a);
+        closePeriod("report");
         App.closeModal("modal-report");
-        App.toast("Phase " + phase.number + " closed · grade " + ev.grade + " · Phase " + (phase.number + 1) + " (" + actionLabel(a).toLowerCase() + ") begins.", "success", 4800);
+        App.toast("Phase " + phase.number + " closed · " + ev.sampleSize + " of " + ev.expected + " sessions attended · Phase " + (phase.number + 1) + " begins.", "success", 4800);
         App.showSection("evaluation");
       });
     }
-
     App.openModal("modal-report");
-    requestAnimationFrame(function () { animateReport(dlg, ev); });
   }
 
   /* ----------------------------------------------------------------------
      5. EVALUATION VIEW
      -------------------------------------------------------------------- */
+  function historyRow(h) {
+    /* A phase closed before this build has a grade and an action; keep it
+       as it was. Later ones show their counts. */
+    if (h.grade) {
+      return '<div class="ev-hist__row">' +
+        '<div class="ev-hist__g" style="color:' + gradeColor(h.grade) + '">' + h.grade + '</div>' +
+        '<div class="grow"><div class="ev-hist__t">Phase ' + h.number + ' · ' + actionLabel(h.action) + '</div>' +
+        '<div class="ev-hist__s">score ' + h.score + ' · ' + lib.relTime(h.endedISO) + (h.plateaus && h.plateaus.length ? ' · ' + h.plateaus.length + ' flag' + (h.plateaus.length === 1 ? "" : "s") : "") + '</div></div>' +
+        '<span class="badge">' + h.score + '</span></div>';
+    }
+    return '<div class="ev-hist__row">' +
+      '<div class="ev-hist__g" style="font-size:var(--fs-md)">' + h.attended + '/' + h.planned + '</div>' +
+      '<div class="grow"><div class="ev-hist__t">Phase ' + h.number + ' · ' + esc((engine.TEMPLATES[h.template] || engine.TEMPLATES.rotation).label) + '</div>' +
+      '<div class="ev-hist__s">' + plural(h.steps || 0, "step") + ' · ' + plural(h.flags || 0, "flag") + ' · ' + plural(h.blocks || 0, "recovery block") + ' · ' + lib.relTime(h.endedISO) + '</div></div></div>';
+  }
+
+  /* Legacy history rows still need their colour and label. */
+  var GRADE_VAR = { S: "--yellow-bright", A: "--green-bright", B: "--aqua-bright", C: "--orange-bright", D: "--red-bright" };
+  function gradeColor(g) {
+    var v = "";
+    try { v = getComputedStyle(document.documentElement).getPropertyValue(GRADE_VAR[g] || "").trim(); } catch (e) {}
+    return v || "var(--text-400)";
+  }
+  function actionLabel(a) { return { advance: "Advance", consolidate: "Consolidate", deload: "Deload" }[a] || cap(a || "start"); }
+
   function renderEvaluation(el, s) {
     var ev = evaluate(s);
     var phase = s.currentPhase;
     var info = ev.dayInfo;
     var phaseDone = info.day >= phase.lengthDays;
-    var gc = gradeColor(ev.grade);
-
-    var rows = metricRows(ev).map(function (r) {
-      return '<div class="ev-metric">' +
-        '<span class="ev-metric__l">' + r.l + '</span>' +
-        '<span class="ev-bar"><span class="ev-bar__fill" style="width:' + Math.round(r.p * 100) + '%;--c:' + subColor(r.p) + '"></span></span>' +
-        '<span class="ev-metric__v">' + r.v + '</span></div>';
-    }).join("");
 
     var hist = (s.phaseHistory || []).slice().reverse();
     var histHtml = hist.length
-      ? '<div class="ev-hist">' + hist.map(function (h) {
-          return '<div class="ev-hist__row">' +
-            '<div class="ev-hist__g" style="color:' + gradeColor(h.grade) + '">' + h.grade + '</div>' +
-            '<div class="grow"><div class="ev-hist__t">Phase ' + h.number + ' · ' + actionLabel(h.action) + '</div>' +
-            '<div class="ev-hist__s">score ' + h.score + ' · ' + lib.relTime(h.endedISO) + (h.plateaus && h.plateaus.length ? ' · ' + h.plateaus.length + ' flag' + (h.plateaus.length === 1 ? "" : "s") : "") + '</div></div>' +
-            '<span class="badge">' + h.score + '</span></div>';
-        }).join("") + '</div>'
-      : '<div class="empty-mini">No phases closed yet. Train through this block, then close it out here to bank a report card.</div>';
+      ? '<div class="ev-hist">' + hist.map(historyRow).join("") + '</div>'
+      : '<div class="empty-mini">No phases closed yet. Train through this block, then close it out here to bank a report.</div>';
 
     var chart = ev.points.length >= 2 ? chartBox("ev-bw-chart", 220)
-      : chartEmpty(220, "Log bodyweight on two days this phase to chart the trend used for grading.");
+      : chartEmpty(220, "Log bodyweight on two days this phase to chart the trend.");
+    var blockOn = !!engine.recoveryOn(lib.today());
 
     el.innerHTML =
       '<div class="page-head row between wrap">' +
@@ -6600,70 +7288,50 @@
       '</div>' +
 
       '<div class="card card--accent card--pad-lg ev-hero stack">' +
-        '<div class="row between wrap" style="align-items:flex-start">' +
-          '<div><div class="eyebrow">Phase ' + phase.number + ' · ' + actionLabel(phase.action || "start") + '</div>' +
-          '<h2 class="display h2">' + (phaseDone ? "Phase complete" : "Day " + info.day + " of " + phase.lengthDays) + '</h2>' +
-          '<p class="muted text-sm" style="max-width:48ch">' +
-            (phaseDone
-              ? "This block is up — close it out to grade your work and generate the next phase."
-              : info.remaining + " days until this phase auto-grades. You can preview your standing any time.") +
-          '</p></div>' +
-          '<div class="ring" style="--p:' + ev.score + ';--c:' + gc + '"><div class="ring__in">' +
-            '<div class="ring__v" style="color:' + gc + '">' + ev.score + '</div><div class="ring__l">grade ' + ev.grade + '</div></div></div>' +
-        '</div>' +
+        '<div><div class="eyebrow">' + phaseTag(phase) + '</div>' +
+        '<h2 class="display h2">' + (phaseDone ? "Phase complete" : "Day " + info.day + " of " + phase.lengthDays) + '</h2>' +
+        '<p class="muted text-sm" style="max-width:52ch">' +
+          (phaseDone
+            ? "This block is up — close it out to bank its report and start the next."
+            : info.remaining + " days left. You can preview the report any time.") +
+        '</p></div>' +
         '<div class="progress" style="height:12px"><div class="progress__bar" style="width:' + info.pct + '%"></div></div>' +
         '<button class="btn btn--primary btn--lg btn--block" id="ev-open">' +
           '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M8.5 13l-1.5 8 5-3 5 3-1.5-8"/></svg>' +
-          (phaseDone ? "Open Phase Report Card" : "Preview Phase Report Card") + '</button>' +
+          (phaseDone ? "Open the phase report" : "Preview the phase report") + '</button>' +
       '</div>' +
 
-      '<div class="grid grid-2 grid-eval mt-4">' +
-        '<div class="card stack">' +
-          '<div class="card__head"><div class="card__title">Live metrics</div>' +
-          '<span class="badge">' + ev.sampleSize + ' session' + (ev.sampleSize === 1 ? "" : "s") + '</span></div>' +
-          '<div class="ev-mgrid">' + rows + '</div>' +
-          '<div class="collapsible" data-coach="scoring"><button class="collapsible__head" data-collapsible type="button" aria-expanded="false">How scoring works' +
-            '<svg class="collapsible__chev ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>' +
-            '<div class="collapsible__body"><div class="collapsible__inner"><div class="collapsible__pad">' +
-              '<p class="text-sm muted">Score = completion 28% · rep ratio 22% · weight trend 14% · difficulty 12% · sleep 12% · nutrition 12%, minus 4 points per plateau flag. ' +
-              'Grades: S 90+ · A 80+ · B 68+ · C 55+ · D below. Each metric scores highest in its healthy band — difficulty peaks at "dialled in", weight at a gentle clean-bulk gain, sleep at 7–9h.</p>' +
-            '</div></div></div></div>' +
-        '</div>' +
-        '<div class="card stack">' +
-          '<div class="card__head"><div class="card__title">Bodyweight this phase</div>' +
-          '<span class="badge badge--' + (ev.metrics.weightTrend == null ? "info" : ev.metrics.weightTrend > 0 ? "success" : "warn") + '">' +
-            (ev.metrics.weightTrend == null ? "baseline" : (ev.metrics.weightTrend >= 0 ? "+" : "") + r1(ev.metrics.weightTrend) + " kg/wk") + '</span></div>' +
-          chart +
-          '<p class="faint text-xs mono">Dashed line is the least-squares trend feeding the weight-trend metric.</p>' +
-        '</div>' +
-      '</div>' +
+      ui.recoveryHtml(s) +
 
-      (ev.plateauFlags.length
-        ? '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Active plateau flags</div>' +
-            '<span class="badge badge--warn">' + ev.plateauFlags.length + '</span></div>' +
-            ev.plateauFlags.map(function (f) {
-              return '<div class="rc-flag"><div class="rc-flag__t">' + esc(f.title) + '</div><div class="rc-flag__b">' + esc(f.body) + '</div></div>';
-            }).join("") + '</div>'
-        : '') +
+      '<div class="card mt-4 stack" id="ev-live"><div class="card__head"><div class="card__title">This phase so far</div>' +
+        '<span class="badge">' + plural(ev.sampleSize, "session") + '</span></div>' + sectionsHTML(ev, s) + '</div>' +
+
+      '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Bodyweight this phase</div>' +
+        '<span class="badge badge--' + (ev.weightTrend == null ? "info" : "primary") + '">' +
+          (ev.weightTrend == null ? "baseline" : (ev.weightTrend >= 0 ? "+" : "") + r1(ev.weightTrend) + " kg/wk") + '</span></div>' +
+        chart +
+        '<p class="faint text-xs mono">Reported, never graded. Dashed line is the least-squares trend of this phase\'s weigh-ins.</p>' +
+      '</div>' +
 
       '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Manual controls</div>' +
         '<span class="badge">your call</span></div>' +
-        '<p class="muted text-sm">The phase auto-grades on day ' + phase.lengthDays + ', but life doesn\'t run on a schedule. Close this phase early to bank a report card now, or jump straight into a recovery block when you\'re run down.</p>' +
+        '<p class="muted text-sm">Close this phase early to bank its report now' + (blockOn ? "" : ', or start a recovery block when you\'re run down') + '.</p>' +
         '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap">' +
           '<button class="btn btn--secondary btn--sm grow" id="ev-close-now">' +
             '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' +
-            'Close phase &amp; grade now</button>' +
-          '<button class="btn btn--ghost btn--sm grow" id="ev-deload-now">' +
+            'Close phase &amp; report now</button>' +
+          (blockOn ? "" :
+          '<button class="btn btn--ghost btn--sm grow" id="ev-rb-now">' +
             '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M12 22v-6M4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M2 12h6M22 12h-6"/></svg>' +
-            'Start a deload block</button>' +
+            'Start a recovery block</button>') +
         '</div>' +
-        '<p class="faint text-xs">A deload reduces working volume by ~40% for one block so you can recover, then you re-evaluate as normal.</p>' +
+        (blockOn ? "" : '<p class="faint text-xs">A recovery block cuts working sets to 60% for 7 days (3 become 2). It keeps your movements, ranges and rest, steps nothing up, and its sessions don\'t count as evidence. End it any time from its banner.</p>') +
       '</div>' +
 
       '<div class="page-head" style="margin-top:var(--sp-8)"><div class="eyebrow">Track record</div><h2 class="display h3">Phase history</h2></div>' +
       histHtml +
 
-      '<p class="faint text-xs mt-6 mono">PHASE REVIEW ONLINE · ' + (s.phaseHistory || []).length + ' phases closed · grading from ' + engine.completedSessions().length + ' lifetime sessions · stored locally.</p>';
+      '<p class="faint text-xs mt-6 mono">PHASE REVIEW ONLINE · ' + (s.phaseHistory || []).length + ' phases closed · ' + engine.completedSessions().length + ' lifetime sessions · stored locally.</p>';
 
     var openBtn = document.getElementById("ev-open");
     if (openBtn) openBtn.addEventListener("click", openReportCard);
@@ -6671,26 +7339,20 @@
     var closeNow = document.getElementById("ev-close-now");
     if (closeNow) closeNow.addEventListener("click", openReportCard);
 
-    var deloadNow = document.getElementById("ev-deload-now");
-    if (deloadNow) deloadNow.addEventListener("click", function () {
-      ui.confirm(
-        "Start a deload block?",
-        "This closes the current phase and begins a recovery block with working volume cut by about 40%. Use it when you're run down, sore, or short on sleep — your progressions are preserved.",
-        "Start deload", "primary",
-        function () {
-          applyAdvancement("deload");
-          App.toast("Deload block started. Train lighter, recover, then re-evaluate.", "success", 4800);
-          App.showSection("evaluation");
-        }
-      );
+    var rbNow = document.getElementById("ev-rb-now");
+    if (rbNow) rbNow.addEventListener("click", function () {
+      var b = engine.startRecovery("asked");
+      if (b) App.toast("Recovery block started for " + b.days + " days. End it any time from the banner.", "success", 4800);
+      App.showSection("evaluation");
     });
+    ui.wireRecovery(el);
 
     drawEvalChart(s, ev);
   }
 
   function drawEvalChart(s, ev) {
     if (ev.points.length < 2) return;
-    var startKey = lib.dayKey(s.currentPhase.startISO);
+    var startKey = Hub.dayOf(s.currentPhase.startISO);
     var labels = ev.points.map(function (p) { return keyLabel(lib.dayKey(lib.addDays(startKey, p.x))); });
     var trend = ev.trendLine ? ev.points.map(function (p) { return r1(ev.trendLine.slope * p.x + ev.trendLine.intercept); }) : null;
     makeChart("ev-bw-chart", {
@@ -6726,26 +7388,33 @@
     var benchDone = benchKeys.filter(function (k) { return s.benchmarks[k].complete; }).length;
     var graduated = s.era === 2;
 
-    /* weekly split */
-    var split = engine.ROTATION.map(function (d) {
-      var pats = engine.patternsFor(d, (s.prefs && s.prefs.sessionLength) || "focused");
-      return '<div class="pg-day' + (d === rec ? " is-next" : "") + '">' +
-        '<div class="row between"><span class="pg-day__t">' + engine.DAY_LABEL[d] + '</span>' +
-          (d === rec ? '<span class="badge badge--primary" style="padding:2px 7px">up next</span>' : '') + '</div>' +
-        '<p class="faint text-xs">' + esc(engine.DAY_DESC[d]) + '</p>' +
-        '<div class="pg-day__pats">' + pats.map(function (p) { return '<span class="chip">' + cap(p) + '</span>'; }).join("") + '</div>' +
-      '</div>';
+    /* The template's days, each with the slots it actually trains: the row in
+       place of pull without a bar, a left-out dip left out. */
+    var tpl = engine.template(), tplId = engine.templateId();
+    var split = templateDaysHtml(tpl, rec);
+    var others = engine.TEMPLATE_ORDER.filter(function (id) { return id !== tplId; }).map(function (id) {
+      return '<button class="btn btn--ghost btn--sm" data-tpl-pick="' + id + '" type="button">' + esc(engine.TEMPLATES[id].label) + '</button>';
     }).join("");
 
-    /* current targets */
-    var targets = PATTERNS.map(function (p) {
-      var t = s.tiers[p] || { level: 1, repsTarget: REF_TARGET[p], progress: 0 };
-      var ex = engine.movementFor(p);
-      var unit = ex && ex.mode === "hold" ? "s" : "reps";
-      return '<div class="pg-trow">' +
-        '<span class="pg-trow__p">' + p + ' · L' + t.level + '</span>' +
-        '<span class="pg-trow__n">' + esc(ex ? ex.name : (PROG[p] && PROG[p].label) || cap(p)) + '</span>' +
-        '<span class="kv__v">' + t.repsTarget + unit + '</span></div>';
+    /* Each slot's prescription and its evidence so far (plan C5). What the
+       workout will actually build, so an equipment fallback shows here too. */
+    var targets = Object.keys(TDATA.SLOTS).map(function (slot) {
+      /* No record (a row never offered yet) or off: nothing is prescribed. */
+      var stored = s.training.slots[slot], pr = stored && !stored.off ? engine.prescriptionFor(slot) : null, rx = pr && pr.rx;
+      var optional = slot === "row" || TDATA.SLOTS[slot].optional;
+      var name = !stored ? "—" : stored.off ? "Left out" : rx ? (DB.getExercise(rx.exerciseId) || {}).name || rx.exerciseId
+        : TDATA.SLOTS[slot].none || "Needs equipment you don't have";
+      var setup = rx ? ui.setupText(rx) : "";
+      var toggle = optional
+        ? '<button class="btn btn--ghost btn--sm" data-slot-toggle="' + slot + '" data-on="' + (!stored || stored.off ? "1" : "0") + '" type="button">' +
+            (!stored || stored.off ? "Add" : "Leave out") + '</button>' : "";
+      return '<div class="pg-trow" data-pg-slot="' + slot + '">' +
+        '<span class="pg-trow__p">' + esc(TDATA.SLOTS[slot].label) + '</span>' +
+        '<span class="pg-trow__n">' + esc(name) + (setup ? ' <span class="faint text-xs">· ' + esc(setup) + '</span>' : '') +
+          (pr && pr.note ? '<span class="faint text-xs" style="display:block">' + esc(pr.note) + '</span>' : '') +
+          '<span class="faint text-xs" data-pg-status style="display:block">' + esc(ui.slotStatus(slot)) + '</span>' +
+          (toggle ? '<span style="display:block;margin-top:4px">' + toggle + '</span>' : '') + '</span>' +
+        '<span class="kv__v">' + (rx && stored && !stored.off ? rx.sets + ' × ' + (rx.range[0] != null ? rx.range[0] + '–' : '') + (rx.range[1] != null ? rx.range[1] : '') + (rx.unit === "sec" ? ' s' : '') : '') + '</span></div>';
     }).join("");
 
     /* Era-I benchmarks */
@@ -6769,11 +7438,11 @@
       PATTERNS.forEach(function (p) {
         (DB.era2Addons(p) || []).forEach(function (a) {
           var ok = (a.equipment || []).every(function (e) { return s.equipment[e]; });
-          tools.push('<span class="chip" style="' + (ok ? "" : "opacity:.5") + '">' + esc(a.name) + (ok ? "" : " · locked") + '</span>');
+          tools.push('<span class="chip" style="' + (ok ? "" : "opacity:.5") + '">' + esc(a.name) + (ok ? "" : " · needs gear") + '</span>');
         });
       });
       era2Tools = '<div class="card rc-era stack mt-4"><div class="rc-era__t">Era II · Hybrid Strength unlocked</div>' +
-        '<p class="text-sm muted">Weighted accessories now seed your sessions when the kit is available.</p>' +
+        '<p class="text-sm muted">Loaded movements you can swap in with the kit you own.</p>' +
         (tools.length ? '<div class="pg-day__pats">' + tools.join("") + '</div>' : '') + '</div>';
     }
 
@@ -6785,7 +7454,7 @@
 
       '<div class="card card--notch stack">' +
         '<div class="card__head"><div class="card__title">Current phase</div>' +
-          '<span class="badge badge--primary">P' + phase.number + ' · ' + actionLabel(phase.action || "start") + '</span></div>' +
+          '<span class="badge badge--primary">P' + phase.number + ((Number(phase.volumeFactor) || 1) < 1 ? ' · legacy deload' : '') + '</span></div>' +
         '<div class="row between wrap"><div class="dash-big">Day ' + info.day + '<small>/ ' + phase.lengthDays + '</small></div>' +
           '<span class="dash-delta dash-delta--flat">' + info.remaining + ' days to evaluation</span></div>' +
         '<div class="progress" style="height:12px"><div class="progress__bar" style="width:' + info.pct + '%"></div></div>' +
@@ -6795,19 +7464,23 @@
         '</div>' +
       '</div>' +
 
-      '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Weekly split</div>' +
-        '<span class="badge">' + engine.DAYS_PER_WEEK + ' days / week</span></div>' +
-        '<p class="muted text-sm">A rolling 4-day rotation. Each session auto-builds from your current tier levels in Workout.</p>' +
-        '<div class="pg-split">' + split + '</div></div>' +
+      '<div class="card mt-4 stack" id="pg-template"><div class="card__head"><div class="card__title">Template</div>' +
+        '<span class="badge" data-tpl-current>' + esc(tpl.label) + ' · ' + esc(tpl.short) + '</span></div>' +
+        '<p class="muted text-sm">' + esc(tpl.desc) + ' Attendance counts against ' + planned28(tpl) + ' planned sessions in a 28-day phase. Each session builds from the prescriptions below.</p>' +
+        '<div class="pg-split">' + split + '</div>' +
+        '<div class="field__label">Change template</div>' +
+        '<div class="row wrap" style="gap:var(--sp-2)">' + others + '</div>' +
+        '<div id="pg-tpl-preview"></div></div>' +
 
-      '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Current targets</div>' +
-        '<span class="badge badge--era1">' + PATTERNS.length + ' patterns</span></div>' +
+      '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Your prescriptions</div>' +
+        '<span class="badge badge--era1">' + Object.keys(TDATA.SLOTS).length + ' slots</span></div>' +
+        '<p class="muted text-sm">Each slot is one movement at a range of reps or seconds. It steps up after ' + TDATA.EVIDENCE_SESSIONS + ' sessions on different days with every set at the top, rated easy or just right, and only when you say yes. A rule of thumb from your own logs, not a test — it can\'t see your form.</p>' +
         '<div class="pg-targets">' + targets + '</div>' +
         '<button class="btn btn--ghost btn--sm btn--block mt-2" data-go="progress">See strength levels in Progress →</button></div>' +
 
       '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Era I benchmarks</div>' +
         '<span class="badge badge--era1" id="bench-count">' + benchDone + '/' + benchKeys.length + '</span></div>' +
-        '<p class="muted text-sm">Clear all five to graduate into Era II and unlock weighted overload. Update your current bests below.</p>' +
+        '<p class="muted text-sm">Clear all five to graduate into Era II — an achievement. Benchmarks don\'t place or unlock anything: loaded movements are in Swap for anyone with the gear. Update your current bests below.</p>' +
         '<div class="progress progress--era1"><div class="progress__bar" id="bench-bar" style="width:' + Math.round(benchDone / benchKeys.length * 100) + '%"></div></div>' +
         '<div class="mt-2">' + benches + '</div></div>' +
 
@@ -6818,13 +7491,79 @@
     wireProgram(el, s);
   }
 
+  function planned28(tpl) { return Math.ceil(28 * tpl.perWeek / 7); }
+
+  function templateDaysHtml(tpl, rec) {
+    var len = (App.getState().prefs || {}).sessionLength || "focused";
+    return tpl.order.map(function (d) {
+      var slots = engine.slotsFor(d, len);
+      return '<div class="pg-day' + (d === rec ? " is-next" : "") + '">' +
+        '<div class="row between"><span class="pg-day__t">' + engine.DAY_LABEL[d] + '</span>' +
+          (d === rec ? '<span class="badge badge--primary" style="padding:2px 7px">up next</span>' : '') + '</div>' +
+        '<p class="faint text-xs">' + esc(engine.DAY_DESC[d]) + '</p>' +
+        '<div class="pg-day__pats">' + slots.map(function (it) { return '<span class="chip">' + esc(TDATA.SLOTS[it.slot].label) + '</span>'; }).join("") + '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  /* What switching to `id` would change, shown before anything changes: its
+     days and slots, what attendance would count against, and that the
+     current phase closes with what it has. The Switch button is the only
+     thing that applies it — no confirm(). */
+  function templatePreviewHtml(id) {
+    var s = App.getState(), tpl = engine.TEMPLATES[id], phase = s.currentPhase;
+    var ev = evaluate(s), row = s.training.slots.row;
+    var namesRow = tpl.order.some(function (d) { return engine.DAY_PATTERNS[d].indexOf("row") >= 0; });
+    return '<div class="card card--glass stack mt-2" data-tpl-preview="' + id + '">' +
+      '<div class="card__head"><div class="card__title">' + esc(tpl.label) + '</div><span class="badge">' + esc(tpl.short) + '</span></div>' +
+      '<p class="muted text-sm">' + esc(tpl.desc) + ' Attendance would count against ' + planned28(tpl) + ' planned sessions in a 28-day phase.</p>' +
+      '<div class="pg-split">' + templateDaysHtml(tpl, null) + '</div>' +
+      (namesRow && row && row.off ? '<p class="faint text-xs">You left the row out, so it stays out of these days. Add it under Your prescriptions to train it.</p>' : '') +
+      '<p class="text-sm" data-tpl-close>Switching closes Phase ' + phase.number + ' today, on day ' + ev.dayInfo.day + ', with ' +
+        ev.sampleSize + ' of ' + ev.expected + ' planned sessions, and starts Phase ' + (phase.number + 1) + ' under ' + esc(tpl.label) +
+        '. Your prescriptions and history don\'t change.</p>' +
+      '<div class="row" style="gap:var(--sp-2)">' +
+        '<button class="btn btn--primary btn--sm grow" data-tpl-apply="' + id + '" type="button">Switch to ' + esc(tpl.label) + '</button>' +
+        '<button class="btn btn--ghost btn--sm" data-tpl-cancel type="button">Keep ' + esc(engine.template().label) + '</button>' +
+      '</div></div>';
+  }
+
   function wireProgram(el, s) {
+    /* template: preview first, then Switch */
+    var pv = el.querySelector("#pg-tpl-preview");
+    el.querySelectorAll("[data-tpl-pick]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        pv.innerHTML = templatePreviewHtml(b.dataset.tplPick);
+        var cancel = pv.querySelector("[data-tpl-cancel]");
+        cancel.addEventListener("click", function () { pv.innerHTML = ""; });
+        pv.querySelector("[data-tpl-apply]").addEventListener("click", function () {
+          var id = this.dataset.tplApply, closed = engine.setTemplate(id);
+          if (!closed) return;
+          App.toast("Switched to " + engine.TEMPLATES[id].label + ". Phase " + closed.number + " closed at " +
+            closed.attended + " of " + closed.planned + " planned; Phase " + (closed.number + 1) + " starts today.", "success");
+          App.refresh();
+        });
+      });
+    });
+
     /* nav buttons */
     el.querySelectorAll("[data-go]").forEach(function (b) {
       b.addEventListener("click", function () { App.showSection(b.dataset.go); });
     });
     var rb = el.querySelector("#pg-report");
     if (rb) rb.addEventListener("click", openReportCard);
+
+    /* the optional row and dip, on or off */
+    el.querySelectorAll("[data-slot-toggle]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var slot = b.dataset.slotToggle, on = b.dataset.on === "1";
+        if (!ui.setSlotOn(slot, on, on ? "added in Program" : "left out in Program")) {
+          App.toast("No " + TDATA.SLOTS[slot].label.toLowerCase() + " movement fits your equipment.", "warn"); return;
+        }
+        App.toast(TDATA.SLOTS[slot].label + (on ? " added." : " left out."), "info");
+        App.refresh();
+      });
+    });
 
     /* benchmark steppers — update in place; trigger Era-transition flow on full clear */
     ui.wireSteppers(el, function (id, val) {
@@ -6860,7 +7599,7 @@
         var st = App.getState();
         st.era = 2;
         App.saveState();
-        App.toast("Era II unlocked — weighted tools are live. Welcome to Hybrid Strength.", "success", 5000);
+        App.toast("Era II reached — all five benchmarks cleared. Welcome to Hybrid Strength.", "success", 5000);
         App.refresh();
       }
     );
@@ -6869,7 +7608,8 @@
   /* ----------------------------------------------------------------------
      7. PUBLIC (additive) HOOK + MOUNT
      -------------------------------------------------------------------- */
-  App.evaluation = { evaluate: evaluate, openReportCard: openReportCard, applyAdvancement: applyAdvancement };
+  App.evaluation = { evaluate: evaluate, openReportCard: openReportCard,
+                     closePeriod: closePeriod };
 
   function mount() {
     themeChart();
@@ -7124,7 +7864,22 @@
       cues:["Set two sturdy chairs of equal height facing each other, a shoulder-width apart.","Place a hand on each seat and support your weight with arms locked.","Keep the body slightly forward and the shoulders down.","Lower until the elbows reach about 90 degrees, then press back to lockout."],
       mistakes:["Using light chairs that can tip or slide — only use heavy, stable ones.","Going too deep and stressing the shoulders."],
       readiness:"A parallel-bar dip substitute when you have no bars — build to 12 strict reps.",
-      injury:"Make sure both chairs are rock-solid; place them against a wall if unsure." }
+      injury:"Make sure both chairs are rock-solid; place them against a wall if unsure." },
+
+    /* ---- STAGE 2 additions: the two movements the progression catalogue
+       (training.data.js) needs and the app never had. Neither is on a skill
+       track yet; nothing reads them until Stage 2's builder is wired. ---- */
+    push_incline: { id:"push_incline", pattern:"push", name:"Incline Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Set your hands on a firm, immovable surface: a counter (~90 cm), a table (~75 cm), a chair seat (~45 cm) or a step (~20 cm). The lower the surface, the harder the push-up.","Walk the feet back until the body is one straight line from ears to heels.","Lower the chest to the edge of the surface, elbows tracking about 45° from the torso.","Press away fully and spread the shoulder blades at the top."],
+      mistakes:["Letting the hips sag or pike, so the surface height stops meaning anything.","Using a surface that can slide or tip; test it with your weight before the first rep."],
+      readiness:"Step down to the next lower surface once 12 clean reps feel easy on two different days.",
+      injury:"Keep wrists neutral on the edge; a lower surface loads the wrists and shoulders more, so drop one step at a time." },
+
+    squat_split: { id:"squat_split", pattern:"squat", name:"Split Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand in a long stride, front foot flat and back heel lifted, feet hip-width apart so you don't balance on a tightrope.","Keep the torso tall and drop the back knee straight down toward the floor.","Stop when the back knee hovers just above the ground and the front shin is near vertical.","Drive through the whole front foot to stand, without pushing off the back leg."],
+      mistakes:["Stepping too short so the front knee is shoved far past the toes.","Leaning the torso forward and letting the front heel come off the floor."],
+      readiness:"Add reps per side before moving to the rear-foot-elevated Bulgarian split squat.",
+      injury:"If the front knee complains, lengthen the stride and shorten the depth. A hand on a wall is fine." }
   };
 
   /* Append to the global DB (created in Part 2). */
@@ -7263,6 +8018,9 @@
         legs:     { track: "lsit",       line: "Open with an L-sit / compression hold while your core is fresh." },
         fullbody: { track: "handstand",  line: "Start with a handstand or L-sit hold before the circuit." }
       };
+      map.fullA = map.fullB = map.fullbody;
+      map.upper = map.push;
+      map.lower = map.legs;
       var pick = map[dayType] || map.push;
       var t = SKILL_TRACKS[pick.track];
       return t ? { id: pick.track, label: t.label, line: pick.line } : null;
@@ -7378,10 +8136,12 @@
    ----------------------------------------------------------------------------
    A self-contained running coach that:
      - lets the user pick a goal ("from nothing"): Base/5K, Stamina, or Sprint
-     - generates a week-by-week progressive plan that COMPLEMENTS the lifting
-       rotation: runs land on Wed / Sat / Sun, the days the Push->Pull->Legs->Full
-       block (Mon/Tue/Thu/Fri) leaves open, so legs & CNS are never double-booked
-     - schedules every run on a real date counted from the program start
+     - generates a week-by-week progressive plan on FIXED weekdays (Wed / Sat /
+       Sun). The lifting does not use fixed weekdays — it follows your last
+       session — so the two are not kept apart by construction: a hard run that
+       lands on a squat or hinge day says so, and can move a day (plan D6)
+     - schedules every run on a real date counted from the program start; a week
+       you did not log is never skipped silently: you repeat it or move on
      - logs completed runs (distance, time, effort), tracks a running streak
      - drives interval sessions with the shared App.startTimer countdown
      - surfaces the plan into the Progress training calendar so lift + run days
@@ -7711,8 +8471,10 @@
   function S() { return App.getState(); }
   function R() {
     var s = S();
-    if (!s.running) s.running = { goal: null, startISO: null, runDays: [3, 6, 0], runLog: [], streak: { count: 0, lastISO: null, best: 0 } };
+    if (!s.running) s.running = { goal: null, startISO: null, runDays: [3, 6, 0], runLog: [], streak: { count: 0, lastISO: null, best: 0 }, weekOffset: 0, askedWeek: null, moved: {} };
     if (!s.running.runDays) s.running.runDays = [3, 6, 0];
+    if (typeof s.running.weekOffset !== "number") s.running.weekOffset = 0;
+    if (!s.running.moved) s.running.moved = {};
     if (!s.running.runLog) s.running.runLog = [];
     if (!s.running.streak) s.running.streak = { count: 0, lastISO: null, best: 0 };
     return s.running;
@@ -7732,15 +8494,27 @@
       var t = todayLocal();
       var mondayOffset = (t.getDay() + 6) % 7;
       r.startISO = keyOf(addDaysLocal(t, -mondayOffset));
+      r.weekOffset = 0; r.askedWeek = null; r.moved = {};
       App.saveState();
     },
 
-    clear: function () { var r = R(); r.goal = null; r.startISO = null; App.saveState(); },
+    clear: function () {
+      var r = R(); r.goal = null; r.startISO = null;
+      r.weekOffset = 0; r.askedWeek = null; r.moved = {};
+      App.saveState();
+    },
 
-    weekIndexFor: function (date) {
+    /* Weeks since the start, by the calendar alone. */
+    calendarWeekFor: function (date) {
       var r = R(); if (!r.startISO) return 0;
-      var diff = lib.daysBetween(r.startISO, keyOf(date));
-      return Math.floor(diff / 7);
+      return Math.floor(lib.daysBetween(r.startISO, keyOf(date)) / 7);
+    },
+
+    /* The plan week a date falls in: the calendar week less the weeks you
+       chose to repeat. Time alone moves it only until a week goes unlogged;
+       then missedWeek() asks, and the plan waits for the answer's effect. */
+    weekIndexFor: function (date) {
+      return run.calendarWeekFor(date) - R().weekOffset;
     },
 
     currentWeek: function () {
@@ -7761,13 +8535,20 @@
       if (!plan.length || !r.startISO) return [];
       var clampIdx = lib.clamp(weekIdx, 0, plan.length - 1);
       var week = plan[clampIdx];
-      var weekMonday = addDaysLocal(localFromKey(r.startISO), clampIdx * 7);
+      /* A repeated week pushes every later week back, so plan week w sits
+         at calendar week w + weekOffset. Weeks from before a repeat shift
+         with it: their logged runs still show in Recent runs, but the week
+         preview no longer ticks them off. */
+      var weekMonday = addDaysLocal(localFromKey(r.startISO), (clampIdx + r.weekOffset) * 7);
       var byKey = run.logByDay();
       return r.runDays.map(function (dow, i) {
         var off = (dow + 6) % 7;          // Mon=0 .. Sun=6
         var d = addDaysLocal(weekMonday, off);
-        var k = keyOf(d);
-        return { date: d, key: k, dow: dow, session: week[i] || rest(), done: !!byKey[k], log: byKey[k] || null };
+        var planned = keyOf(d), k = planned;
+        var to = r.moved[planned];
+        if (to) { d = localFromKey(to); k = to; }
+        return { date: d, key: k, dow: d.getDay(), plannedKey: planned, moved: !!to,
+                 session: week[i] || rest(), done: !!byKey[k], log: byKey[k] || null };
       }).sort(function (a, b) { return a.date - b.date; });
     },
 
@@ -7791,7 +8572,7 @@
 
     logByDay: function () {
       var map = {};
-      (R().runLog || []).forEach(function (l) { map[lib.dayKey(l.dateISO)] = l; });
+      (R().runLog || []).forEach(function (l) { map[Hub.dayOf(l.dateISO)] = l; });
       return map;
     },
 
@@ -7807,6 +8588,75 @@
       return out;
     },
 
+    /* ---- A13: the plan moves on only when you say so (plan D6) ---- */
+
+    /* The week just behind you, when it holds runs with nothing logged on
+       their day: { week, sessions, missed } (week is the plan week index).
+       null when there is nothing to ask. Answering stores the calendar week,
+       so the question is asked once per week, on every screen. */
+    missedWeek: function () {
+      if (!run.isActive()) return null;
+      var r = R(), cal = run.calendarWeekFor(todayLocal()), cur = cal - r.weekOffset;
+      if (cur < 1 || r.askedWeek === cal) return null;
+      var prev = cur - 1;
+      if (prev >= run.totalWeeks()) return null;
+      var sched = run.weekSchedule(prev).filter(function (i) { return i.session.kind !== "rest"; });
+      /* Only days already past: a run moved over the week's end is still due. */
+      var missed = sched.filter(function (i) { return !i.done && i.key < lib.today(); });
+      return missed.length ? { week: prev, sessions: sched.length, missed: missed } : null;
+    },
+
+    /* "repeat" runs the missed week again from this week, so every later
+       week moves back by one; "move" carries on as the calendar would. */
+    answerMissed: function (choice) {
+      var r = R();
+      if (!run.missedWeek()) return false;
+      if (choice === "repeat") r.weekOffset += 1;
+      r.askedWeek = run.calendarWeekFor(todayLocal());
+      App.saveState();
+      return true;
+    },
+
+    /* Undo the last repeat: the plan returns to where it was, and asks again. */
+    undoRepeat: function () {
+      var r = R();
+      if (r.weekOffset < 1) return false;
+      r.weekOffset -= 1; r.askedWeek = null;
+      App.saveState();
+      return true;
+    },
+
+    /* ---- A13: a hard run on a squat or hinge day (plan D6) ---- */
+
+    HARD_KINDS: { tempo: 1, interval: 1, sprint: 1, vo2: 1, test: 1 },
+
+    /* { item, type, done, patterns, canMove } when `item` is a hard run that
+       shares its day with a squat or hinge session; null otherwise. Only
+       today's and the next session are known (App.engine.liftOn). Adjacent days
+       are not flagged, so moving a run to tomorrow is not checked against
+       tomorrow's lifting. */
+    clashFor: function (item, type) {
+      if (!item || item.done || !run.HARD_KINDS[item.session.kind]) return null;
+      /* `type` is a day the workout screen is previewing; without it, the
+         session the engine says is on that day. */
+      var lift = type ? { type: type, done: false } : App.engine.liftOn(item.key);
+      if (!lift) return null;
+      var legs = App.engine.patternsFor(lift.type, (S().prefs || {}).sessionLength).filter(function (p) {
+        return p === "squat" || p === "hinge";
+      });
+      if (!legs.length) return null;
+      var tomorrow = lib.dayKey(lib.addDays(item.key, 1));
+      return { item: item, type: lift.type, done: lift.done, chosen: !!type, patterns: legs,
+               tomorrow: tomorrow, canMove: !run.plannedByDay()[tomorrow] && !run.logByDay()[tomorrow] };
+    },
+
+    /* Move a planned run to the day after the day it is on now. */
+    moveRun: function (plannedKey, fromKey) {
+      R().moved[plannedKey] = lib.dayKey(lib.addDays(fromKey, 1));
+      App.saveState();
+    },
+    unmoveRun: function (plannedKey) { delete R().moved[plannedKey]; App.saveState(); },
+
     logRun: function (entry) {
       var r = R();
       var nowISO = entry.dateISO || lib.iso();
@@ -7818,10 +8668,16 @@
         distanceKm: Math.max(0, Number(entry.distanceKm) || 0),
         durationSec: Math.max(0, Math.round(Number(entry.durationSec) || 0)),
         rpe: entry.rpe || null,
-        notes: entry.notes || ""
+        notes: entry.notes || "",
+        updatedAt: new Date().toISOString()   // a re-log keeps the id; this makes it win on sync
       };
-      var k = lib.dayKey(nowISO);
-      r.runLog = (r.runLog || []).filter(function (l) { return lib.dayKey(l.dateISO) !== k; });
+      var k = Hub.dayOf(nowISO);
+      /* Re-logging a day replaces its run under the SAME id. A new id made the
+         replacement a delete plus an add, and sync's union by id brought the
+         old run back beside the new one: 5 km re-logged as 6 km read 11 km. */
+      var prev = (r.runLog || []).filter(function (l) { return Hub.dayOf(l.dateISO) === k; })[0];
+      if (prev && prev.id) rec.id = prev.id;
+      r.runLog = (r.runLog || []).filter(function (l) { return Hub.dayOf(l.dateISO) !== k; });
       r.runLog.push(rec);
       run._bumpStreak(k);
       App.saveState();
@@ -7855,7 +8711,7 @@
         sec: lib.sum(log, function (x) { return x.durationSec; }),
         thisWeekRuns: (function () {
           var monday = (function () { var t = todayLocal(); return keyOf(addDaysLocal(t, -((t.getDay() + 6) % 7))); })();
-          return log.filter(function (x) { return lib.dayKey(x.dateISO) >= monday; }).length;
+          return log.filter(function (x) { return Hub.dayOf(x.dateISO) >= monday; }).length;
         })()
       };
     },
@@ -7875,6 +8731,7 @@
           var when = next.item.key === lib.today() ? "today" : (DOW_SHORT[next.item.dow]);
           line = "Next run " + when + ": " + sess.title + (sess.distanceKm ? " · " + sess.distanceKm + " km" : "") + ".";
         } else line = "All caught up this week — nice work.";
+        if (run.missedWeek()) line = "Week " + (run.missedWeek().week + 1) + " has runs you did not log: open Running to repeat it or move on. " + line;
         return '<div class="card mt-4" style="border-color:rgba(208,139,208,.28)">' +
           '<div class="card__head"><div class="card__title">Running · ' + esc(g.name) + '</div>' +
             '<span class="badge">week ' + (curWeek + 1) + ' / ' + run.totalWeeks() + '</span></div>' +
@@ -7886,13 +8743,71 @@
       return '<div class="card mt-4" style="border-color:rgba(208,139,208,.28)">' +
         '<div class="row between wrap" style="gap:var(--sp-3)">' +
           '<div><div class="card__title" style="margin-bottom:4px">Add a running plan</div>' +
-          '<p class="muted text-sm" style="max-width:48ch;margin:0">Build endurance or speed from nothing — BASALT schedules runs on your off-days (Wed/Sat/Sun) so they complement your lifting instead of fighting it.</p></div>' +
+          '<p class="muted text-sm" style="max-width:48ch;margin:0">Build endurance or speed from nothing — BASALT schedules runs on Wed / Sat / Sun and tells you when a hard one lands on a squat or hinge day.</p></div>' +
           '<button class="btn btn--secondary btn--sm" data-go="running">Choose a goal →</button>' +
         '</div></div>';
     }
   };
 
   App.run = run;
+
+  /* ----------------------------------------------------------------------
+     2b) THE TWO A13 NOTES, shared by the Running view and the Today tab
+     -------------------------------------------------------------------- */
+  function dayText(key) { return key === lib.today() ? "today" : lib.fmtDate(key); }
+
+  /* The note for a hard run on a squat or hinge day (run.clashFor), with
+     the move button. It sits on the run's card and on the lifting card. */
+  function clashHtml(c) {
+    if (!c) return "";
+    var sess = c.item.session, label = App.engine.DAY_LABEL[c.type] || c.type, legs = c.patterns.join(" and ");
+    var lead = c.done ? 'You trained ' + label + ' today, which works ' + legs + '.'
+      : c.chosen ? 'Today\'s ' + label + ' session trains ' + legs + '.'
+      : label + ' is your next session, ' + dayText(c.item.key) + ', and it trains ' + legs + '.';
+    var move = c.canMove
+      ? '<button class="btn btn--secondary btn--sm" data-run-move="' + esc(c.item.plannedKey) + '|' + esc(c.item.key) + '" type="button">Move run to ' +
+        (c.item.key === lib.today() ? "tomorrow" : esc(lib.fmtDate(c.tomorrow))) + '</button>'
+      : '<span class="faint text-xs">The next day already has a run, so there is no move to offer.</span>';
+    return '<div class="wh-advice wh-advice--warn mt-4" data-run-clash role="status"><div>' +
+      '<div class="wh-advice__title">A hard run on a ' + esc(legs) + ' day</div>' +
+      '<p class="wh-advice__body" style="margin:var(--sp-2) 0">' + esc(lead) + ' ' + esc(sess.title) + ' (' + esc(kindLabel(sess.kind)) + ') is planned for the same day, ' +
+        'and a hard run takes from the same legs. Only today\'s and your next session are checked, not the day after.</p>' +
+      move + '</div></div>';
+  }
+
+  /* The question for an unlogged week (run.missedWeek). */
+  function missedHtml(m) {
+    var days = m.missed.map(function (i) { return esc(lib.fmtDate(i.key)); }).join("; ");
+    return '<div class="wh-advice wh-advice--info mt-4" data-run-missed role="status"><div>' +
+      '<div class="wh-advice__title">Week ' + (m.week + 1) + ' has runs you did not log</div>' +
+      '<p class="wh-advice__body" style="margin:var(--sp-2) 0">Nothing is logged on the day for ' + days + ' (' + m.missed.length + ' of ' + m.sessions +
+        ' sessions). The plan does not skip a week by itself. <b>Repeat week ' + (m.week + 1) + '</b> runs it again from this week and moves every later week back by one; ' +
+        '<b>Move on</b> goes to week ' + (m.week + 2) + '. A run you logged on another day is in Recent runs, but only a log on the planned day ticks it off.</p>' +
+      '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap"><button class="btn btn--secondary btn--sm" data-run-repeat type="button">Repeat week ' + (m.week + 1) + '</button>' +
+      '<button class="btn btn--ghost btn--sm" data-run-moveon type="button">Move on</button></div></div></div>';
+  }
+
+  function wireNotes(el) {
+    var go = function (sel, fn) { el.querySelectorAll(sel).forEach(function (b) { b.addEventListener("click", function () { fn(b); }); }); };
+    go("[data-run-move]", function (b) {
+      var p = b.getAttribute("data-run-move").split("|");
+      run.moveRun(p[0], p[1]);
+      App.toast("Run moved to " + lib.fmtDate(R().moved[p[0]]) + ". Put it back from its row on the Running tab.", "success", 4800);
+      runUi.weekView = null; App.refresh();
+    });
+    go("[data-run-unmove]", function (b) { run.unmoveRun(b.getAttribute("data-run-unmove")); runUi.weekView = null; App.refresh(); });
+    go("[data-run-repeat]", function () {
+      var m = run.missedWeek();
+      if (m && run.answerMissed("repeat")) App.toast("Repeating week " + (m.week + 1) + ". Every later week moves back by one.", "success", 4800);
+      runUi.weekView = null; App.refresh();
+    });
+    go("[data-run-moveon]", function () {
+      var m = run.missedWeek();
+      if (m && run.answerMissed("move")) App.toast("Moving on to week " + (m.week + 2) + ".", "info");
+      runUi.weekView = null; App.refresh();
+    });
+  }
+  run.clashHtml = clashHtml; run.wireNotes = wireNotes;
 
   /* ----------------------------------------------------------------------
      3) VIEW STATE
@@ -7934,37 +8849,18 @@
     el.innerHTML =
       pageHead(s) +
       '<p class="muted text-sm" style="max-width:64ch;margin-bottom:var(--sp-5)">' +
-        'Pick a goal and BASALT builds a week-by-week plan that <b>complements your lifting</b>. ' +
-        'Runs are scheduled on Wednesday, Saturday and Sunday - the days your Push -> Pull -> Legs -> Full ' +
-        'rotation (Mon / Tue / Thu / Fri) leaves open - so your legs and nervous system are never double-booked. ' +
+        'Pick a goal and BASALT builds a week-by-week plan on Wednesday, Saturday and Sunday. ' +
         'Every plan starts from walking and easy efforts, no base required.' +
       '</p>' +
       '<div class="run-goal-grid">' + cards + '</div>' +
       '<div class="card card--glass mt-6">' +
-        '<div class="card__head"><div class="card__title">How it interlocks with strength</div></div>' +
-        '<div class="run-week" style="gap:var(--sp-2)">' +
-          weekMapRow("Mon", "Push / Pull", "lift") +
-          weekMapRow("Tue", "Pull / Legs", "lift") +
-          weekMapRow("Wed", "Run - easy / speed", "run") +
-          weekMapRow("Thu", "Legs / Full", "lift") +
-          weekMapRow("Fri", "Full / Push", "lift") +
-          weekMapRow("Sat", "Run - long / key", "run") +
-          weekMapRow("Sun", "Run - easy / rest", "run") +
-        '</div>' +
-        '<p class="faint text-xs mt-4">Hard running stays away from leg-strength days, long runs land on the weekend with no lift the next morning, and easy Sunday miles aid recovery. You can still run whenever you like - this is just the backbone.</p>' +
+        '<div class="card__head"><div class="card__title">How it sits beside your lifting</div></div>' +
+        '<p class="faint text-xs"><b>Runs have fixed days; lifting does not.</b> Runs fall on Wed, Sat and Sun. Your lifting follows your last session and your template\'s rest rule, so it can land on any weekday, and a hard run (tempo, intervals, sprints, VO2 max or a test) can share a day with a squat or hinge session. ' +
+        'When that is true for today or your next session, the run card and the workout card both say so, and the run can move a day. Later lifting days are your call and are not projected, so they are not checked. ' +
+        'A week you did not log is never skipped by the calendar alone: the plan asks whether to repeat it. Long runs and easy runs are not treated as hard.</p>' +
       '</div>';
 
     wireGoalPicker(el, s);
-  }
-
-  function weekMapRow(dow, label, kind) {
-    var k = kind === "run" ? "run-kind--easy" : "run-kind--rest";
-    var tag = kind === "run" ? "RUN" : "LIFT";
-    return '<div class="row between" style="padding:var(--sp-2) var(--sp-3);border:1px solid var(--line);border-radius:var(--r-sm);background:var(--ink-850)">' +
-      '<div class="row" style="gap:var(--sp-3)"><span class="run-day__dow" style="width:34px">' + dow + '</span>' +
-      '<span class="text-sm" style="color:var(--text-200)">' + esc(label) + '</span></div>' +
-      '<span class="run-kind ' + k + '">' + tag + '</span>' +
-    '</div>';
   }
 
   function wireGoalPicker(el, s) {
@@ -7974,7 +8870,7 @@
         var g = GOALS[id];
         App.ui.confirm(
           "Start the " + g.name + " plan?",
-          g.tag + ". Runs schedule onto Wed / Sat / Sun around your lifting, starting this week from easy efforts.",
+          g.tag + ". Runs schedule onto Wed / Sat / Sun, starting this week from easy efforts.",
           "Start plan", "primary",
           function () {
             run.start(id);
@@ -7997,6 +8893,7 @@
 
     el.innerHTML =
       pageHead(s) +
+      (run.missedWeek() ? missedHtml(run.missedWeek()) : "") +
       heroRun(g, next, complete, curWeek) +
       '<div class="run-stat-row mt-6">' +
         App.util.statTile("Plan", g.name, complete ? "plan complete" : "week " + (curWeek + 1) + " / " + run.totalWeeks()) +
@@ -8008,7 +8905,7 @@
         '<div class="card__head"><div class="card__title">' + esc(g.name) + ' - plan weeks</div>' +
           '<span class="badge">' + esc(g.tag) + '</span></div>' +
         '<div class="run-ladder">' + ladder(curWeek) + '</div>' +
-        '<p class="faint text-xs mt-3">Tap a week to preview its sessions. Runs sit on Wed / Sat / Sun so they never clash with a strength day.</p>' +
+        '<p class="faint text-xs mt-3">Tap a week to preview its sessions. Runs sit on Wed / Sat / Sun. Your lifting follows your last session instead, so a hard run can land on a squat or hinge day; the card says so when it does.</p>' +
       '</div>' +
       '<div class="card mt-4">' +
         '<div class="card__head"><div class="card__title">Sessions - week ' + (runUi.weekView + 1) + '</div>' +
@@ -8021,7 +8918,8 @@
         '<button class="btn btn--ghost btn--sm" id="run-log-free">Log a freestyle run</button>' +
         '<button class="btn btn--ghost btn--sm" id="run-change-goal">Change goal</button>' +
       '</div>' +
-      '<p class="faint text-xs mt-6 mono">RUNNING ONLINE - ' + totals.runs + ' runs logged - ' + totals.km + ' km lifetime - plan anchored ' + R().startISO + ' - stored locally.</p>';
+      '<p class="faint text-xs mt-6 mono">RUNNING ONLINE - ' + totals.runs + ' runs logged - ' + totals.km + ' km lifetime - plan anchored ' + R().startISO + (R().weekOffset ? ' - ' + R().weekOffset + ' week' + (R().weekOffset > 1 ? 's' : '') + ' repeated' : '') + ' - stored locally.</p>' +
+      (R().weekOffset ? '<button class="btn btn--ghost btn--sm mt-3" id="run-unrepeat" type="button">Undo the last repeat</button>' : '');
 
     wirePlan(el, s);
   }
@@ -8060,6 +8958,7 @@
         (sess.durationSec ? '<div class="run-day__metric"><b>' + fmtDur(sess.durationSec) + '</b>est. time</div>' : '') +
         (next.week !== curWeek ? '<div class="run-day__metric"><b>W' + (next.week + 1) + '</b>plan week</div>' : '') +
       '</div>' +
+      clashHtml(run.clashFor(item)) +
       '<button class="btn btn--primary btn--lg btn--block" data-runstart=\'' + encodeSession(item) + '\'>' +
         '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"/></svg>Start this run -></button>' +
     '</div>';
@@ -8119,6 +9018,7 @@
         '<div class="run-day__main">' +
           '<div class="run-day__title">' + esc(sess.title) + ' <span class="run-kind run-kind--' + sess.kind + '">' + kindLabel(sess.kind) + '</span></div>' +
           '<div class="run-day__sub">' + esc(sess.sub) + '</div>' +
+          (item.moved ? '<div class="run-day__sub">Moved from ' + esc(lib.fmtDate(item.plannedKey)) + ' <button class="btn btn--ghost btn--sm" data-run-unmove="' + esc(item.plannedKey) + '" type="button">Put it back</button></div>' : '') +
           metrics +
         '</div>' +
         '<div class="run-day__act">' + act + '</div>' +
@@ -8179,6 +9079,13 @@
      5) WIRING
      -------------------------------------------------------------------- */
   function wirePlan(el, s) {
+    wireNotes(el);
+    var ur = el.querySelector("#run-unrepeat");
+    if (ur) ur.addEventListener("click", function () {
+      run.undoRepeat(); runUi.weekView = null;
+      App.toast("Last repeat undone. The plan is back where it was.", "info");
+      renderRunning(el, App.getState());
+    });
     el.querySelectorAll("[data-runweek]").forEach(function (b) {
       b.addEventListener("click", function () {
         runUi.weekView = Number(b.dataset.runweek);

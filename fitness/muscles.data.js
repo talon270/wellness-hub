@@ -6,15 +6,16 @@
    Dead Hang (grip) and a Chin-up (lats + biceps) — so this maps by exercise id.
 
    GLOBALS EXPOSED
-     window.MUSCLE_GROUPS   ordered [{ key, label, short, region, weeklyTarget }]
+     window.MUSCLE_GROUPS   ordered [{ key, label, short, region }]
      window.MUSCLE_MAP      exerciseId -> { primary[], secondary[], stabiliser[] }
      window.MUSCLE_FALLBACK pattern -> same shape (safety net for future ids)
+     window.MUSCLE_WEEK     the model behind each group's weekly target (1b)
      window.MUSCLE_RANKS    ordered rank names, index 0 = level 1
 
    THE TAXONOMY IS SIZED TO THIS APP
      An earlier draft imported 19 groups from a general-purpose fitness site.
      Five of them — neck, calves, adductors, traps, rear delts — have no
-     exercise in this 84-movement calisthenics library that meaningfully trains
+     exercise in this 86-movement calisthenics library that meaningfully trains
      them. A group that can never level up is a dead tile and an unearnable
      badge, so they are not groups here. Traps and rear delts fold into
      `upper_back`, which is honest for rows and scapular work.
@@ -36,41 +37,68 @@
 
   /* --------------------------------------------------------------------------
      1) GROUPS
-     `weeklyTarget` is in work units and is MEASURED, not guessed: it is what
-     the app's own 4-day rotation (one push / pull / legs / fullbody per week,
-     3 sets, steady-state BASE_REPS) actually delivers to that group. Ratio 1.0
-     therefore means "you followed the program" by construction, instead of a
-     size-class guess that left three groups permanently in a recovery warning.
-     Regenerate with:  node tools/check-muscle-map.js --targets
-     (which also reports any row that has drifted from the computed value)
+     A group has no stored weekly target. It is worked out when the Muscles
+     view draws, from the template you train on (section 1b), so the target
+     cannot describe a schedule the app has stopped offering.
      ------------------------------------------------------------------------ */
   var MUSCLE_GROUPS = [
-    { key: "chest",       label: "Chest",            short: "Chest",  region: "front", weeklyTarget: 96 },
-    { key: "delts_front", label: "Front delts",      short: "F.delt", region: "front", weeklyTarget: 62 },
-    { key: "delts_side",  label: "Side delts",       short: "S.delt", region: "front", weeklyTarget: 10 },
-    { key: "triceps",     label: "Triceps",          short: "Tri",    region: "back",  weeklyTarget: 120 },
-    { key: "lats",        label: "Lats",             short: "Lats",   region: "back",  weeklyTarget: 48 },
-    { key: "upper_back",  label: "Upper back",       short: "U.back", region: "back",  weeklyTarget: 48 },
-    /* Assist-only: no movement in an 84-exercise calisthenics library targets
+    { key: "chest",       label: "Chest",            short: "Chest",  region: "front" },
+    { key: "delts_front", label: "Front delts",      short: "F.delt", region: "front" },
+    { key: "delts_side",  label: "Side delts",       short: "S.delt", region: "front" },
+    { key: "triceps",     label: "Triceps",          short: "Tri",    region: "back" },
+    { key: "lats",        label: "Lats",             short: "Lats",   region: "back" },
+    { key: "upper_back",  label: "Upper back",       short: "U.back", region: "back" },
+    /* Assist-only: no movement in an 86-exercise calisthenics library targets
        the spinal erectors directly — they brace on hinges, rows and deep squats
        and that is the whole of it. The group is kept because that work is real
        and worth seeing, but it is marked so the audit and the balance badge
        treat it honestly rather than expecting a primary movement that does not
        and should not exist here. */
-    { key: "lower_back",  label: "Lower back",       short: "L.back", region: "back",  weeklyTarget: 57, assist: true },
-    { key: "biceps",      label: "Biceps",           short: "Bi",     region: "front", weeklyTarget: 19 },
-    { key: "forearms",    label: "Forearms & grip",  short: "Grip",   region: "front", weeklyTarget: 19 },
-    { key: "abs",         label: "Abs",              short: "Abs",    region: "front", weeklyTarget: 122 },
+    { key: "lower_back",  label: "Lower back",       short: "L.back", region: "back", assist: true },
+    { key: "biceps",      label: "Biceps",           short: "Bi",     region: "front" },
+    { key: "forearms",    label: "Forearms & grip",  short: "Grip",   region: "front" },
+    { key: "abs",         label: "Abs",              short: "Abs",    region: "front" },
     /* Assist-only for the same reason: there is no side plank, Russian twist,
        windshield wiper or suitcase carry in this library. The obliques get
        genuine anti-rotation work from archer and one-arm variants, unilateral
        squats and every hollow-body hold — 19 exercises touch them — but none of
        those is an oblique exercise. */
-    { key: "obliques",    label: "Obliques",         short: "Obl",    region: "front", weeklyTarget: 29, assist: true },
-    { key: "glutes",      label: "Glutes",           short: "Glute",  region: "back",  weeklyTarget: 168 },
-    { key: "quads",       label: "Quads",            short: "Quad",   region: "front", weeklyTarget: 84 },
-    { key: "hamstrings",  label: "Hamstrings",       short: "Ham",    region: "back",  weeklyTarget: 118 }
+    { key: "obliques",    label: "Obliques",         short: "Obl",    region: "front", assist: true },
+    { key: "glutes",      label: "Glutes",           short: "Glute",  region: "back" },
+    { key: "quads",       label: "Quads",            short: "Quad",   region: "front" },
+    { key: "hamstrings",  label: "Hamstrings",       short: "Ham",    region: "back" }
   ];
+
+  /* --------------------------------------------------------------------------
+     1b) THE WEEKLY TARGET MODEL
+     "On target" has to mean "you followed your template", or the bars argue
+     with the program: a guessed size-class target once left three groups
+     permanently in a recovery warning. So the target is what a week of the
+     active template delivers, worked out by App.muscles.weeklyTargets from
+       · the template's slots (engine.slotsFor, so a profile with no pull-up bar
+         rows where the pull would be, and a slot you left off adds nothing),
+       · its sessions a week (perWeek), split evenly across its day types
+         because they alternate,
+       · `sets` working sets of each slot at `unitsPerSet`,
+       · the slot's MUSCLE_FALLBACK profile at the contribution tiers above.
+     Profiles come from the pattern, not from the exercise you are on now, so
+     a target does not move when you climb from Wall Push-up to Archer Push-up.
+     The standard session is used: Short and Full length show as being under or
+     over it, rather than moving the goalposts with them.
+
+     `unitsPerSet` is a steady-state assumption, not a measurement of you:
+     reps per set, and for core a 30 s hold at 5 s = 1 unit (sessionVolume's
+     conversion), which is 6. The row is a slot, not a pattern: its exercises are
+     catalogued under `pull`, so it reads the pull profile.
+     tools/check-muscle-map.js runs the same arithmetic over every template
+     read from basalt.js and fails if a slot has no entry here or a group is
+     never trained.
+     ------------------------------------------------------------------------ */
+  var MUSCLE_WEEK = {
+    sets: 3,
+    unitsPerSet: { push: 12, row: 8, pull: 8, squat: 14, hinge: 14, core: 6, shoulder: 8, dip: 8 },
+    profileOf: { row: "pull" }
+  };
 
   /* --------------------------------------------------------------------------
      2) RANKS — BASALT's own rock/forge vocabulary.
@@ -100,7 +128,7 @@
   };
 
   /* --------------------------------------------------------------------------
-     4) THE MAP — every one of the 84 ids in EXERCISE_DB, explicitly.
+     4) THE MAP — every one of the 86 ids in EXERCISE_DB, explicitly.
      `m(primary, secondary, stabiliser)` keeps the rows readable.
      ------------------------------------------------------------------------ */
   var MUSCLE_MAP = {};
@@ -123,6 +151,7 @@
   m("push_e2_dbpress", ["chest"], ["triceps", "delts_front"], []);          /* supported — no bracing demand */
   m("push_alt_scapula", ["upper_back"], ["delts_front"], ["abs"]);          /* scapular protraction/retraction */
   m("push_alt_wide", ["chest"], ["delts_front", "triceps"], ["abs"]);
+  m("push_incline", ["chest", "triceps"], ["delts_front"], ["abs"]);        /* same muscles as a push-up, less of the load */
   m("push_alt_negative", ["chest", "triceps"], ["delts_front"], ["abs"]);
   m("push_alt_explosive", ["chest", "triceps"], ["delts_front"], ["abs"]);
   m("push_alt_onearm", ["chest", "triceps"], ["delts_front"], ["obliques", "abs"]);
@@ -147,6 +176,7 @@
   m("squat_1", ["quads", "glutes"], ["hamstrings"], ["abs"]);
   m("squat_2", ["quads", "glutes"], ["hamstrings"], ["abs"]);
   m("squat_3", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);   /* unilateral */
+  m("squat_split", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]); /* unilateral, rear foot on the floor */
   m("squat_4", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);
   m("squat_5", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);
   m("squat_6", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);
@@ -218,6 +248,7 @@
   window.MUSCLE_GROUPS   = MUSCLE_GROUPS;
   window.MUSCLE_MAP      = MUSCLE_MAP;
   window.MUSCLE_FALLBACK = MUSCLE_FALLBACK;
+  window.MUSCLE_WEEK     = MUSCLE_WEEK;
   window.MUSCLE_RANKS    = MUSCLE_RANKS;
 
 })();

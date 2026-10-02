@@ -176,7 +176,7 @@
     try {
       ((window.App && window.App.STATE && window.App.STATE.sessions) || []).forEach(function (s) {
         if (!s || !s.dateISO) return;
-        var k = String(s.dateISO).slice(0, 10);
+        var k = s.dayKey || Hub.dayOf(s.dateISO);   // the training day, not the UTC slice
         _volume[k] = (_volume[k] || 0) + (Number(s.volume) || 0);
       });
     } catch (e) {}
@@ -189,7 +189,7 @@
     _weight = {};
     try {
       ((window.App && window.App.STATE && window.App.STATE.bodyweightLog) || []).forEach(function (e) {
-        if (e && e.dateISO && e.kg) _weight[String(e.dateISO).slice(0, 10)] = Number(e.kg);
+        if (e && e.dateISO && e.kg) _weight[Hub.dayOf(e.dateISO)] = Number(e.kg);
       });
     } catch (e) {}
     (Hub.state.logs.vitals || []).forEach(function (v) {

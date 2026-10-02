@@ -18,6 +18,35 @@ way.
 
 **Open `index.html` and it runs.**
 
+**A week of runs you didn't log is never skipped for you.** The running plan
+used to count weeks by the calendar alone: two weeks with nothing logged put a
+9-week plan on week 3, with no question asked. Now, when the week behind you has
+a run with nothing logged on its day, the Running tab asks **Repeat week N** or
+**Move on**, and the dashboard says it is waiting. Repeat shifts every later
+week back by one (stored as `running.weekOffset`) and can be undone from the
+foot of the page; Move on changes nothing and stops the question for that
+week. Elapsed time alone never answers it: a week after repeating, with still
+nothing logged, the plan is on week 2, not 3, and asks again. Limits: only a
+log on the planned day ticks a run off, so a run done on another day is in
+Recent runs but not credited to the plan; after a repeat, the week preview
+shows earlier weeks a week later and unticked, though their logs are intact;
+and `running` merges between devices with this device winning, so answer on one
+device.
+
+**A hard run on a squat or hinge day says so, on both cards.** Runs sit on fixed
+weekdays (Wed, Sat, Sun); the lifting follows your last session instead, so the
+old promise that runs "never clash with a strength day" was false. Reproduced on
+the previous build: the VO2 plan's 30/30 intervals on Wed 21 Oct, with Full
+body B (a hinge), Upper / lower's Lower, or the rotation's Pull all due that
+day — three templates, no warning anywhere, and the Today tab said "fit it in
+before or after your lift". Now the run card and the workout card both name the
+session, and **Move run to tomorrow** shifts the run a day (`running.moved`, put
+back from its row). Hard means tempo, intervals, sprints, VO2 max or a test;
+long and easy runs aren't flagged. Limits: only today's session and your next
+one are known, because when you train after that is your call, so a clash later
+in the week isn't flagged, and a run moved to tomorrow isn't checked against
+tomorrow's lifting.
+
 ## What it covers
 
 | Tab | What's in it |
@@ -93,6 +122,19 @@ shifts the boundary to any hour up to 6am. Train at 23:00, log it at 00:20, and
 it still lands on the day you actually trained instead of quietly breaking the
 streak. Every date key in the app derives from that one setting.
 
+**A workout belongs to the day it began.** The day is decided once, when you
+press Begin — from the logging date and the day-start hour — and saved on the
+session as `dayKey`. Nothing re-derives it from a timestamp afterwards. It used
+to be worked out three ways: a workout finished at 05:00 IST is `23:30Z` the day
+before, so the fitness streak (which sliced the UTC date) filed it on the wrong
+day and showed the day not done; one finished at 00:20 with the day starting at
+4:00 was 2 Oct in Fitness and 1 Oct everywhere else; and a workout logged while
+backfilling 29 Sep was stamped with the moment you saved it. Now begun at 23:50
+and finished at 00:20, it is the day it began, and backfilling 29 Sep files it on
+29 Sep. Sessions saved before `dayKey` existed fall back to their local day with
+the same day-start hour, never the UTC date. One limit: a PR or pain flag from a
+backfilled workout still carries the time you saved it, so it can read "today".
+
 **A missed day doesn't have to reset a hundred.** Each calendar month grants a
 small allowance of **grace days** (one by default, configurable, 0 for the
 strict version). A missed day inside a run doesn't count as done — the number
@@ -122,7 +164,7 @@ level-up toast, and the caption says it in one line. It is called
 **conditioning**, not strength, and not "level" — the app already has levels,
 on the progression ladders, and those measure something real.
 
-**The muscle map is sized to this app, not borrowed.** Every one of the 84
+**The muscle map is sized to this app, not borrowed.** Every one of the 86
 movements is mapped to the muscles it trains, at three weights: primary, real
 assistance, and bracing. Bracing is priced low on purpose — counting the core in
 a squat as 40% of squat volume made abs level three times faster than chest
@@ -131,16 +173,104 @@ there is no calf raise in calisthenics, so there is no calf tile to stare at
 forever. `node tools/check-muscle-map.js` enforces both halves of that — every
 exercise mapped, and every group actually reachable.
 
-**Weekly targets are measured, not guessed.** "Above target" compares your week
-against what the app's own 4-day rotation delivers to that group, computed from
-the program itself. A guessed target would have left three groups permanently
-reading "well above — check recovery" on the plan the app wrote for you, which
-is the app arguing with itself.
+**Weekly targets follow your template.** "Above target" compares your week
+against what a week of *your* template delivers to that group: its slots, its
+sessions a week, 3 sets at steady-state reps, worked out when the Muscles view
+draws, from the slots the app would build for you. So the same chest reads a
+target of 54 on Full body ×3, 36 on ×2, 120 on Upper / lower and 84 on the
+rotation, and Upper / lower's lats read 48 with no pull-up bar (one row a day)
+and 96 with one (a row and a pull-up). The rotation's numbers fell 12.5% when
+this landed — chest 96 → 84 — because the old ones assumed four sessions a week
+and its own rest rule allows 3.5. A guessed target would have left three groups
+permanently reading "well above — check recovery" on the plan the app wrote for
+you, which is the app arguing with itself. Limits: the reps per set (12 for
+push, 8 for pulling, 14 for squat and hinge, a 30 s core hold) are an
+assumption, not a measure of you; the standard-length session is used, so Short
+and Full read as under or over it; and a slot you switch off adds nothing.
+`node tools/check-muscle-map.js` runs the same arithmetic over every template it
+reads out of `basalt.js` and fails if a slot has no entry or a group is never
+trained — the first run of it found that the row had neither.
 
 **Units are display-only.** Everything is stored in metric, always. Switching
 between kg/cm/°C and lb/in/°F changes what you type and what you see, and can
 never alter, round or corrupt a reading you already saved. A backup exported on
 one setting reads correctly on the other.
+
+**Sync merges your fitness history instead of picking a side.** Sessions, pain
+flags, goals and run logs are joined by their ids, and each exercise keeps one
+PR per kind at the higher value. It used to replace the whole list with the
+local one: log one workout on the phone and one on the desktop and each device
+kept only its own, so the sync file held whichever device wrote last. Now both
+keep both, and the higher schema version wins. An edit travels too: a
+session's notes or volume, a goal ticked or pinned, and a run re-logged on the
+same day carry the time of the edit, so the newer one wins on both devices. Two
+limits, stated where they bite: a session you delete comes back from any device that still has it, and
+keeps coming back until you delete it on every device; and the logs with no
+ids — bodyweight, measurements, sleep, nutrition — still merge whole, with this
+device winning.
+
+**A recovery block cuts sets for a week, and nothing else.** The old deload cut a
+target by 25% and then applied a floor of 20 s for holds and 6 reps for
+everything else, so the smallest targets went *up*: a 15 s hollow hold became
+20 s, a 10 s L-sit became 20 s, a 5-rep pull-up became 6 — a harder recovery
+week for the people least able to take one. Targets are ranges now, so the block
+doesn't touch them. For 7 days working sets are cut to 60%, rounded, never below
+1 (3 become 2, 4 become 2). Ranges and rest stay, nothing steps up and the "+1
+set" mode is off, so no number can rise. A session done inside it is stamped and
+is never evidence: at one set the block leaves the count alone, so the set count
+can't be what excludes it. The first session after day 7 is a normal one. A
+banner shows on every day of it with an **End block now** button, and ending it
+the day it started means it never applied. It is offered after a sharp pain flag
+or when two movements' totals have fallen over their last three sessions each,
+with the numbers that triggered it and a **Not now** that holds until something
+new happens — or you start one yourself from Phase review. Limits: the 7 days
+and the 60% are product choices, and the offer can't see pain you don't flag.
+
+**The phase report has three readings and no grade.** It used to blend
+completion, rep ratio, sleep, effort and weight into one S–D score and then
+advance, consolidate or deload your program on it — and the rep ratio compared
+every session to a target the points system had set, which no longer exists. It
+now reports **adherence** (sessions attended out of the template's planned
+sessions), **performance** (per movement, comparable sessions this period and
+steps taken) and **recovery** (pain flags, exercises rated Failed, recovery
+blocks), each with its own sample size and its own limit written beneath it:
+effort is rated per exercise, not per set, so "Failed" counts exercises, and a
+period part-way through is read against the sessions planned so far. Bodyweight
+is charted beside them and feeds nothing. Closing a phase changes no
+prescription. Phases closed before this build keep their grade in the history.
+
+**A step up needs evidence, and your yes.** Each movement is a range — 3 sets
+of 6–12 reps, or a hold range like 10–20 s for an L-sit — and it steps up only
+after two sessions on different days with every set at the top, both rated easy
+or just right. Then the Workout card asks, naming the sessions: "Ready: 3 × 12
+on 24 Sept and 27 Sept — step up to table height (~75 cm)?", with **Step up**
+and **Repeat**. It used to run on points, and points paid for work that wasn't
+done: one logged wall push-up set advanced shoulder, dip and core by 13 points
+each, and eight sessions of 3 × 1 against an 8-rep target reached Level 2. The
+card's "when to step up" sentence is generated from the same constants the
+decision uses, so it can't disagree with it; the old per-movement "ready to
+advance when…" lines no longer render. The limit sits on the card itself: 6–12, three sets and
+two sessions are product choices, not validated thresholds, and the rule reads
+your logged sets and ratings — it can't see your form.
+
+**Old sessions are history, never evidence.** A session saved before the
+upgrade carries no record of the prescription it was done at, and its "just
+right" can't be told from no answer — the old build saved `moderate` for a
+blank rating, so a workout with nothing rated saved four of them. Those
+sessions still show in your history, but the session log reads their rating as
+"unknown — older log", and no step is ever offered from them. Effort now has a
+**Not sure** button, and a blank stays blank; neither counts toward a step. The
+first workout after the upgrade shows one card saying all of this, once per
+device.
+
+**The program follows the equipment you have.** The default profile owns no
+pull-up bar and still got Dead Hang, so a beginner's pull day was Dead Hang,
+Glute Bridge and Plank — no pulling at all. Without a bar the row now carries
+pulling, and the card says why. With one, a row is offered on your first pull
+day as a ticked checkbox, applied only if you save it ticked, and reversible in
+Program. Loaded movements are no longer locked behind Era II: anyone who owns
+dumbbells or kettlebells finds them in Swap, with the weight marked per hand or
+total.
 
 ---
 

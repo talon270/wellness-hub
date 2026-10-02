@@ -248,6 +248,29 @@
     forearms:    [0.25, 0.30, 0.35, 0.30, 0.25]
   });
 
+  /* ---- PUSH, hands raised (Stage 2) ----
+     Same cycle as the push-up with the load moved toward the legs, so the
+     bars sit lower than push_2's. Illustrative, like every number here. */
+  p("push_incline", "rep", [
+    { name: "Top / plank", pos: 0.00,
+      desc: "Arms locked, body one straight line sloping down from the raised hands. The abs and glutes hold the line; the chest and triceps are barely loaded." },
+    { name: "Descent", pos: 0.35,
+      desc: "Lowering the chest toward the edge, elbows tracking back around 45 degrees. Chest and front delts lengthen under a lighter load than a floor push-up." },
+    { name: "Bottom", pos: 0.90,
+      desc: "Chest at the edge of the surface. The chest and front delts are at their longest and most loaded; a lower surface raises every bar here." },
+    { name: "Press", pos: 0.50,
+      desc: "Driving back up. Chest and triceps share the work, and the triceps take over as the elbows near lockout." },
+    { name: "Lockout", pos: 0.05,
+      desc: "Back to the straight line, shoulder blades spread. Triceps finish the rep, the serratus and abs hold the line." }
+  ], {
+    chest:       [0.20, 0.55, 0.75, 0.70, 0.30],
+    triceps:     [0.25, 0.45, 0.60, 0.75, 0.60],
+    delts_front: [0.20, 0.50, 0.65, 0.55, 0.30],
+    abs:         [0.50, 0.50, 0.55, 0.55, 0.50],
+    glutes:      [0.30, 0.30, 0.35, 0.35, 0.30],
+    forearms:    [0.20, 0.25, 0.30, 0.25, 0.20]
+  });
+
   /* ---- DIP ---- */
   p("dip_3", "rep", [
     { name: "Support hold", pos: 0.00,
@@ -287,6 +310,29 @@
     hamstrings:  [0.15, 0.40, 0.55, 0.50, 0.30],
     abs:         [0.25, 0.50, 0.60, 0.55, 0.30],
     lower_back:  [0.25, 0.55, 0.65, 0.60, 0.35]
+  });
+
+  /* ---- SQUAT, split stance (Stage 2) ----
+     Drawn with the bilateral squat rig, which is a diagram of the pattern,
+     not of this stance. The front leg does most of the work; the back leg
+     steadies and stretches the hip flexor, which is why glutes lead here. */
+  p("squat_split", "rep", [
+    { name: "Standing split", pos: 0.00,
+      desc: "Tall in a long stride, front foot flat, back heel lifted. A light postural brace and a stretch in the back leg's hip flexor." },
+    { name: "Descent", pos: 0.45,
+      desc: "Back knee travels straight down. The front quad and glute lengthen under load while the obliques and abs stop the torso tipping." },
+    { name: "Bottom", pos: 0.95,
+      desc: "Back knee just above the floor, front shin near vertical. Peak stretch and demand on the front glute and quad, and the most balance work." },
+    { name: "Drive", pos: 0.55,
+      desc: "Pushing the front foot through the floor. Quad and glute are the movers; the hamstring steadies the knee." },
+    { name: "Lockout", pos: 0.10,
+      desc: "Standing in the split again with the front hip extended. The front glute finishes the rep." }
+  ], {
+    quads:       [0.20, 0.65, 0.90, 0.85, 0.30],
+    glutes:      [0.25, 0.60, 0.90, 0.90, 0.50],
+    hamstrings:  [0.15, 0.35, 0.50, 0.45, 0.25],
+    abs:         [0.25, 0.45, 0.55, 0.50, 0.25],
+    obliques:    [0.20, 0.45, 0.60, 0.50, 0.25]
   });
 
   /* ---- HINGE (bilateral) ---- */

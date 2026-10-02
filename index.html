@@ -303,6 +303,17 @@
             <button class="seg__btn" data-goal="size" type="button">Size</button>
             <button class="seg__btn" data-goal="both" type="button">Both</button>
           </div>
+          <p class="faint text-xs" style="margin:6px 0 0">Sets your rep ranges: Strength 4–8 where a harder setup or load
+            exists (else 6–12), Size 8–15, Both 6–12. Holds keep their own. Changing it moves your prescriptions to the new range.</p>
+        </div>
+        <div class="field mt-2"><span class="field__label">Bodyweight direction</span>
+          <select class="select" id="set-weightdir" aria-label="Bodyweight direction">
+            <option value="">None</option>
+            <option value="gain">Gain</option>
+            <option value="hold">Hold</option>
+            <option value="lose">Lose</option>
+          </select>
+          <p class="faint text-xs" style="margin:6px 0 0">Optional. Only judges your weigh-in trend; the phase report doesn't use it.</p>
         </div>
       </div>
 
@@ -325,18 +336,17 @@
         <div class="field mt-3"><span class="field__label">Default intensity</span>
           <div class="seg" id="set-vol-mode">
             <button class="seg__btn" data-voldefault="standard" type="button">Standard</button>
-            <button class="seg__btn" data-voldefault="extended" type="button">Extended</button>
-            <button class="seg__btn" data-voldefault="max" type="button">Max effort</button>
+            <button class="seg__btn" data-voldefault="extended" type="button">+1 set</button>
           </div>
         </div>
         <div class="field mt-3"><span class="field__label">Default length</span>
           <div class="seg" id="set-len-mode">
+            <button class="seg__btn" data-lengthdefault="short" type="button">Short</button>
             <button class="seg__btn" data-lengthdefault="focused" type="button">Focused</button>
             <button class="seg__btn" data-lengthdefault="full" type="button">Full</button>
           </div>
-          <p class="faint text-xs" style="margin:6px 0 0">Intensity changes sets, reps and rest on the same movements.
-            Length adds one more movement — an antagonist for the day, kept out of your ladders and rep targets
-            because it is support work, not a session for that pattern.</p>
+          <p class="faint text-xs" style="margin:6px 0 0">+1 set adds a set to each main movement; rest never changes.
+            Short drops the day's last movement; Full adds one more, an antagonist for the day.</p>
         </div>
       </div>
 
@@ -434,7 +444,7 @@
         <div class="guide-section guide-section--sm" id="guide-readiness-wrap">
           <div class="guide-section__label" style="color:var(--success)">
             <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14.01l-3-3"/></svg>
-            Ready to advance when…
+            When to step up
           </div>
           <p class="guide-text" id="guide-readiness"></p>
         </div>
@@ -489,6 +499,8 @@
 <script src="js/views/settings.js"></script>
 <script src="js/app.js"></script>           <!-- boot -->
 <script src="js/guide.js"></script>         <!-- spotlight tour -->
+<script src="fitness/training.data.js"></script> <!-- ranges, setups, slots: what each exercise is for -->
+<script src="fitness/training.js"></script>      <!-- step up / repeat / reduce; basalt.js's v4 migration needs it -->
 <script src="fitness/basalt.js"></script>   <!-- the calisthenics engine -->
 <script src="fitness/muscles.data.js"></script> <!-- exercise -> muscle map -->
 <script src="fitness/phases.data.js"></script>  <!-- per-phase activation + pose rigs -->

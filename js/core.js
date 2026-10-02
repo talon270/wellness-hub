@@ -541,8 +541,17 @@
      to the day that just ended — which is what someone who trains at 23:00 and
      logs it at 00:20 actually means. Every other date helper is relative to
      this, so the whole app agrees on where a day begins. */
-  function today() {
-    var d = new Date();
+  function today() { return dayOf(Date.now()); }
+
+  /* The day a record's timestamp belongs to, by the same rollover rule.
+     A workout finished at 05:00 IST is "2026-09-30T23:30:00.000Z", so the
+     UTC slice files it on 30 Sep; this files it on 1 Oct, and with rollover 6
+     on 30 Sep, the same day today() said it was.
+     A bare day key comes back unchanged: new Date("2026-10-01") is 05:30 IST,
+     and moving a day key by the rollover would shift it a day early. */
+  function dayOf(v) {
+    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    var d = new Date(v);
     var start = Number(STATE.settings && STATE.settings.dayStartHour) || 0;
     if (start > 0 && d.getHours() < start) d.setDate(d.getDate() - 1);
     return ymd(d);
@@ -2239,7 +2248,7 @@
     defaultCheckups: defaultCheckups,
 
     /* dates */
-    ymd: ymd, today: today, calendarToday: calendarToday,
+    ymd: ymd, today: today, dayOf: dayOf, calendarToday: calendarToday,
     parseYmd: parseYmd, shiftDay: shiftDay,
     daysBetween: daysBetween, prettyDate: prettyDate, relDay: relDay, clock: clock,
 

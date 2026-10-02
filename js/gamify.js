@@ -239,7 +239,9 @@
     try {
       var sessions = (window.App && window.App.STATE && window.App.STATE.sessions) || [];
       sessions.forEach(function (s) {
-        if (s && s.dateISO && s.completed !== false) set.add(String(s.dateISO).slice(0, 10));
+        /* The training day, never the UTC slice: a 05:00 IST workout is
+           23:30Z the day before. Same rule as App.lib.sessionDay. */
+        if (s && s.dateISO && s.completed !== false) set.add(s.dayKey || Hub.dayOf(s.dateISO));
       });
     } catch (e) { /* BASALT not booted yet — recompute runs again once it is */ }
     _fitnessDates = set;
