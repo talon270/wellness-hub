@@ -1465,3 +1465,95 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 
 /* Trunk mass: faint enough that the muscle shapes on top stay the signal. */
 .phz-trunk { fill: var(--text-500); fill-opacity: .30; stroke: none; }
+
+/* ==========================================================================
+   BODY MAP  (fitness/bodymap.js)
+   Lit regions take their fill inline from the same ramp as the phase view, so
+   the colour keeps its meaning in every theme. What is theme-owned is the
+   figure around them: the silhouette, the unlit regions and the focus ring.
+   ========================================================================== */
+.bm { display: grid; gap: var(--sp-3); }
+.bm-figs {
+  display: grid; gap: var(--sp-3);
+  /* Two across until the host is narrower than ~250 px, then stacked. The guide modal host is 268 px at 390 (W14 measured), so 2 x 120 + gap must stay under it. */
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  justify-items: center;
+}
+.bm-figwrap { margin: 0; display: grid; gap: 4px; justify-items: center; width: 100%; }
+.bm-figwrap figcaption {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-400);
+}
+.bm-fig { width: 100%; max-width: 230px; height: auto; display: block; }
+.bm-body { fill: var(--ink-700); stroke: var(--line-2); stroke-width: 1.2; }
+.bm-part { fill: var(--ink-650); stroke: none; }
+.bm-r { stroke: var(--ink-850); stroke-width: .6; }
+.bm-r--off { fill: var(--text-500); fill-opacity: .16; }
+/* A transparent stroke under every region: the shapes are 10-30 px wide at
+   390 px, so a thumb needs the margin. Under the regions, so a region always
+   wins the area it fills. 14 px across = 7 px past each edge. */
+.bm-pad { fill: none; stroke: transparent; stroke-width: 14px; vector-effect: non-scaling-stroke; pointer-events: stroke; }
+.bm-r--tap { cursor: pointer; }
+.bm-r--tap:hover { stroke: var(--primary); stroke-width: 1.6; }
+.bm-r--tap:focus-visible { outline: none; stroke: var(--primary); stroke-width: 2.4; }
+
+.bm-legend {
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-400);
+}
+.bm-legend__ramp { flex: 0 1 120px; height: 8px; border-radius: 4px; border: 1px solid var(--line-2); }
+.bm-legend__k { display: inline-flex; align-items: center; gap: 6px; }
+.bm-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.bm-credit { margin: 0; font-size: 10.5px; line-height: 1.5; color: var(--text-400); text-align: center; }
+.phz-map { display: block; }
+.phz-map .bm-fig { max-width: 170px; }
+
+
+/* ---- Exercises directory (fitness/directory.js) ---------------------------
+   One column on a phone; at 960 px the list gets a filter-and-map rail on its
+   left and an exercise page gets its muscles and program on its right, so no
+   width is left as empty background on one side. */
+.dx-layout { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); align-items: start; }
+.dx-side, .dx-main { display: grid; gap: var(--sp-4); min-width: 0; align-content: start; }
+@media (min-width: 960px) {
+  .dx-layout { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
+  .dx-layout--page { grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); }
+  .dx-layout:not(.dx-layout--page) .dx-side { position: sticky; top: var(--sp-4); }
+}
+.dx-controls { display: grid; gap: var(--sp-3); }
+.dx-selects { display: grid; gap: var(--sp-3); grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.dx-check { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--text-200); }
+.dx-note { margin: 0; }
+.dx-mapcard .bm-fig { max-width: 150px; }
+.dx-count-row { margin-bottom: var(--sp-2); }
+.dx-slot { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-md); color: var(--text-100); }
+.dx-slot:first-child { margin-top: 0; }
+.dx-slot__n { font-size: var(--fs-xs); font-weight: 400; color: var(--text-500); margin-left: var(--sp-1); }
+.dx-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.dx-row {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  width: 100%; padding: var(--sp-3); border-radius: var(--r-sm); text-align: left; cursor: pointer;
+  background: var(--ink-700); border: 1px solid transparent; color: var(--text-200); font: inherit;
+  transition: border-color .16s var(--ease);
+}
+.dx-row:hover, .dx-row:focus-visible { border-color: var(--line-2); }
+.dx-row__main { display: grid; gap: 2px; min-width: 0; }
+.dx-row__name { font-weight: 600; color: var(--text-100); }
+.dx-row__sub { font-size: var(--fs-xs); color: var(--text-500); }
+.dx-row__tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.dx-head { display: grid; gap: var(--sp-2); justify-items: start; }
+.dx-tags, .dx-joints { display: flex; flex-wrap: wrap; gap: 4px; }
+.dx-summary { margin: 0 0 var(--sp-3); font-size: var(--fs-md); color: var(--text-100); }
+.dx-block { margin-top: var(--sp-4); }
+.dx-block p { margin: 0 0 var(--sp-2); }
+.dx-h { margin: 0 0 var(--sp-2); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: .06em; color: var(--text-500); }
+.dx-steps { margin: 0; padding-left: 1.25rem; display: grid; gap: var(--sp-2); }
+.dx-two { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.dx-tiers { list-style: none; margin: var(--sp-3) 0 0; padding: 0; display: grid; gap: 4px; font-size: var(--fs-sm); }
+.dx-tier { display: inline-block; min-width: 5.5em; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; color: var(--text-500); }
+.dx-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--primary); text-decoration: underline; cursor: pointer; }
+.dx-actions { gap: var(--sp-2); margin-top: var(--sp-3); }
+.dx-pin { margin-top: var(--sp-3); }
+.dx-msg { margin: 0 0 var(--sp-3); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); font-size: var(--fs-sm); }
+.dx-msg--ok  { background: var(--success-soft); color: var(--success); }
+.dx-msg--bad { background: var(--warn-soft, var(--ink-700)); color: var(--warn); }

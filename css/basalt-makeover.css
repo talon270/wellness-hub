@@ -184,8 +184,12 @@
 }
 .appbar .nav { justify-content: flex-start; gap: 2px; }
 
+/* 8px each side, not 12: nine destinations at 12px need 1153px and the bar has
+   1120 at a 1440px window, so Phase review dropped to a row of its own (R4-5,
+   measured in all 21 palettes). This is the padding that applies: it loads
+   after basalt-gruvbox.css §5, whose padding-inline it overrides. */
 .nav__btn {
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2);
   font-weight: 600;
   border-radius: 8px;
   color: var(--text-400);

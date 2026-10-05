@@ -208,6 +208,36 @@ main session, which overstates short isometric work; and "Full Sweep" and
 "Balanced Build" now span 22 groups, so they are harder (earned badges keep their
 date).
 
+**The Exercises section is the one place a movement is explained.** It lists all
+150 movements, one page each: a written guide (set up, one rep, breathing,
+tempo, where you should and shouldn't feel it, mistakes with their fix, when to
+stop), the muscles in three tiers on a front-and-back drawing, easier and harder
+moves taken from the ladder, and what your own program and log say about it —
+the slot's current prescription, your last three sessions (with the weight, on
+a loaded movement), your best. *How to do
+this* in a workout opens the same page, and Back returns to the workout with
+your draft as you left it. Three actions sit on the page: **Train this in my
+slot** (the same call as Program's picker, so a refused choice says why on the
+page, and like the picker it isn't offered on a slot you left out), **Exclude** and **Include again**, and, for coverage movements, **Pin**.
+Search reads names, muscles, the slot and an alias list: "knuckle" finds the six
+push-ups that take that grip. **The guides never state a rep range, a set count
+or a hold time** — the app's rule is the only source of those, and
+`node tools/check-exercise-content.js` fails on 14 phrasings that would restate
+one. Limits worth knowing:
+- The 150 guides were written from the app's own cues and general knowledge, not
+  by a coach; the planche, handstand, front-lever, L-sit, Copenhagen and neck
+  guides are the ones to read critically.
+- The drawing is simplified: on a phone each muscle shape is 9–30 px, and the
+  side-delt strip is about 3 px wide on the back view. The **Muscle** select
+  beside the map does the same job, so no one needs to hit it.
+- **Where on its path** is a position on the slot's ladder, not a strength
+  rating, and the **joint load** line is scored by judgement at the setup the
+  movement starts at: it filters movements, and can't assess an injury.
+- The figure is the male one from the source drawing; the profile's `sex` field
+  doesn't switch it yet.
+- Offline works from the service worker's cache. `file://` can't register one,
+  so open it over localhost to install it (see "Running it").
+
 **Weekly targets follow your template.** "Above target" compares your week
 against what a week of *your* template delivers to that group: its slots, its
 sessions a week, 3 sets at steady-state reps, worked out when the Muscles view
@@ -734,6 +764,15 @@ js/
 fitness/
   basalt.css                The original calisthenics app's stylesheet
   basalt.js                 The original calisthenics app's logic
+  training.data.js          The catalogue: slots, ladders, setups, grips, joint stress
+  training.js               The step-up / repeat / step-back rules, pure
+  muscles.data.js           Exercise -> muscle map, the 22 groups and their weekly floors
+  muscles.js                The Muscles section
+  coverage.js               Direct sets per group, and which coverage slots a finisher picks
+  bodymap.data.js           GENERATED — the front and back drawing, one region per group
+  bodymap.js                Draws it: tiers for one movement, heat for the week
+  directory.js              The Exercises section
+  content/                  The written guides, in four batch files, and STYLE.md
   ironframe_original.html   Untouched original, kept for reference only
 vendor/
   chart.umd.min.js          Chart.js, vendored locally so the app stays offline
@@ -890,11 +929,11 @@ data feeds the hub's fitness streak directly.
 
 ### How Fitness navigation works
 
-**Eight destinations, one registry, two layouts.** `App.SECTIONS` in
+**Nine destinations, one registry, two layouts.** `App.SECTIONS` in
 `fitness/basalt.js` holds every destination — id, label, group, order, one-line
 description — and both the full bar and the compact picker are generated from it,
-so Muscles (registered by `fitness/muscles.js`) appears in both without either
-being edited. **Ids never change, labels do:** `today` reads *Workout*,
+so Muscles and Exercises (registered by `fitness/muscles.js` and
+`fitness/directory.js`) appear in both without either being edited. **Ids never change, labels do:** `today` reads *Workout*,
 `evaluation` reads *Phase review*, `dashboard` reads *Overview*, `skills` reads
 *Skills & mobility*; the stored section (`ironframe.ui.section`), the workout
 draft (`today.workout`), the Progress subview (`progTab`) and every `data-go`
@@ -905,11 +944,12 @@ moved.
 container query on the app bar (`css/basalt-gruvbox.css` §5) shows the full bar
 at 720px of content or more and the picker below it. That distinction matters:
 the hub's 232px sidebar, the phone layout and 200% zoom each change the room
-independently. Measured on this machine, where the system font
-resolves to a monospace face and so runs wide: the full bar plus *Training setup*
-fits one row at 1440px in the two Ochre palettes and at 1920px in all seven; at
-1440px in the five original palettes, and at 1280px in all of them, *Training
-setup* wraps to a second row instead of scrolling. The picker is what you get at
+independently. Measured on this machine on 2026-10-06, in all 21 palettes, where
+the system font runs wide: the nine destinations fit one row at 1440px and
+1920px and wrap at 1366px and 1280px, and *Training setup* sits on a second row
+at all four widths instead of scrolling. Nine fit at 1440px only because the
+buttons' side padding is 8px (`css/basalt-makeover.css`, which overrides §5's):
+at 12px they needed 1,153px of the bar's 1,120. The picker is what you get at
 360, 390, 412, 768 and 1024. Only one layout is ever
 displayed, so only one is ever in the tab order. Where container queries are
 unsupported the full bar simply stays, as it was.

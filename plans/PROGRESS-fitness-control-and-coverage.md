@@ -1070,3 +1070,579 @@ The record loop in `finalizeSession` (`basalt.js` ~2992) walks every session exe
 **Noted, not touched:** a scratch copy of the whole repo filled `/tmp`, because `src-tauri/` is 12 GB. Copy only `index.html`, `css`, `js`, `fitness` and `vendor` for `HELTH_INDEX` runs.
 
 **Untracked:** the four `*.backup-20261005-222115.*` files, which Part H's `git add` excludes.
+
+## 2026-10-05 · W13 · step 4.1 body-map asset
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1` (Stage 3 committed). Nothing committed. Run on Opus 5.5. The source clone, scratch renderers and screenshots are in this session's scratchpad, not the repo.
+
+**Source.** `react-native-body-highlighter` (MIT, © 2022 ELABBASSI Hicham), pinned at **`8ed39ac2ae9cb46fb79d77eedec7e5b029a75174`** (master, 2026-09-13). Used: `assets/bodyFront.ts`, `assets/bodyBack.ts` and the two outline paths in `components/SvgMaleWrapper.tsx`.
+
+**Files.** Backups are `*.backup-20261005-225213.*` beside `index.html` and `service-worker.js`. The four new files have no backup.
+- `fitness/bodymap.data.js` (new, 65 KB, generated): `window.BODY_MAP = { source, viewBox, front, back, outline }`.
+  - `front` and `back` are `[{ id, group, d }]`: 29 front and 30 back regions, one per group and body side, ids like `f-delts_front-l`.
+  - `viewBox` holds one box per view, in source units, trimmed to the figure plus 8.
+  - `outline` per view is `{ body, parts }`: the silhouette, plus the head, hair, hands, feet, knees and ankles (44 shapes). They're drawn and never tappable.
+- `vendor/LICENSES/react-native-body-highlighter.txt` (new): the MIT text verbatim, under a line naming the repo, the commit and the three files.
+- `tools/build-bodymap.py` (new): rebuilds both outputs from a clone at the pinned commit, and refuses any other commit. It uses Python Playwright (Chromium measures the curves), so it adds no dependency. Two runs give byte-identical output.
+- `tools/check-bodymap.js` (new): case D1.
+- `index.html`: a script tag after `coverage.js`. `service-worker.js`: the file added to `PRECACHE`, `CACHE_VERSION` v62 → v63 (rule 8). Nothing reads `BODY_MAP` yet; W14 does.
+
+**Mapping to the 22 groups.**
+
+| Group(s) | From the source | How |
+|---|---|---|
+| front delts / side delts | front `deltoids` | cut by a line, (240, 300) → (210, 398): the medial piece is front, the lateral strip side |
+| rear delts / side delts | back `deltoids` | cut by a line, (934, 300) → (926, 400): the medial piece is rear, the lateral strip side |
+| traps / upper back | back `trapezius` | cut at y = 340: above is traps (what a shrug trains), below is the middle and lower fibres (upper back) |
+| rotator cuff / upper back / lats | back `upper-back`, three shapes per side | by position, top to bottom: the shape on the shoulder blade (infraspinatus) is rotator cuff, the crescent under it (teres major) is upper back, the big one is lats |
+| abductors / glutes | back `gluteal`, two shapes per side | the upper one (gluteus medius) is abductors |
+| the other 14 | one slug each | `trapezius` front → traps, `tibialis` → shins, `quadriceps` → quads, and so on |
+
+The right side of each figure is cut by the mirror image of the left's line, and every cut leaves a 4-unit gutter like the source's own.
+
+**Harness lines.**
+
+| Check | Before | After |
+|---|---|---|
+| `check-bodymap.js` | first run, before the wiring: **paths FAIL** (2 outline parts "outside the box"), **shipped FAIL** (no script tag, no PRECACHE entry), exit 1 | **all passed**: 59 regions, 22 groups, 105 paths parse inside their box, licence and commit present, shipped |
+| `check-workout.py` | 71 pass (R3 fixes) | **71 pass, 0 fail, 0 error**, exit 0 |
+| `check-training.js` / `check-coverage.js` | 44 PASS / 9 PASS | all passed, 44 PASS / all passed, 9 PASS |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass / 17 passed | 9 pass / 17 passed |
+
+A test-runner subagent ran the full suite. I read the eight output files myself and took the counts from them. The paths FAIL was a harness defect, not bad data. The box bound put a full radius around every arc, and the source draws near-flat arcs with radius 910, which threw the box out to −701. A small arc now counts as bulging at most half its chord. After the suite, a comment-only regeneration landed; the map's JSON is identical to the tested one (compared in Node), and `check-bodymap.js` still passes.
+
+**The check can fail.** Six faults planted in scratch copies (`BODYMAP_JS=`), each exiting 1 on its own line:
+
+| Fault | What failed |
+|---|---|
+| Biceps renamed `bicep` | groups |
+| A duplicate id | ids |
+| A truncated path | paths: "'c' needs 6 values" |
+| An arc flag of 2 | paths |
+| A back shape added to the front view | paths: outside the box |
+| The SHA changed | licence |
+
+**Screens.** There is one scratch screenshot per group, alone, in Selene and Selene Day at 390 px: 44 shots, 0 page errors, 0 horizontal overflow. They used a scratch renderer on the app's palette tokens, not W14's component. Every group lights up where it should in both themes. Measured at 390 px, each figure is 175 × 344 px.
+
+**Regions that look wrong, or will be hard to use.**
+
+| Region | Problem |
+|---|---|
+| Side delts | A strip on both views: bounding box 11 × 23 px at 390 px, and the back strip is about 3 px wide. You can see it, but you can't tap it |
+| **Every group** | Under 24 px in at least one dimension at 390 px. The smallest are shins 10 × 62, traps 21 × 11 and biceps 11 × 24; the largest is upper back 34 × 36. W14's tap-to-list needs a fallback: a group list, or hit areas larger than the shapes |
+| Lower back | Includes two small shapes above the hips that sit where quadratus lumborum and the posterior obliques are. This is the source's call, kept |
+| Upper back | The lower trapezius plus teres major. The rhomboids sit under the trapezius and aren't drawn |
+| Rotator cuff | Infraspinatus only. Supraspinatus and subscapularis can't be seen from behind |
+| Abductors | Back view only (gluteus medius). The source draws no TFL on the front |
+| Front-view triceps | The inner-arm strip next to the biceps. This is the source's call |
+
+**Deviations from the plan, and why.**
+1. **Rotator cuff reuses the source's shape on the shoulder blade** instead of a newly drawn region. The source's `upper-back` already holds that shape separately, so reusing it involves no new drawing and no overlap.
+2. **Upper back isn't cut from the source's `upper-back`.** It's the teres crescent plus the lower part of the trapezius. Plan E1 said "upper-back → lats and upper back", but that slug's big shape is the whole lat, and the area between the shoulder blades is drawn as trapezius.
+3. **The source has no abductor region.** Plan E1's table assumed one (`react-body-highlighter` has one; this repo doesn't). The upper gluteal shape is used instead.
+4. **The male figure only.** The same commit has a female figure (`bodyFemaleFront.ts`, `bodyFemaleBack.ts`), and BASALT's profile has a `sex` field (`basalt.js:119`). Under the identity-picks-defaults rule, the figure should follow that field. The plan's data shape holds one figure, and adding the second means re-doing the cuts on its geometry. That's a decision for you, and it would go in W14 or later.
+5. **A generator is checked in** (`tools/build-bodymap.py`). The plan only asked for the data. Without the script, the cuts would be hand edits to 65 KB of path data that nobody could redo or move.
+6. **Cut pieces are polygons, not curves.** They're sampled every 1.5 units and simplified to within 0.35 units, which is well under a pixel at any size the app draws.
+7. **The licence file isn't in `PRECACHE`.** The page never loads it. W14's credit line can link to it.
+
+**For W14.** `BODY_MAP.viewBox[view]` is per view (the back view's x runs from about 761). Draw `outline[view].body` and `.parts` as non-interactive shapes, then the regions. Several ids share a group, so colour by `group`. The credit line and the licence link are W14's. Tap targets are the open problem (above).
+
+**Not run:** the Android and desktop shells; themes other than Selene and Selene Day; the map inside the app (no screen renders it yet).
+
+**Untracked:** the two `*.backup-20261005-225213.*` files, which Part H's `git add` excludes. The four new files are untracked and *are* included.
+
+## 2026-10-05 · W14 · step 4.2 body-map component and its two placements
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1`, on W13's uncommitted tree. Nothing committed. Run on Sonnet 5.5. Scratch scripts and screenshots are in this session's scratchpad.
+
+**Files.** Backups are `*.backup-20261005-231037.*` beside each file (`css/muscles.backup-20261005-231336.css` for the stylesheet).
+- `fitness/bodymap.js` (new, ~170 lines): `App.bodymap.render(host, spec, opts)` per plan E1.
+  - `{ mode: "tiers", profile }` or `{ mode: "heat", values }`, with `opts.onTap(group)`.
+  - Front and back SVGs, a legend, and a credit line naming the repo, the licence and the cuts.
+  - A tappable map adds a transparent 14 px hit pad under every region, so a region always wins the area it fills.
+- `fitness/phases.js`: exports `opacityFor` and `tier` on `App.phases` (one definition of what "secondary" looks like). `renderStatic` draws the map in tiers above its bars.
+- `fitness/muscles.js`: a *Last 7 days* card between the tiles and the table, the heat map beside a *Furthest below the floor* list (six buttons that open the same detail modal).
+- `fitness/basalt.css` (`.bm-*`, `.phz-map`), `css/muscles.css` (`.ms-map`, `.ms-gap*`).
+- `index.html` (script tag after `phases.js`), `service-worker.js` (`PRECACHE` entry, `CACHE_VERSION` v63 → v64).
+- `tools/check-workout.py`: B1, B2, B3 and a header block.
+
+**Harness lines, before → after.** The cases were written first and run against a scratch copy of the pre-change tree (backups restored, no `bodymap.js`).
+
+| Case | Before | After |
+|---|---|---|
+| B1 guide modal, Wall Push-up (no phases) | FAIL: 0 figures, 0 lit groups. The phased movement (Pike Push-up) has 5 tabs either way | PASS: 2 figures; lit abs, chest, front delts, triceps = the profile exactly, each labelled with its tier; 4 text rows kept; the phased movement keeps its tabs and gets no map |
+| B2 Muscles, 3 sessions of rows | FAIL: no body map | PASS: lit lats ("9 of 3 direct sets, 7 d") and upper back; biceps unlit ("0 of 6"); a click on lats and Enter on biceps open their detail modals; one tab stop per group and view |
+| B3 390 and 1920 px × Selene, Selene Day | FAIL: no body map, all four runs | PASS: 0 overflow in all four, figures 153 × 301 at 390 and 230 × 452 at 1920, map left and list right at 1920 |
+
+| Check | Result |
+|---|---|
+| `check-workout.py` (full, read from the output file) | **74 pass, 0 fail, 0 error**, exit 0 (71 + B1–B3) |
+| `check-training.js` / `check-coverage.js` | all passed / all passed |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass / 17 passed |
+| `check-bodymap.js` | all passed (the script tag and `PRECACHE` entry are found) |
+
+A test-runner subagent ran the suite and reported "8 of 8 passed" before its Playwright run had finished; its output file held 3 cases at that point. I took the counts from the finished files, not from that report. After the run I narrowed one grid column (below) and re-ran B1–B3, which pass.
+
+**A defect found by the first B2 run, fixed before the numbers above.** A heat value of 0 was drawn as a faint grey-fill region labelled lit, so all 22 groups counted as lit. A zero now has its label ("Biceps — 0 of 6 direct sets, 7 d") and the unlit style.
+
+**By eye.** Muscles at 390, 1440 and 1920 px and the guide modal at 390, in Selene and Selene Day: 0 page errors, 0 horizontal overflow. The first Muscles layout was a 1,300 px card with a 480 px map in its middle, so the list beside the map was added (layout rule in `memory.md`). The guide modal's host is 268 px wide at 390, so the two figures stacked at 150 px minimum; the minimum is now 120 px and they sit side by side at 128 px.
+
+**Hit pads, measured at 390 px** (scratch probe, bounding-box sampling, not a harness case). A point 4 px outside the edge still resolves to the same group's pad for 19 of 22 groups; lats, obliques and part of triceps read lower because the sampled point lands on a neighbour or a gap. Pad hits are not tested by clicking.
+
+**Deviations from the plan, and choices it left open.**
+1. **The guide modal keeps its tier bars under the map.** Plan E1 says the map replaces the static fallback. The bars stay as the text list: colour alone can't say "secondary", and the 9–30 px shapes can't be read at 390 px.
+2. **No group chip list inside `bodymap.js`.** W13 asked for a fallback for the small shapes. On Muscles the table and the new gaps list are the fallback. **W20 (the directory) must supply its own**, such as the muscle filter, because the map there is also tappable.
+3. **The heat map's value is direct sets ÷ weekly floor, capped at 1**, not the template-relative work. The template column is circular (F7), and this is the number *Neglected* uses. It ignores the 7/30-day selector, and the card says so.
+4. **Non-interactive regions aren't focusable.** Plan E1 says every region can be focused. Only tappable maps are: one tab stop per group and view (left and right are the same group). Every region carries an `aria-label`; unlit ones in a non-tappable map are `aria-hidden`.
+5. **The credit line is text, with no link to the licence file.** A link to a `.txt` in the Android WebView has no back path. The file stays out of `PRECACHE`.
+6. **API additions:** `spec.label(group, value)` and `spec.legend` on heat mode, for the aria text and the end labels. The plan's shape is unchanged.
+7. **The male figure only**, as in W13 (its deviation 4 is still your decision).
+
+**Left for W15 and later.**
+- `App.bodymap.render` is ready for the directory's exercise page (tiers) and `onTap` (muscle filter).
+- Not run: the Android and desktop shells; themes other than Selene and Selene Day; the offline install of the new file (D7 belongs to 4.8).
+
+**Untracked:** the new `*.backup-20261005-231037.*` and `css/muscles.backup-20261005-231336.css` files, which Part H's `git add` excludes. `fitness/bodymap.js` is new and *is* included.
+
+## 2026-10-06 · W15 · step 4.3 guide schema, style guide, checker and 12 exemplars
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1`, on W14's uncommitted tree. Nothing committed. Run on Opus 5.5. Scratch scripts (`plant.py`, `w15_page.py`) and suite output are in this session's scratchpad.
+
+**Files.** Backups are `*.backup-20261006-003650.*` beside `index.html` and `service-worker.js`. The new files have no backup.
+- `fitness/content/STYLE.md` (new): the schema table, the ten style rules, the batch-file shape and the batch → slot map. Each rule says whether the checker enforces it.
+- `fitness/content/batch-a.js` (new, 4 guides): Push-up and Incline Push-up, each with a knuckles section; Pike Push-up; Parallel Bar Dip.
+- `fitness/content/batch-b.js` (new, 8 guides): Pull-up, Table / Door-Edge Row, Bodyweight Squat, Bulgarian Split Squat, Hip Thrust, Nordic Curl Negative, Plank, Dumbbell Romanian Deadlift.
+- `fitness/content/batch-c1.js`, `batch-c2.js` (new, empty, `"pending"`).
+- `tools/check-exercise-content.js` (new): case D2.
+- `index.html`: four script tags after `bodymap.data.js`. `service-worker.js`: four `PRECACHE` entries, `CACHE_VERSION` v64 → v65.
+
+**The schema, as built.** `window.EXERCISE_CONTENT[id] = { summary, setup[], steps[], breathing, tempo, feel: { should, shouldnt }, mistakes: [{ mistake, fix }], safety[], variations?: { grip?: { knuckles: [] }, alternatives?: [{ id, text }] } }`. Bounds are in `STYLE.md` and the checker. Each batch file marks itself with `window.EXERCISE_CONTENT_BATCHES.<batch> = "pending" | "complete"`.
+
+**Harness lines, before → after.** The checker was written first and run before any content existed.
+
+| Check | Before | After (final tree) |
+|---|---|---|
+| `check-exercise-content.js` | **files FAIL** (4 batch files missing), **shipped FAIL** (no script tags, no `PRECACHE`), exit 1 | **all passed**: 12 of 150 (a 4/39, b 8/47, c1 0/29, c2 0/35, all pending); 235 strings, 14 banned patterns, 0 hits; 2 grip sections; 4 alternatives resolve; shipped |
+| `check-workout.py` | 74 pass (W14) | **74 pass, 0 fail, 0 error** (read from the file's last line) |
+| `check-training.js` / `check-coverage.js` / `check-bodymap.js` | all passed ×3 | all passed ×3 |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass / 17 passed | 9 pass, 0 fail / 17 passed, 0 failed |
+
+A test-runner subagent ran the suite and reported back while `check-workout.py` was still at case 65, so I waited for the file's summary line myself. Three wording edits to `batch-a.js` and `batch-b.js` landed during that run (below). Afterwards I re-ran `check-exercise-content.js` and the page probe on the final tree: all passed, and 0 page errors.
+
+**In the page** (scratch `w15_page.py`, not a harness case; `evaluate` reads globals only). At 390 and 1920 px: `EXERCISE_CONTENT` holds the 12 ids, all four batches read `"pending"`, Push-up has its grip section, `scrollWidth` equals the viewport, and there were **0 page errors**. Nothing renders the guides yet; W20 does.
+
+**The checker can fail.** I planted 13 faults in scratch copies (`CONTENT_DIR=`), one at a time. Each exits 1 on the check that owns it:
+
+| Fault | Fails |
+|---|---|
+| "12 reps" in a step · "prevents injury" · "12 inches" · "Advance once" · "3 s" in tempo | phrases (each named) |
+| A grip section on Parallel Bar Dip · Incline's knuckles section renamed · an unknown alternative id | variations |
+| A push guide written in batch-b | placement (and variations: it lacks knuckles) |
+| `tempo` misspelled | fields: unknown field, `tempo` missing |
+| A sentence without a full stop | fields |
+| Batch A marked complete at 4 of 39 | coverage, naming the 35 missing |
+| A neck guide without dizziness or tingling | safety |
+
+**Deviations, and choices the plan left open.**
+1. **The style guide is a file, `fitness/content/STYLE.md`,** not precached and not loaded. Plan E2 lists only the four batch files, but W16–W19 need the rules written down somewhere they will read.
+2. **Coverage is per batch, with a pending or complete flag in each batch file.** The plan's D2 (every id covered) is the end state, so it can't pass at 4.3. W8 solved the same problem with a `PENDING` list inside the check, but here that list would be one shared file edited by four windows. Instead each batch flips its own flag, so W16–W19 still each write **only their own file**. A pending batch with every guide written fails, so a window can't forget the flag. **D2 is met when all four read `"complete"`.**
+3. **The checker owns the batch → slot map** (plan E2's counts: 39 / 47 / 29 / 35, measured as 150 in total). Skill-kind entries count in their slot's batch: 5 in push, 4 in row, 4 in shoulder, 4 in core.
+4. **Prescriptions are banned by pattern:** digits or number words with reps, sets or seconds, any digit time, "sets of", and "advance / progress / step up at·when·once". Tempo is therefore written in words ("about two seconds down"). That catches restated rules but would also block a harmless "2 s pause". I chose to block, to keep one source for every number.
+5. **`variations.grip` is required on every grip-capable id,** not just allowed. C1 says each capable exercise gets a knuckles section. `alternatives` is for sideways swaps only, so the ladder's easier and harder moves aren't duplicated. I used it on 4 exemplars: Push-up → Wide, Table Row → Towel Door Row, Bodyweight Squat → Narrow-Stance, Dumbbell RDL → Single-Leg RDL with Dumbbell.
+6. **The neck safety rule is checked** (slow, dizziness, tingling), from plan D2's neck copy. No neck guide exists yet; a planted one proves the check fails.
+7. **Three lines changed after the first pass**, on a re-read against the cues:
+   - The knuckles note claimed why the app ranks knuckles harder; it now states only the geometry.
+   - Pike Push-up's lockout said "shoulders toward your ears", which contradicted "keep the neck long"; it now says "back over your hands", as the cue does.
+   - Plank had an advice line in `safety`; it is now a stop sign.
+
+**For W16–W19.** Read `STYLE.md`, then the exemplars in your batch file, which are the bar. Write only your own `batch-*.js`, set it to `"complete"` in the edit that writes your last guide, and run `node tools/check-exercise-content.js`. The checker can't read for originality or for consistency with `EXERCISE_DB` cues, so say in your entry where a cue looked wrong instead of contradicting it. W18 writes the three neck guides with the safety copy.
+
+**Not run:** the Android and desktop shells; themes (no screen changed); D7 offline (step 4.8).
+
+**Untracked:** the two `*.backup-20261006-003650.*` files, which Part H's `git add` excludes. `fitness/content/` and `tools/check-exercise-content.js` are new and *are* included.
+
+## 2026-10-06 · W16 · step 4.4 guide batch A (push, shoulder, dip)
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1`, on W15's uncommitted tree. Nothing committed. Run on Sonnet 5.5. Scratch scripts (`dump2.js`, `p1.js`–`p3.js`, `w16_page.py`) and the `check-workout.py` output are in this session's scratchpad.
+
+**Files.** Backups are `fitness/content/batch-a.backup-20261006-012606.js` and `service-worker.backup-20261006-012927.js`.
+- `fitness/content/batch-a.js` (+35 guides, 4 → 39): by slot, push 18 (13 exercises plus 5 planche skills), shoulder 10 (6 plus 4 handstand skills), dip 7 (5 plus 2 chair variants). Flag flipped `"pending"` → `"complete"` in the same edit. The four W15 exemplars are untouched.
+- `service-worker.js`: `CACHE_VERSION` v65 → v66, since a precached file changed.
+- No other file edited. `batch-b.js`, `batch-c1.js`, `batch-c2.js`, `STYLE.md` and the checker are as W15 left them.
+
+**Harness lines, before → after.**
+
+| Check | Before (W15's tree) | After |
+|---|---|---|
+| `check-exercise-content.js` coverage | 12 of 150, `a 4/39 pending` | **47 of 150, `a 39/39 complete`** (b 8/47, c1 0/29, c2 0/35 still pending) |
+| same, fields / phrases | 235 strings, 0 hits | **870 strings, 14 banned patterns, 0 hits** |
+| same, variations | 2 grip sections, 4 alternatives | **6 grip sections** (push_2, push_incline, push_1, push_4, push_alt_wide, push_alt_negative), 4 alternatives, all resolve |
+| same, overall | all passed | **all passed** (first run, no fix loop) |
+| `check-workout.py` | 74 pass | **74 pass, 0 fail, 0 error**, read from the file's last line |
+| `check-training.js` / `check-coverage.js` / `check-bodymap.js` | all passed ×3 | all passed ×3 |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass / 17 passed | 9 pass, 0 fail / 17 passed, 0 failed |
+
+I ran every Node check and `check-workout.py` myself, because the test-runner subagent went 20 minutes with no process alive and I stopped waiting; its later report agreed (all clean, 74 pass).
+
+**In the page** (scratch `w16_page.py`, not a harness case). At 390 and 1920 px: `EXERCISE_CONTENT` holds 47 ids, batch states are `a: complete, b/c1/c2: pending`, `scrollWidth` equals the viewport, **0 page errors**. Nothing renders the guides yet; W20 does.
+
+**Review pass after the first green run.** The checker can't read for sense, so I re-read the 35 against their `EXERCISE_DB` cues and fixed nine lines (two unclear mistake fixes, a dip depth line that made no sense, Planche Lean's hand position, which contradicted the cue, a "your coach" line in Wall Handstand Hold, a Scapular Push-up safety line that suggested knuckles on an exercise that takes no grip, a protective-sounding phrase in Chest-to-Wall Handstand, and splitting Dumbbell Press's two-idea mistake per rule 10). Checker re-run after: all passed.
+
+**Deviations and choices.**
+1. **Push-up knuckles on the wall version.** Wall Push-up is grip-capable, so the checker demands a knuckles section. Pressing bare knuckles into a wall makes little sense, so it says to hang a folded towel on the wall first and stand slightly further back. Say if you'd rather drop `push_1` from `GRIPS.exercises`; that's a data change outside this step.
+2. **Skill-kind holds use steps as enter, hold, exit** rather than one rep. Hold times are left to the app, as the style guide requires.
+3. **Tempo words stay inside the checker's patterns.** "Four to five seconds" appears once (Negative Push-up) because its cue says the same; "about two seconds" elsewhere. Neither is a digit.
+
+**Cues that look wrong or loose (not contradicted in the guides).**
+- `push_e2_weighted` cue says "Press explosively", while the exercise is a loaded slow-strength lift. The guide says "press up with intent" and "without jerking".
+- `shoulder_3` cue says "chest facing the wall (or back to it)" without saying which suits a beginner; the guide leans toward chest-to-wall.
+- `push_alt_scapula` injury note ("protects the joint") is a protective claim the style guide would reject; the guide doesn't repeat it.
+- `shoulder_2` cue says "Press up powerfully", a banned hype word in guides; the guide avoids it.
+
+**Not confirmed.** Originality of wording (no source was open while writing, but nobody has compared it against any). Anatomical and coaching accuracy of the six planche and four handstand guides, which I wrote from the cues and general knowledge, not from a coach; a reviewer should read those first.
+
+**Not run:** the Android and desktop shells; themes (no screen changed); D7 offline (step 4.8).
+
+**Untracked:** `batch-a.backup-20261006-012606.js` and `service-worker.backup-20261006-012927.js`, which Part H's `git add` excludes.
+
+**For W17–W19.** Same recipe: write only your own `batch-*.js`, flip your flag in the edit that writes your last guide, run the checker. `STYLE.md` and the exemplars hold; I found nothing to change in them.
+
+## 2026-10-06 · W17 · step 4.5 guide batch B (row, pull, squat, hinge, core)
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1`, on W16's uncommitted tree. Nothing committed. Run on Sonnet 5.5. Scratch scripts (`dumpb.js`, `w17_page.py`), the draft parts and the suite output are in this session's scratchpad.
+
+**Files.** Backups are `fitness/content/batch-b.backup-20261006-021152.js` and `service-worker.backup-20261006-021332.js`.
+- `fitness/content/batch-b.js` (+39 guides, 8 → 47): row 8 (4 exercises plus 4 front-lever skills), pull 7, squat 10, hinge 5, core 9 (5 plus 4 L-sit and V-sit skills). Flag flipped `"pending"` → `"complete"` in the same edit. The eight W15 exemplars are untouched.
+- `service-worker.js`: `CACHE_VERSION` v66 → v67, since a precached file changed.
+- No other file edited. `batch-a.js`, `batch-c1.js`, `batch-c2.js`, `STYLE.md` and the checker are as W16 left them.
+
+**Harness lines, before → after.**
+
+| Check | Before (W16's tree, run first) | After |
+|---|---|---|
+| `check-exercise-content.js` coverage | 47 of 150, `b 8/47 pending` | **86 of 150, `b 47/47 complete`** (c1 0/29, c2 0/35 still pending) |
+| same, fields / phrases | 870 strings, 0 hits | **1574 strings, 14 banned patterns, 0 hits** |
+| same, variations | 6 grip sections, 4 alternatives | 6 grip sections (none new: no batch-B exercise takes a grip), **11 alternatives**, all resolve |
+| same, overall | all passed | **all passed** (first run, no fix loop) |
+| `check-workout.py` | 74 pass | **74 pass, 0 fail, 0 error**, read from the file's last line (a test-runner subagent ran it, 16 min) |
+| `check-training.js` / `check-coverage.js` / `check-bodymap.js` | all passed ×3 | all passed ×3 |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass / 17 passed | 9 pass, 0 fail / 17 passed, 0 failed |
+
+**In the page** (scratch `w17_page.py`, not a harness case). At 390 and 1920 px: `EXERCISE_CONTENT` holds 86 ids, batch states are `a, b: complete; c1, c2: pending`, `scrollWidth` equals the viewport, **0 page errors**. Nothing renders the guides yet; W20 does.
+
+**The completeness check can fail.** Three planted faults in a scratch copy: a guide id renamed (placement FAIL: not an exercise; coverage FAIL: "marked complete but lacks core_6"), and "30 seconds" in a breathing line (phrases FAIL). The repo copy exits 0.
+
+**Review pass after the first green run.** The checker can't read for sense, so I re-read the 39 against their `EXERCISE_DB` cues and changed two lines: Passive Hang said to hold "until your grip starts to tire", which competes with the app's hold rule, so it now says to hold until the end of the hold; and L-Sit's third setup line duplicated step 1, so it now says to warm up wrists and hip flexors. Checker re-run after: all passed.
+
+**Deviations and choices.**
+1. **Skill-kind holds use steps as enter, hold, exit**, as W16 did. Hold times are left to the app.
+2. **Tuck L-Sit (`core_3`) and L-Sit (`core_4`) duplicate `skill_lsit_2` and `skill_lsit_3` in movement.** The DB lists them as separate ids, so each has its own guide, worded differently but teaching the same position.
+3. **Alternatives added on 7 guides** (towel row, Australian row, bent-over row, one-arm row, dead hang, narrow squat, kettlebell swing), all sideways swaps.
+
+**Cues that look wrong or loose (not contradicted in the guides).**
+- `core_2` (Hollow Body Hold) says to "lower the arms/legs to make it easier, raise them to make it harder". That looks backwards: a lower leg angle lengthens the lever and is harder. The guide says to bend the knees or raise the legs slightly if your lower back lifts.
+- `pull_alt_towel` says "feet either side of the door", which doesn't fit a closed, latched door. The guide uses the safer reading: a door that opens away from you, so the pull presses it into its frame. Worth a look on a real door.
+- `core_5` says "grip behind your head for an anchor" without naming what you grip. The guide says the bench behind your head.
+- `squat_2` and `pull_3` cues state hold and lowering times in digits, which the guides can't repeat; they say "about two seconds" or "as slowly as you can control".
+- `hinge_e2_swing` cue says "explosively", `pull_2`, `squat_2` and `pull_alt_passivehang` injury lines make protective claims ("protects", "decompress"); the guides repeat neither.
+
+**Not confirmed.** Originality of wording (no source was open while writing, but nobody has compared it against any). Coaching accuracy of the four front-lever, four L-sit and V-sit guides, written from the cues and general knowledge, not from a coach; a reviewer should read those first, along with Dragon Flag and the Nordic variants.
+
+**Not run:** the Android and desktop shells; themes (no screen changed); D7 offline (step 4.8).
+
+**Untracked:** `batch-b.backup-20261006-021152.js` and `service-worker.backup-20261006-021332.js`, which Part H's `git add` excludes.
+
+**For W18, W19.** Same recipe: write only your own `batch-*.js`, flip your flag in the edit that writes your last guide, run the checker. W18 writes the three neck guides with the safety copy.
+
+## 2026-10-06 · W18 · step 4.6 guide batch C1 (curl, lateral, reardelt, cuff, traps, neck, grip)
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1`, on W17's uncommitted tree. Nothing committed. Run on Sonnet 5.5. Scratch scripts (`w18_page.py`, the planted-fault runs) and the suite output are in this session's scratchpad.
+
+**Files.** Backups are `fitness/content/batch-c1.backup-20261006-023538.js` and `service-worker.backup-20261006-023538.js`.
+- `fitness/content/batch-c1.js` (0 → 29 guides): curl 5, lateral 4, reardelt 5, cuff 4, traps 3, neck 3, grip 5. Flag flipped `"pending"` → `"complete"` in the same edit.
+- `service-worker.js`: `CACHE_VERSION` v67 → v68, since a precached file changed.
+- No other file edited. `batch-a.js`, `batch-b.js`, `batch-c2.js`, `STYLE.md` and the checker are as W17 left them.
+
+**Harness lines, before → after.**
+
+| Check | Before (W17's tree, run first) | After |
+|---|---|---|
+| `check-exercise-content.js` coverage | 86 of 150, `c1 0/29 pending` | **115 of 150, `c1 29/29 complete`** (c2 0/35 still pending) |
+| same, fields / phrases | 1574 strings, 0 hits | **2085 strings, 14 banned patterns, 0 hits** |
+| same, variations | 6 grip sections, 11 alternatives | 6 grip sections (none new: no batch-C1 exercise takes a grip), **31 alternatives**, all resolve |
+| same, safety | neck check had nothing to read | the three neck guides say slow, and stop at dizziness or tingling |
+| same, overall | all passed | **all passed** (one fix loop: a 13-character step in Prone W Raise, lengthened) |
+| `check-workout.py` | 74 pass | **74 pass, 0 fail, 0 error**, exit 0 (read from the output file's last line) |
+| `check-training.js` / `check-coverage.js` / `check-bodymap.js` | all passed ×3 | all passed ×3 (44 PASS / 9 PASS counted from the files) |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass / 17 passed | 9 pass, 0 fail / 17 passed, 0 failed |
+
+A test-runner subagent ran the suite; I read the output files myself.
+
+**In the page** (scratch `w18_page.py`, not a harness case). At 390 and 1920 px: `EXERCISE_CONTENT` holds 115 ids, batch states are `a, b, c1: complete; c2: pending`, `scrollWidth` equals the viewport, **0 page errors**. Nothing renders the guides yet; W20 does.
+
+**The checks can fail on this batch.** Six faults planted in a scratch copy of `fitness/content/` (`CONTENT_DIR=`), one at a time, each exiting 1 on its own check: "12 reps" in a step (phrases), "heals" in a safety line (phrases), the neck guide's stop-at-dizziness line cut (safety), an unknown alternative id (variations), the flag left `"pending"` with all 29 written (coverage), and a guide id renamed (placement and coverage). The repo copy exits 0.
+
+**Review pass.** The checker can't read for sense, so I re-read all 29 against their `EXERCISE_DB` cues. I changed nothing after the first green run beyond the length fix above. Two lines go slightly beyond the cues and are mine: Isometric Lateral Raise says "elbow nearly straight", and Lean-Away Lateral Raise's *shouldn't feel* names the lower back on the leaning side. Both are signs, not claims.
+
+**Deviations and choices.**
+1. **Alternatives on 17 guides**, all sideways swaps (same job, different equipment or angle): band ↔ dumbbell curl and lateral, Hammer ↔ Dumbbell Curl, Face Pull ↔ Pull-Apart, T-Raise ↔ Reverse Fly, band ↔ side-lying external rotation, band ↔ weighted shrug, and the three grip holds to each other.
+2. **Neck guides each carry the same stop line** ("slow, never jerk, stop at dizziness, pain or tingling in your neck, arms or hands"). Chin Tuck Hold and Four-Way Neck Isometric also tell you to get advice with a neck condition or recent injury or to keep the effort moderate; the first is advice, not a claim.
+3. **Per-side holds and one-arm moves say "swap sides once you finish the set"** and avoid any count, as W15's rules require. The app, not the guide, decides whether one set means both sides (W10 decided yes).
+4. **Tempo is in words**: "about two seconds" appears where a cue says it; holds read "no movement".
+
+**Cues that look wrong or loose (not contradicted in the guides).**
+- `acc_curl_invrow`'s injury line says to switch to a palms-down grip if the elbow aches. That makes it an ordinary row, not a curl, so it stops training the slot's muscle. The guide repeats the advice, because it is the safe reading.
+- `acc_traps_pike`'s injury line says "rest on your fists", but Pike Shrug isn't grip-capable in `GRIPS`. The guide says to end the set instead.
+- `acc_cuff_walllift` and `acc_cuff_pronew` both hold "a beat" at the top with no time. Fine for a guide; noting it because the app gives these reps, not holds.
+- `acc_neck_fourway` says "Each direction counts for the seconds you hold it", which is a prescription detail. The guide says nothing about times.
+- `acc_lateral_leanaway`'s cue doesn't say which arm holds the support, so the guide says "swap sides" without naming it.
+- `acc_cuff_sidelying`'s readiness line (2.5 kg is a big jump) is the app's, not the guide's; the guide only says "lighter than you think you need".
+- `acc_reardelt_bandpull` and `acc_reardelt_facepull` have no injury line that mentions the anchor beyond the face pull's; the guide's anchor line is mine.
+
+**Not confirmed.** Originality of wording (no source was open while writing, but nobody has compared it against any). Coaching accuracy of the neck, cuff and wall-slide guides, written from the cues and general knowledge and not from a coach; a reviewer should read the three neck guides first.
+
+**Not run:** the Android and desktop shells; themes (no screen changed); D7 offline (step 4.8).
+
+**For W19.** Same recipe: write only `batch-c2.js` (35 guides: quad, hamstring, calf, shin, adductor, abductor, antirot, backext), flip its flag in the edit that writes the last one, and run the checker. After W19, D2 is met when all four read `"complete"`.
+
+**Untracked:** `batch-c1.backup-20261006-023538.js` and `service-worker.backup-20261006-023538.js`, which Part H's `git add` excludes.
+
+## 2026-10-06 · W19 · step 4.7 guide batch C2 (quad, hamstring, calf, shin, adductor, abductor, antirot, backext)
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1`, on W18's uncommitted tree. Nothing committed. Run on Sonnet 5.5. Scratch scripts (`w19_page.py`, the planted-fault copies) and the suite output are in this session's scratchpad.
+
+**Files.** Backups are `fitness/content/batch-c2.backup-20261006-025838.js` and `service-worker.backup-20261006-025838.js`.
+- `fitness/content/batch-c2.js` (0 → 35 guides): quad 6, hamstring 5, calf 4, shin 2, adductor 4, abductor 4, antirot 6, backext 4. Flag flipped `"pending"` → `"complete"` in the same edit.
+- `service-worker.js`: `CACHE_VERSION` v68 → v69, since a precached file changed.
+- No other file edited. `batch-a.js`, `batch-b.js`, `batch-c1.js`, `STYLE.md` and the checker are as W18 left them.
+
+**Harness lines, before → after.**
+
+| Check | Before (W18's tree) | After |
+|---|---|---|
+| `check-exercise-content.js` coverage | 115 of 150, `c2 0/35 pending` | **150 of 150, all four batches complete** (a 39/39, b 47/47, c1 29/29, c2 35/35) |
+| same, fields / phrases | 2085 strings, 0 hits | **2729 strings, 14 banned patterns, 0 hits** |
+| same, variations | 6 grip sections, 31 alternatives | 6 grip sections (none new: no C2 exercise takes a grip), **38 alternatives**, all resolve |
+| same, overall | all passed | **all passed** (first run, no fix loop). **D2 is met** |
+| `check-workout.py` | 74 pass | **74 pass, 0 fail, 0 error**, exit 0 (read from the output file's last line) |
+| `check-training.js` / `check-coverage.js` / `check-bodymap.js` | all passed ×3 | all passed ×3 (44 PASS counted from the training file) |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass / 17 passed | 9 pass, 0 fail / 17 passed, 0 failed |
+
+A test-runner subagent ran the suite. I read the output files myself and the counts above come from them.
+
+**In the page** (scratch `w19_page.py`, not a harness case). At 390 and 1920 px: `EXERCISE_CONTENT` holds **150** ids, 35 of them in this batch, all four batch states read `complete`, `scrollWidth` equals the viewport, **0 page errors**. Nothing renders the guides yet; W20 does.
+
+**The checks can fail on this batch.** Four faults planted in a scratch copy of `fitness/content/` (`CONTENT_DIR=`), one at a time, each exiting 1 on its own check: a guide id renamed (placement and coverage), "30 seconds" in a step (phrases), the flag left `"pending"` with all 35 written (coverage), and "prevents injury" in a mistake fix (phrases). The repo copy exits 0. My first attempt at this ran against an empty scratch directory and was void; the numbers above are from the rerun.
+
+**Review pass.** The checker can't read for sense, so I re-read all 35 against their `EXERCISE_DB` cues. One line changed after the first green run: Bent-Knee Calf Raise's *should feel* now reads "a little deeper than you feel it with straight knees".
+
+**Deviations and choices.**
+1. **Alternatives on 7 guides**, all sideways swaps by equipment: Sliding Leg Curl ↔ Band Leg Curl, Side-Lying Adduction ↔ Band Adduction, Side-Lying Abduction ↔ Banded Clamshell, Calf Raise → Bent-Knee Calf Raise.
+2. **Per-side moves say "do the set on one side, then switch"** and never give a count, so the app, not the guide, decides what one set means (W10: one set covers both sides).
+3. **Holds use steps as enter, hold, exit**, as W16–W18 did. Hold times are left to the app.
+4. **Spanish Squat's setup says to face the post.** The cue doesn't say which way you face; the band runs from the post to the backs of your knees, so facing it is the only arrangement where the band pulls your knees forward.
+
+**Cues that look wrong or loose (not contradicted in the guides).**
+- `acc_calf_bentknee`'s injury line says the bent knee "moves more of the work into the lower calf". The muscle that takes over is the soleus, which sits under the main calf muscle, not strictly lower. The guide repeats "lower calf".
+- `acc_antirot_deadbug`'s cue says "One rep is one arm and leg on each side", and the batch-C1 per-side moves count one side. The guide says to alternate sides and gives no count.
+- `acc_abductor_bandwalk`'s cue says "Count each step as a rep" while its slot's other moves count per side. The guide doesn't count.
+- `acc_adductor_copknee` and `acc_adductor_copfoot` both say the lower leg "hangs free beneath you". In a Copenhagen plank it's usually the lower leg that is lifted toward the top one. The guides follow the cue and say only that it hangs free.
+- `acc_hamstring_slidecurl`'s cue says "about three seconds out and two back". The guide writes it in words as the style guide requires.
+- `acc_shin_single`'s readiness line ("it is the last step in this slot") and `acc_calf_weighted`'s "list the weights you own in Settings" are the app's rules, not the guide's.
+- `acc_quad_sissy`'s injury line says the position "loads the front of the knee and the ankles hard". The guide says this in its safety list, as a reason to start with a short range, not as a claim about injury.
+
+**Not confirmed.** Originality of wording (no source was open while writing, but nobody has compared it against any). Coaching accuracy of the Copenhagen planks, Sissy Squat and the two single-leg hinges, written from the cues and general knowledge and not from a coach; a reviewer should read those first.
+
+**Not run:** the Android and desktop shells; themes (no screen changed); D7 offline (step 4.8).
+
+**For W20.** All 150 guides exist and all four batches read `complete`. The directory can render every exercise's guide, and `check-exercise-content.js` already asserts the four script tags and `PRECACHE` entries.
+
+**Untracked:** `batch-c2.backup-20261006-025838.js` and `service-worker.backup-20261006-025838.js`, which Part H's `git add` excludes.
+
+## 2026-10-06 · W20 · step 4.8 Exercises section and close-out
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1`, on W19's uncommitted tree. Nothing committed. Run on Sonnet 5.5. Scratch scripts (`w20_shots.py`, `w20_nav.py`), the pre-change tree (`before/`), the planted-fault trees and every suite output are in this session's scratchpad.
+
+**Files.** Backups are `*.backup-20261006-031833.*` beside `index.html`, `service-worker.js`, `README.md`, `fitness/basalt.js`, `fitness/basalt.css`, `tools/check-workout.py` and `tools/check-exercise-content.js` (the last was backed up and not edited).
+- `fitness/directory.js` (new, 637 lines, `App.directory = { has, open }`): the **Exercises** section, registered in group *Plan* after Muscles.
+  - **List.** Search over name, an alias list (only the knuckle grip has aliases), slot, primary muscles and the guide's summary. Filters: Muscle, Slot, Kind, *Where on its path*, *Doable with my equipment*, *Show excluded (n)*. The body map is the muscle filter (tap to select, tap again to clear) and the *Muscle* select does the same job, which is the group-list fallback W13 and W14 asked for. Ordered by slot then ladder depth; with a muscle chosen, by tier, then the slot built for that muscle, then slot order.
+  - **Page.** Tags, the written guide (set up, one rep, breathing, tempo, feel, mistakes, safety, *On your knuckles*, sideways swaps), the muscles in tiers on the body map plus a text list, the phase animation on the 14 animated movements, joint load, easier and harder moves from the ladder, and *In your program* (the slot's current prescription, last three sessions, best).
+  - **Actions.** *Train this in my ⟨slot⟩* (`engine.chooseExercise`), *Exclude* / *Include again* / *Allow anyway* (`engine.setExcluded`), and *Pin* weekday toggles on coverage movements (`engine.setPins`). Results and refusals show inline on the page; no `alert` or `confirm`.
+- `fitness/basalt.js`: `openGuideModal` hands off to `App.directory.open` first, so a workout's *How to do this* and Skills open the page. The modal and its code stay as the fallback if `directory.js` fails to load.
+- `fitness/basalt.css` (+~50, `.dx-*`), `index.html` (a `view-exercises` container and the script tag), `service-worker.js` (`fitness/directory.js` in `PRECACHE`; `CACHE_VERSION` v69 → v70).
+- `README.md`: a paragraph on the section with its limits, `Nine destinations`, the measured nav wrap, and Layout entries for the Stage 3 and 4 `fitness/` files, which were missing.
+- `tools/check-workout.py`: D3–D7, `open_exercises`, and B1 retargeted at the page (deviation 1).
+
+**Harness lines, before → after.** "Before" is the pre-change app (the backups of `index.html`, `service-worker.js`, `basalt.js`, `basalt.css`, and no `directory.js`) run through `HELTH_INDEX`. Cases were written against the plan's Part F; every number is read from the output file.
+
+| Case | Before | After |
+|---|---|---|
+| B1 | FAIL: 0 figures, 0 lit groups, 0 phase tabs (the modal opens instead of the page) | PASS: 2 figures, lit abs / chest / front delts / triceps, 3 rows; Pike's phase tabs kept |
+| D3 | FAIL: no Exercises section in the navigation | PASS: "knuckle" lists exactly `push_1`, `push_incline`, `push_2`, `push_4`, `push_alt_wide`, `push_alt_negative`; Biceps lists 16 of 16, first four are curls, secondary starts at the sixth, tapping again returns 150 |
+| D4 | FAIL: no Exercises section | PASS: slot `push_5` "chosen by you"; Weighted Dip refused with "needs dip bars", slot unchanged; Diamond excluded, hidden, shown as *excluded* with Show excluded, 0 rows in Today's Swap; 0 dialogs |
+| D5 | FAIL: the Exercises section didn't open, the old modal did | PASS: page opens, "← Back to Workout", the workout resumes with the typed 9 still in set 1; 14 of 14 animated pages keep their tabs and the tiers map |
+| D6 | FAIL: no section, all four runs | PASS: 0 overflow in 12 runs (2 themes × 390 / 1920 × list, page, animated page), 2 figures each, the layout spans its view (416–1736 at 1920) |
+| D7 | FAIL: 0 guides, no page offline | PASS: 7 new files served 200 from the worker offline, none missing from `PRECACHE`; Push-up's page, 150 guides and the map work |
+
+| Check | Result (final tree, read from the files) |
+|---|---|
+| `check-workout.py`, full | **79 pass, 0 fail, 0 error**, exit 0 (74 + D3–D7) |
+| `check-training.js` / `check-coverage.js` | all passed, 44 PASS / all passed, 9 PASS |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass / 17 passed |
+| `check-bodymap.js` / `check-exercise-content.js` | all passed / all passed |
+
+Test-runner subagents ran everything. I read the output files; two subagent summaries were wrong (one described a planted fault backwards, one repeated a first run from before a fix), so the numbers above come from the files.
+
+**One defect found by the harness, fixed:** D3's first run FAILed on "curls come first": under plain slot order the Pull slot's chin-ups (biceps primary) led, ahead of the curls. Within a tier the slot whose `trains` names the muscle now leads.
+
+**The new cases can fail.** Three faults, each in a scratch copy of the tree:
+
+| Fault | Fails |
+|---|---|
+| `fitness/directory.js` removed from `PRECACHE` | D7: "missing from PRECACHE ['fitness/directory.js']" |
+| Back never returns to the section you left | D5: "Back returns to the running workout", `resumed 0` |
+| Slot order only, no muscle-first ordering | D3: "curls come first", first slots `['pull', 'curl', 'curl', 'curl']` (the real first run) |
+
+**By eye.** Scratch `w20_shots.py`: the list at 1440 px and a Push-up page at 390 px (full page) in Selene and Selene Day, 0 page errors. Other themes weren't looked at.
+
+**Deviations, and choices the plan left open.**
+1. **B1 now reads the exercise page.** It drove the guide modal, which *How to do this* no longer opens (plan E1: the page replaces the modal). Its assertions are the same (tiers on the map, the legend, the muscle rows, the animation kept), and its selectors changed. The old modal is unchanged and unreachable unless `directory.js` fails to load.
+2. **"Difficulty" is *Where on its path*:** starting rung, on the path, or branch or optional. The catalogue has no difficulty rating, and the DB's `level` is null for most branches. The screen says it is a position and not a strength rating.
+3. **D7 serves the app over localhost** (`python3 -m http.server`), because a service worker can't register from `file://` and every other case blocks workers. It is the one case that doesn't use a `Session`.
+4. **The nine-destination nav bar wraps at 1440 px.** Measured by distinct button tops in Selene: before, 8 buttons on 1 row at 1440 and 1920; now 9 buttons on **2 rows at 1440** (Phase review drops under) and 1 row at 1920. The 1440 wrap is new with this section. README says so. A fix would change `css/basalt-gruvbox.css` §5's threshold or a label, and I didn't.
+5. **The map is the male figure only,** as W13 and W14 left it. The profile's `sex` field doesn't switch it. Still your decision.
+6. **"Pin to my finisher" is the Coverage card's weekday pin,** on coverage movements only. Pins belong to a slot, not to one movement, and the page says "Pin the ⟨slot⟩ slot".
+7. **Search matches the guide's summary,** so a word in a summary can surface an exercise the name doesn't suggest. Only the six grip-capable push-ups have the knuckle alias.
+
+**Not confirmed.** Coaching accuracy of the 150 guides (the earlier windows' note stands; the README says it). The screens in themes other than Selene and Selene Day. The Android and desktop shells.
+
+**Carried open, not touched.** W5-1 (a sync before a device's first write skips `toV5`), R2-1 to R2-4, R3-4.
+
+**Untracked:** the seven `*.backup-20261006-031833.*` files, which Part H's `git add` excludes. `fitness/directory.js` is new and *is* included.
+
+## 2026-10-06 · R4 · step 4.9 review
+
+**Where.** `/home/talon/SyncedWork/Claude/Helth` (Talon), branch `fitness-plan` at `da63ab1`, on W20's uncommitted tree. The paste named "the Stage 2 diff", the template's wording; this window reviewed Stage 4, the plan's 4.9, as R3 did for its stage. The before is `git archive da63ab1` (the committed Stage 3 tree), extracted to the scratchpad and run through `HELTH_INDEX`. No code changed by this window. Run on Opus 5.5. Scratch probes (`r4_probes.py`, `r4_more.py`, `r4_nav.py`), screenshots and the suite output are in this session's scratchpad. Backup: `PROGRESS-fitness-control-and-coverage.backup-20261006-041454.md`.
+
+**Harnesses, re-run on this tree** (a test-runner subagent ran them; counts read from the output files).
+
+| Check | Result |
+|---|---|
+| `check-workout.py` | **79 pass, 0 fail, 0 error**, exit 0 (B1–B3, D3–D7 PASS) |
+| `check-training.js` / `check-coverage.js` | all passed, 44 PASS / all passed |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass, 0 fail / 17 passed, 0 failed |
+| `check-bodymap.js` (D1) / `check-exercise-content.js` (D2) | all passed / all passed |
+
+**Findings, each reproduced by clicks against this tree.**
+
+### R4-1 · INCONSISTENCY (medium): *Train this* puts a left-out slot back into your program without saying so
+Program hides *Change exercise* on a left-out slot on purpose ("a left-out slot has nothing to control; Add brings it back", `basalt.js` `slotRow`). The page's button (`directory.js:493`) has no such guard, and `chooseExercise` overwrites the `off` record.
+- **By clicks:** Program → Dip → *Leave out* (`off: true`, 0 *Change exercise* buttons) → Exercises → Bench Dip. The page says "Your Dip slot has nothing prescribed — it is off, or nothing in it is allowed", then offers *Train this in my Dip slot*. Clicked: the record is `dip_1`, `off: null`, "chosen by you"; Program's row reads "Bench Dip … Leave out". The message says only "Bench Dip is now your Dip slot's exercise, at the bottom of its range." 0 page errors.
+- **Effect:** silent configuration: dips come back into every dip day, and nothing on the page says so.
+- **Smallest fix (not applied):** show the button under Program's own condition (a live record, or a coverage slot with none); otherwise say "Left out — Add it in Program first". One condition in `actionsHtml`.
+
+### R4-2 · INCONSISTENCY (medium): Back goes to the wrong section once a page was left by the nav instead of Back
+`openPage` sets `V.from` only when `V.page` is empty (`directory.js:598`), and only `back()` empties it. Leave a page any other way and both stay stale.
+- **By clicks, shape 1:** Skills → a skill rung's page ("← Back to Skills & mobility") → Begin a workout from the nav → log 7 in set 1 → *How to do this*. The page says **"← Back to Skills & mobility"**, and Back lands on Skills, not the running workout. The draft survives (Workout still shows Complete, set 1 still 7), so nothing is lost; you have to find the workout yourself.
+- **By clicks, shape 2:** Workout → *How to do this* → nav to Muscles → nav to Exercises. The section opens on the old Wall Push-up page, still reading "← Back to Workout", with 0 list rows; pressing the Exercises nav button again leaves it there. The list is reachable only by Back (out of the section) and then the nav.
+- **Effect:** README's "Back returns to the workout" is false in shape 1.
+- **Smallest fix (not applied):** in `openPage`, set `V.from` whenever the current section isn't `exercises` (drop the `!V.page` guard): one line, fixes shape 1. Shape 2 also needs `V.page` cleared when the section is entered from elsewhere, which `renderExercises` can't tell from a refresh today; a flag set by `openPage` would do it.
+
+### R4-3 · INCONSISTENCY (low): a loaded movement's history and best print without the weight
+`historyFor` (`directory.js:450`) keeps `reps` and drops each set's `weight`.
+- **By clicks:** two Dumbbell Curl sessions seeded, 3 × 12 at **5 kg** and 3 × 12 at **12.5 kg** → the page reads "Last 2 sessions: 2 Oct — 12 / 12 / 12; 1 Oct — 12 / 12 / 12. Best: 12 reps." The two read the same.
+- **Effect:** against the house rule of printing the raw quantity beside the number; on a loaded movement the load is the progression. The PR record itself is reps only (`_checkPR`, pre-existing); the page shows that as-is.
+- **Smallest fix (not applied):** carry the sets' weight in `historyFor` and append "at X kg" when it's uniform and above 0, as `rxLine` already does for the prescription.
+
+### R4-4 · DESIGN RISK (low): every list render adds another click listener to the section
+`renderList` calls `el.addEventListener("click", …)` on `#view-exercises` (`directory.js:357`), which persists across renders; the page uses `el.onclick`, which then also stays live on the list.
+- **Measured** (`App.refresh` wrapped to count): one row click after k Backs → **1, 3, 4, 5** refreshes, and **13 after 11 Backs**, each a full page render. Time per click with the 150 ms wait went 210 → 273 ms over those 11. 0 page errors; nothing visibly wrong yet.
+- **Effect:** grows with every Back for the life of the tab, which on an installed PWA is days.
+- **Smallest fix (not applied):** `el.onclick = function (e) {…}` in `renderList`, as `renderPage` does. One line, and it also replaces the page's stale handler.
+
+### R4-5 · COSMETIC (low): the nav bar wraps at 1440 px in all 21 palettes, not just Selene
+**Measured** by distinct button tops in `#nav` plus `#btn-settings`, before (`da63ab1`) and after:
+
+| Width | Before | After |
+|---|---|---|
+| 1440 | 21 of 21: one row of 8, *Training setup* below | 21 of 21: *Phase review* drops to row 2, *Training setup* below |
+| 1920 | 21 of 21: one row of 8, *Training setup* below | 21 of 21: one row of 9, *Training setup* below |
+
+W20 disclosed the wrap for Selene; README says "in Selene". It's every palette. **Pre-existing, separate:** README's older sentence that the bar plus *Training setup* "fits one row … at 1920px in all seven" was already false at `da63ab1` (21 of 21 put *Training setup* on its own row, Nostromo screenshot at 1920 shows it).
+**Fix:** your call, as W20 said: a shorter label or §5's threshold. At least correct README's "in Selene".
+
+### R4-6 · COSMETIC (low): the directory's map reads "not worked" and doubles the selected name for a screen reader
+The directory passes `values` for the selected muscle only, and its `label` returns the group name, which `bodymap.js` already prefixes.
+- **By DOM, after tapping Biceps:** "Biceps — Biceps — selected"; every other region "Chest — not worked", "Abs — not worked" — a filter, not a week. The legend shows a grey → amber → red ramp between "Not selected" and "Selected" for a two-state choice.
+- **Smallest fix (not applied):** pass `0` for every group and have `label` return "selected" / "not selected". Two lines in `renderMap`.
+
+**Checked, nothing found.**
+- **Every page:** all 150 opened in turn: an `h1` matching the DB name, a guide summary, two figures with at least one lit region, and no "undefined", "NaN" or "[object" anywhere. 0 page errors.
+- **Themes and widths:** Nostromo and Chernobyl × 390, 1440 and 1920, list and page: `scrollWidth` equals the viewport, and the layout spans its view (264–1408 of main 232–1440; 416–1736 of 232–1920, centred). D6 already covers Selene and Selene Day.
+- **Muscles map card:** a *Furthest below the floor* row opens the group's detail ("Side delts … 0 of 6"). `neg` is always the 7-day model, so the list beside the 7-day map can't disagree with it under the 30-day selector.
+- **Skills:** all 5 rungs shown open the page, none fall back to the old modal.
+- **Guides, mechanically:** every equipment word in a guide sits in a sideways-swap line about the other movement. One alternative crosses slots (Dumbbell RDL → Single-Leg RDL with Dumbbell, hinge → hamstring), deliberately (W15). The three neck guides read slow, no jerking, stop at dizziness, pain or tingling.
+- **Engine shapes the page reads:** session sets are `{ reps, weight }` and keyed by `key` (`finalizeSession`), and PRs are one record per id and kind updated in place, so `filter()[0]` is the best.
+
+**Not confirmed.** Coaching accuracy of the 150 guides beyond the neck three (read, not checked by a coach), and originality of the wording. The pre-existing cue notes W16–W19 raised (`core_2`'s easier/harder direction looks backwards) are in `EXERCISE_DB`, not Stage 4.
+
+**Carried open, not re-run here:** W5-1, R2-1 to R2-4, R3-4.
+
+**Not run:** the Android and desktop shells.
+
+**Untracked:** this entry's backup, `PROGRESS-fitness-control-and-coverage.backup-20261006-041454.md`, which Part H's `git add` excludes. `plans/.Rhistory` (empty, 1 Oct) is untracked and *would* be included by Part H's `git add -A`; it isn't Stage 4's.
+
+## 2026-10-06 · R4 fixes · R4-1 to R4-6 applied
+
+**Where.** The same session as R4, at your request ("make all the fixes"), on the same uncommitted tree. Nothing committed. Run on Opus 5.5.
+
+**Files.** Backups are `*.backup-20261006-042316.*` beside each file.
+- `fitness/directory.js`:
+  - **R4-1.** `actionsHtml` offers *Train this* only under Program's own rule: a live record, or a coverage slot with none. A left-out slot's page says "Your Dip slot is left out of your program. Add it under **Your prescriptions** in Program to train anything here." and has no button.
+  - **R4-2.** `openPage` records where you came from every time it's called from another section, not only when no page was open. A `MutationObserver` on the view's class forgets the page whenever the section is hidden, so leaving by the nav or Begin opens the list next time. The router only toggles `hide`, so that is the one signal every route shares.
+  - **R4-3.** `historyFor` keeps each set's weight. A uniform session reads "12 / 12 / 12 at 5 kg per hand", a mixed one "12 at 12.5 kg / 12 at 12.5 kg / 12 at 10 kg per hand". *Best* on a loaded movement adds "at any weight: the record counts reps, not load".
+  - **R4-4.** `renderList` sets `el.onclick` instead of adding a listener, which also replaces the page's handler.
+  - **R4-6.** The filter map passes 0 or 1 for every group, labels them "selected" / "not selected", and draws no legend.
+- `fitness/bodymap.js` (R4-6): `spec.legend: false` draws no legend; documented in the header.
+- `css/basalt-makeover.css` (R4-5): `.nav__btn` side padding 12 → 8 px. **Deviation from R4's note:** R4 named `basalt-gruvbox.css` §5, but `basalt-makeover.css` loads after it and sets the padding, so §5's `padding-inline` was already dead. The first edit went to §5 and R4e still measured 1153 px; it was reverted (the file is byte-identical to HEAD and its backup was removed) and the rule that applies was changed.
+- `README.md`: the nav measurement paragraph re-measured (21 palettes: one row at 1440 and 1920, wraps at 1366 and 1280, *Training setup* on its own row at all four, and why 8 px), W20's "in Selene" sentence removed, and the Exercises paragraph says the left-out rule and that history carries the weight. **Pre-existing, fixed with it:** the old claim that the bar plus *Training setup* fits one row at 1920 px, false at `da63ab1` in 21 of 21.
+- `service-worker.js`: `CACHE_VERSION` v70 → v71.
+- `tools/check-workout.py`: R4a–R4f, helpers `visible_views` and `open_page`, a header line.
+
+**Harness lines, before → after.** The cases were written first and run on the unfixed tree. Two harness defects were caught there and fixed before the numbers below: R4a's coverage control used Door-Frame Curl, which is that slot's prescription (so no button is correct), and is now Four-Way Neck Isometric; R4b's second shape ran while still on Skills, and now opens Workout first.
+
+| Case | Before | After |
+|---|---|---|
+| R4a | FAIL: offered 1; dip after `dip_1`, `off` None | PASS: offered 0; dip stays `off`; coverage and live controls 1 and 1 |
+| R4b | FAIL: "← Back to Skills & mobility", landed Skills; from the nav 0 rows, 1 Back button | PASS: "← Back to Workout", landed Workout, set 7 kept; from the nav 150 rows, 0 Back buttons |
+| R4c | FAIL: "12 / 12 / 12" twice; "Best: 12 reps (1 Oct)" | PASS: both weights printed; "at any weight" |
+| R4d | FAIL: refreshes per click after 0–5 Backs `[1, 3, 4, 5, 6, 7]` | PASS: `[1, 1, 1, 1, 1, 1]` |
+| R4e | FAIL: 21 of 21 palettes wrapped; 1153 of 1120 px | PASS: 0 wrapped; 1081 of 1120 px |
+| R4f | FAIL: "Biceps — Biceps — selected", "Chest — not worked"; 1 ramp | PASS: "Biceps — selected", "Chest — not selected"; 0 ramps |
+
+| Check | Result (final tree, read from the output files) |
+|---|---|
+| `check-workout.py` | **85 pass, 0 fail, 0 error**, exit 0 (79 + R4a–R4f) |
+| `check-training.js` / `check-coverage.js` | all passed, 44 PASS / all passed |
+| `check-training-data.js` / `check-muscle-map.js` | OK / OK |
+| `check-syncmerge.js` / `check-androidupdate.js` | 9 pass, 0 fail / 17 passed, 0 failed |
+| `check-bodymap.js` / `check-exercise-content.js` | all passed / all passed |
+
+A test-runner subagent ran the suite and said the Playwright run took about 4 minutes; the file timestamps say 04:30 → 04:44. The counts above are from the files.
+
+**By eye.** The nav at 1440 px in Selene and Selene Day: nine on one row, *Training setup* below as before. At 390 px in both: the left-out Dip page, the Dumbbell Curl history line ("12 / 12 / 12 at 7.5 kg per hand"), and the filter map with Biceps selected and no legend. 0 overflow, 0 page errors.
+
+**Not run:** the Android and desktop shells.
+
+**Carried open, not touched:** W5-1, R2-1 to R2-4, R3-4.
+
+**Untracked:** the seven `*.backup-20261006-042316.*` files, which Part H's `git add` excludes.

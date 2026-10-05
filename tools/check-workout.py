@@ -56,6 +56,21 @@ WELLNESS HUB · WORKOUT REGRESSION HARNESS
              own: Part F lists only V7
   · R3a-R3c  R3's findings: a pain flag on coverage work, no coverage record
              for an untouched pick, the Coverage row naming a joint limit
+  · B1-B3    Stage 4's body map (step 4.2): tiers for a movement without
+             authored phases, the 7-day heat map on Muscles (lit by direct
+             sets, tapped by click and by key), and the map at 390 and 1920 px
+             in two themes. B1 read the guide modal until step 4.8 made "How
+             to do this" open the exercise page; it now reads the page
+  · D3-D7    Stage 4's Exercises section (step 4.8): search and the muscle
+             filter (D3), Train this in my slot / Exclude (D4), How to do this
+             from a workout and the 14 animated pages (D5), 390 and 1920 px in
+             two themes (D6), and offline from the service worker's cache (D7,
+             the one case that serves the app over localhost, since a worker
+             can't register from file://)
+  · R4a-R4f  R4's findings: Train this on a left-out slot, Back after a page
+             was left by the nav, a loaded movement's history and best, one
+             render per row click, the nav bar's one row at 1440 px, and the
+             muscle filter's screen-reader labels
 
 Retired in step 2.4 (W8), because Stage 2 removed what they measured; each
 reason is in plans/PROGRESS-workout-progression.md:
@@ -3204,6 +3219,662 @@ def r3c(pw):
         return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "neck row %r" % row[:160], s.errors
     finally:
         s.close()
+
+
+MODAL_TEXT = """() => { const m = document.getElementById('wh-modal'); return m && !m.hidden ? m.innerText.replace(/\\s+/g, ' ') : ''; }"""
+
+
+def lit_regions(s: Session, host: str) -> list:
+    """[(group, aria-label)] for every region drawn in colour inside `host`."""
+    return s.ev("""h => [...document.querySelectorAll(h + ' .bm-r:not(.bm-r--off)')]
+        .map(e => [e.dataset.g, e.getAttribute('aria-label')])""", host)
+
+
+@case("B1", "Exercise page (opened by How to do this): a movement without phases shows the body map in tiers; one with phases keeps its animation")
+def b1(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        begin(s)
+        ids = s.ev("() => [...document.querySelectorAll('[data-guide]')].map(b => b.dataset.exid)")
+        has = s.ev("ids => ids.map(id => !!(window.PHASE_MAP && window.PHASE_MAP[id]))", ids)
+        plain = [i for i, h in zip(ids, has) if not h]
+        phased = [i for i, h in zip(ids, has) if h]
+        if not plain:
+            return False, "no movement without phases in today's workout: %s" % ids, s.errors
+        s.tap('[data-guide][data-exid="%s"]' % plain[0])
+        s.pg.wait_for_timeout(300)
+        prof = s.ev("id => { const p = MUSCLE_MAP[id] || MUSCLE_FALLBACK[(EXERCISE_DB[id] || {}).pattern]; return p; }", plain[0])
+        lit = lit_regions(s, "[data-dx-pmap]")
+        figs = s.ev("() => document.querySelectorAll('[data-dx-pmap] .bm-fig').length")
+        rows = s.ev("() => document.querySelectorAll('.dx-tiers li').length")
+        legend = text_of(s, "[data-dx-pmap] .bm-legend")
+        want = {}
+        for tier in ("primary", "secondary", "stabiliser"):
+            for g in prof[tier]:
+                want[g] = tier
+        got = {}
+        for g, label in lit:
+            got.setdefault(g, set()).add(label.rsplit(" — ", 1)[1])
+        tab = s.ev("() => document.querySelectorAll('[data-dx-phases] .phz-tab').length")
+        if not s.tap("[data-dx-back]"):
+            s.tap("#modal-guide .modal__close")   # a tree without the page still has the modal
+        s.pg.wait_for_timeout(300)
+        phased_info = "no phased movement in today's workout"
+        phased_ok = True
+        if phased:
+            s.tap('[data-guide][data-exid="%s"]' % phased[0])
+            s.pg.wait_for_timeout(300)
+            tabs = s.ev("() => document.querySelectorAll('[data-dx-phases] .phz-tab').length")
+            phased_ok = tabs > 0
+            phased_info = "%s: %d phase tabs" % (phased[0], tabs)
+        checks = {
+            "two figures": figs == 2,
+            "lit groups are exactly the profile's": set(got) == set(want),
+            "every lit region names its tier": all(got[g] == {want[g]} for g in got),
+            "the tier legend names all three": all(w in legend.lower() for w in ("primary", "secondary", "stabiliser")),
+            "the muscle list is still there, one row per tier": rows == len([t for t in ("primary", "secondary", "stabiliser") if prof[t]]),
+            "no phase tabs on this one": tab == 0,
+            "a phased movement keeps its animation": phased_ok,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "%s: %d figures, lit %s, %d rows | %s" % (plain[0], figs, sorted(got), rows, phased_info), s.errors
+    finally:
+        s.close()
+
+
+@case("B2", "Muscles: the 7-day map is lit by direct sets against the floor, and a click or Enter opens that group's detail")
+def b2(pw):
+    s = Session(pw, now=ist(2026, 10, 3, 12, 0))
+    try:
+        onboard(s)
+        seed_rows(s)
+        open_section(s, "muscles")
+        if not s.ev("() => !!document.querySelector('#ms-map .bm-fig')"):
+            return False, "no body map on the Muscles screen", s.errors
+        cov = s.ev("() => Coverage.status(App.getState().sessions, App.lib.today(), [])")
+        lit = dict(lit_regions(s, "#ms-map"))
+        off_biceps = s.ev("() => document.querySelectorAll('#ms-map .bm-r--off[data-g=\"biceps\"]').length")
+        lats_label = lit.get("lats", "")
+        gaps = s.ev("() => [...document.querySelectorAll('.ms-gap')].map(e => e.dataset.msDetail)")
+        tabs = s.ev("""() => [...document.querySelectorAll('#ms-map .bm-fig')].map(svg => ({
+            stops: [...svg.querySelectorAll('.bm-r--tap[tabindex="0"]')].map(e => e.dataset.g),
+            groups: [...new Set([...svg.querySelectorAll('.bm-r--tap')].map(e => e.dataset.g))] }))""")
+        # a real click on the shape, then the keyboard on a different one
+        s.pg.locator('#ms-map .bm-r--tap[data-g="lats"]').first.click()
+        s.pg.wait_for_timeout(300)
+        click_modal = s.ev(MODAL_TEXT)
+        s.pg.keyboard.press("Escape")
+        s.pg.wait_for_timeout(200)
+        s.pg.locator('#ms-map .bm-r--tap[data-g="biceps"][tabindex="0"]').first.focus()
+        s.pg.keyboard.press("Enter")
+        s.pg.wait_for_timeout(300)
+        key_modal = s.ev(MODAL_TEXT)
+        checks = {
+            "lats is lit, labelled '9 of 3 direct sets, 7 d'": "9 of 3 direct sets" in lats_label,
+            "biceps (0 of 6) is not lit": "biceps" not in lit and off_biceps == 2,
+            "the lit groups are the ones with direct sets": set(lit) == {k for k, g in cov.items() if g["direct"] > 0},
+            "the list beside it starts with the neediest groups": len(gaps) == 6 and "lats" not in gaps,
+            "one tab stop per group and view": len(tabs) == 2 and all(
+                sorted(v["stops"]) == sorted(v["groups"]) and len(v["stops"]) == len(set(v["stops"])) for v in tabs),
+            "a click on lats opens its detail": "Lats" in click_modal and "9 of 3" in click_modal,
+            "Enter on biceps opens its detail": "Biceps" in key_modal and "0 of 6" in key_modal,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "lit %s; lats %r; gaps %s; tab stops %s; click %r; key %r" % (
+                sorted(lit), lats_label, gaps, [len(v["stops"]) for v in tabs], click_modal[:40], key_modal[:40]), s.errors
+    finally:
+        s.close()
+
+
+@case("B3", "Muscles map at 390 and 1920 px in Selene and Selene Day: no overflow, both figures visible, nothing stranded to one side")
+def b3(pw):
+    global VIEWPORT
+    saved, out, bad, errs = VIEWPORT, [], [], []
+    try:
+        for theme in ("selene", "selene-day"):
+            for w, h in ((390, 844), (1920, 1080)):
+                VIEWPORT = {"width": w, "height": h}
+                s = Session(pw, now=ist(2026, 10, 3, 12, 0))
+                try:
+                    onboard(s)
+                    seed_rows(s)
+                    s.ev("id => Hub.theme.apply(id)", theme)
+                    open_section(s, "muscles")
+                    if not s.ev("() => !!document.querySelector('#ms-map .bm-fig')"):
+                        bad.append("%s/%d: no body map" % (theme, w))
+                        continue
+                    m = s.ev("""() => {
+                        const r = e => { const b = e.getBoundingClientRect(); return [b.left, b.right, b.width, b.height]; };
+                        const figs = [...document.querySelectorAll('#ms-map .bm-fig')].map(r);
+                        const card = r(document.getElementById('ms-map').closest('.card'));
+                        const fill = getComputedStyle(document.querySelector('#ms-map .bm-r--off')).fill;
+                        return { over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                                 figs, card, fill, vw: document.documentElement.clientWidth };
+                    }""")
+                    f0, f1 = m["figs"][0], m["figs"][1]
+                    gap_l = f0[0] - m["card"][0]
+                    gap_r = m["card"][1] - (m["figs"][-1][1])
+                    tag = "%s/%d" % (theme, w)
+                    checks = {
+                        "no horizontal overflow": m["over"] == 0,
+                        "two figures, each over 120 px wide": len(m["figs"]) == 2 and f0[2] > 120 and f1[2] > 120,
+                        "inside the card": f0[0] >= m["card"][0] and m["figs"][-1][1] <= m["card"][1],
+                        "unlit fill resolves": m["fill"] not in ("", "none"),
+                    }
+                    if w >= 1440:
+                        # the map and its list share the card: no more than ~40% of it empty on the right
+                        checks["the figures sit in the left half of the card, the list in the right"] = \
+                            f1[1] < m["card"][0] + 0.55 * (m["card"][1] - m["card"][0])
+                    miss = [k for k, ok in checks.items() if not ok]
+                    bad += ["%s: %s" % (tag, k) for k in miss]
+                    out.append("%s fig %dx%d over %d" % (tag, round(f0[2]), round(f0[3]), m["over"]))
+                    errs += s.errors
+                finally:
+                    s.close()
+    finally:
+        VIEWPORT = saved
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "; ".join(out), errs
+
+
+# --- D3-D7 · Stage 4's Exercises section (step 4.8) --------------------------
+def open_exercises(s: Session) -> bool:
+    """Open the Exercises section by its navigation entry. A tree without the
+    section is recorded as absent, so the case FAILs with a number instead of
+    timing out into an ERROR."""
+    if s.pg.locator('#nav [data-section="exercises"], #fit-panel [data-section="exercises"]').count() == 0:
+        s.absent.append("exercises nav")
+        return False
+    open_section(s, "exercises")
+    return True
+
+
+NO_SECTION = (False, "no Exercises section in the navigation")
+
+
+def exercises_rows(s: Session) -> list:
+    """[(id, [badge texts])] for every row of the directory list, in order."""
+    return s.ev("""() => [...document.querySelectorAll('[data-dx-results] [data-dx-open]')].map(b =>
+        [b.dataset.dxOpen, [...b.querySelectorAll('.badge')].map(x => x.innerText.trim().toLowerCase())])""")
+
+
+@case("D3", "Exercises: searching 'knuckle' finds the six grip-capable push-ups; tapping Biceps lists curls first, then rows")
+def d3(pw):
+    s = Session(pw, now=ist(2026, 10, 3, 12, 0))
+    try:
+        onboard(s)
+        if not open_exercises(s):
+            return NO_SECTION + (s.errors,)
+        total = len(exercises_rows(s))
+        s.put("[data-dx-q]", "knuckle")
+        s.pg.wait_for_timeout(200)
+        found = sorted(r[0] for r in exercises_rows(s))
+        grip = sorted(s.ev("() => TRAINING_DATA.GRIPS.exercises"))
+        s.tap('[data-dx-open="push_2"]')
+        s.pg.wait_for_timeout(300)
+        knuckle_block = s.ev("""() => [...document.querySelectorAll('.dx-h')].filter(h => /knuckles/i.test(h.innerText))
+            .map(h => h.parentElement.innerText.replace(/\\s+/g, ' ')).join(' | ')""")
+        s.tap("[data-dx-back]")
+        s.pg.wait_for_timeout(200)
+        s.put("[data-dx-q]", "")
+        s.pg.wait_for_timeout(200)
+        s.pg.locator('.bm-r--tap[data-g="biceps"]').first.click()
+        s.pg.wait_for_timeout(300)
+        rows = exercises_rows(s)
+        sel = s.ev("() => document.querySelector('[data-dx-sel=\"muscle\"]').value")
+        want = s.ev("""() => Object.keys(TRAINING_DATA.EXERCISES).filter(id => EXERCISE_DB[id] && MUSCLE_MAP[id] &&
+            ['primary', 'secondary', 'stabiliser'].some(t => (MUSCLE_MAP[id][t] || []).includes('biceps'))).length""")
+        order = ["primary", "secondary", "stabiliser"]
+        tiers = [next((t for t in order if t in r[1]), None) for r in rows]
+        slots = s.ev("ids => ids.map(id => TRAINING_DATA.EXERCISES[id].slot)", [r[0] for r in rows])
+        first_sec = tiers.index("secondary") if "secondary" in tiers else -1
+        s.pg.locator('.bm-r--tap[data-g="biceps"]').first.click()
+        s.pg.wait_for_timeout(300)
+        cleared = len(exercises_rows(s))
+        checks = {
+            "the list holds every movement to begin with": total == 150,
+            "'knuckle' finds exactly the grip-capable ids": found == grip and len(grip) == 6,
+            "Push-up's page has the knuckles section": "front two knuckles" in knuckle_block.lower() or "knuckle" in knuckle_block.lower(),
+            "tapping Biceps selects it in the Muscle select": sel == "biceps",
+            "every movement that works biceps is listed": len(rows) == want and want > 0,
+            "tiers never go backwards (primary, secondary, stabiliser)": None not in tiers and
+                [order.index(t) for t in tiers] == sorted(order.index(t) for t in tiers),
+            "curls come first": slots[0] in ("curl", "pull") and slots[:3].count("curl") == 3,
+            "rows come after the curls": first_sec > 0 and "row" in slots[first_sec:],
+            "tapping Biceps again clears the filter": cleared == total,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "%d listed; knuckle %s; biceps %d of %d, first slots %s, first secondary at %d, cleared %d" % (
+                total, found, len(rows), want, slots[:4], first_sec, cleared), s.errors
+    finally:
+        s.close()
+
+
+@case("D4", "Exercises: Train this in my slot, a refused one says why inline, Exclude hides it from Swap")
+def d4(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    dialogs = []
+    s.pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    try:
+        onboard(s)
+        if not open_exercises(s):
+            return NO_SECTION + (s.errors,)
+        s.put("[data-dx-q]", "archer push")
+        s.tap('[data-dx-open="push_5"]')
+        s.pg.wait_for_timeout(300)
+        s.tap("[data-dx-train]")
+        s.pg.wait_for_timeout(300)
+        slot = s.state()["training"]["slots"]["push"]
+        said = text_of(s, ".dx-msg")
+        now_in = n_visible(s, "[data-dx-train]")
+        # a movement the default equipment can't do: Weighted Dip needs dip bars and weights
+        s.tap("[data-dx-back]")
+        s.put("[data-dx-q]", "weighted dip")
+        s.tap('[data-dx-open="dip_6"]')
+        s.pg.wait_for_timeout(300)
+        s.tap("[data-dx-train]")
+        s.pg.wait_for_timeout(300)
+        refused = text_of(s, ".dx-msg")
+        dip = s.state()["training"]["slots"].get("dip") or {}
+        # Exclude Diamond, then look for it in Today's Swap list and in the directory
+        s.tap("[data-dx-back]")
+        s.put("[data-dx-q]", "diamond")
+        s.tap('[data-dx-open="push_3"]')
+        s.pg.wait_for_timeout(300)
+        s.tap('[data-dx-excl="excluded"]')
+        s.pg.wait_for_timeout(300)
+        rec = s.state()["training"]["exclusions"].get("push_3") or {}
+        shown_excl = n_visible(s, '[data-dx-excl="none"]')
+        s.tap("[data-dx-back]")
+        s.put("[data-dx-q]", "diamond")
+        s.pg.wait_for_timeout(200)
+        hidden = len(exercises_rows(s))
+        s.tick('[data-dx-chk="showExcluded"]')
+        s.pg.wait_for_timeout(200)
+        listed = exercises_rows(s)
+        open_today(s)
+        pick_day(s, "push")
+        s.pg.click('[data-pvswap="push"]')
+        s.pg.wait_for_timeout(300)
+        in_swap = s.pg.locator('[data-pvswapto="push_3"]').count()
+        checks = {
+            "Train this sets the slot, 'chosen by you'": slot.get("exerciseId") == "push_5" and slot.get("why") == "chosen by you",
+            "the page says so, and the button gives way": "Archer Push-up" in said and now_in == 0,
+            "a refused choice says why on the page": "needs" in refused.lower() and "dip" in refused.lower(),
+            "and writes nothing": dip.get("exerciseId") != "dip_6",
+            "Exclude stamps the record": rec.get("state") == "excluded" and bool(rec.get("at")),
+            "the page then offers Include again": shown_excl == 1,
+            "an excluded movement is hidden from the list": hidden == 0,
+            "Show excluded brings it back, marked": len(listed) == 1 and "excluded" in listed[0][1],
+            "Today's Swap list hides it": in_swap == 0,
+            "no alert, confirm or prompt": not dialogs,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "slot %s/%r; said %r; refused %r; dip %s; record %s; hidden %d, listed %s; swap rows %d; dialogs %s" % (
+                slot.get("exerciseId"), slot.get("why"), said[:50], refused[:70], dip.get("exerciseId"),
+                rec.get("state"), hidden, listed, in_swap, dialogs), s.errors
+    finally:
+        s.close()
+
+
+@case("D5", "How to do this from a workout opens the page and Back keeps the draft; all 14 animated pages keep their animation")
+def d5(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        begin(s)
+        log_set(s, 0, 0, 9)
+        w0 = draft(s)
+        ex0 = w0["exercises"][0]
+        s.tap('[data-guide="0"]')
+        s.pg.wait_for_timeout(300)
+        landed = s.ev("""() => ({ view: !!document.getElementById('view-exercises') && !document.getElementById('view-exercises').classList.contains('hide'),
+            today: document.getElementById('view-today').classList.contains('hide'),
+            h1: (document.querySelector('#view-exercises h1') || {innerText: ''}).innerText.trim() })""")
+        modal_open = s.ev("() => { const m = document.getElementById('modal-guide'); return !!m && m.classList.contains('is-open'); }")
+        if not landed["view"]:
+            return False, "How to do this did not open the Exercises section (landed %s, old modal open %s)" % (landed, modal_open), s.errors
+        back_label = text_of(s, "[data-dx-back]")
+        s.tap("[data-dx-back]")
+        s.pg.wait_for_timeout(300)
+        w1 = draft(s)
+        resumed = n_visible(s, "#complete-session")
+        ids = s.ev("() => Object.keys(PHASE_MAP).filter(id => TRAINING_DATA.EXERCISES[id] && EXERCISE_DB[id])")
+        total_phased = s.ev("() => Object.keys(PHASE_MAP).length")
+        bad_pages = []
+        open_exercises(s)
+        for id in ids:
+            name = s.ev("id => EXERCISE_DB[id].name", id)
+            s.put("[data-dx-q]", name)
+            if not s.tap('[data-dx-open="%s"]' % id):
+                bad_pages.append(id + ": no row")
+                continue
+            s.pg.wait_for_timeout(120)
+            m = s.ev("""() => ({ h1: document.querySelector('#view-exercises h1').innerText.trim(),
+                tabs: document.querySelectorAll('[data-dx-phases] .phz-tab').length,
+                maps: document.querySelectorAll('[data-dx-pmap] .bm-fig').length })""")
+            if m["h1"] != name or m["tabs"] < 1 or m["maps"] != 2:
+                bad_pages.append("%s: h1 %r tabs %d maps %d" % (id, m["h1"], m["tabs"], m["maps"]))
+            s.tap("[data-dx-back]")
+        checks = {
+            "the page opens in the Exercises section": landed["view"] and landed["today"] and landed["h1"] == ex0["name"],
+            "not the old modal": not modal_open,
+            "Back names where you came from": "workout" in back_label.lower(),
+            "Back returns to the running workout": resumed == 1,
+            "the set you had typed is still there": w1["exercises"][0]["sets"][0]["value"] == 9 == w0["exercises"][0]["sets"][0]["value"],
+            "all 14 animated movements are listed": len(ids) == total_phased == 14,
+            "each animated page has its tabs and the tiers map": not bad_pages,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "landed %s; modal %s; back %r; resumed %d; set %s; animated %d/%d %s" % (
+                landed, modal_open, back_label, resumed, w1["exercises"][0]["sets"][0]["value"], len(ids), total_phased, bad_pages), s.errors
+    finally:
+        s.close()
+
+
+@case("D6", "Exercises list and page in Selene and Selene Day at 390 and 1920 px: no overflow, the map visible, the layout fills its width")
+def d6(pw):
+    global VIEWPORT
+    saved, out, bad, errs = VIEWPORT, [], [], []
+    try:
+        for theme in ("selene", "selene-day"):
+            for w, h in ((390, 844), (1920, 1080)):
+                VIEWPORT = {"width": w, "height": h}
+                s = Session(pw, now=ist(2026, 10, 3, 12, 0))
+                try:
+                    onboard(s)
+                    s.ev("id => Hub.theme.apply(id)", theme)
+                    if not open_exercises(s):
+                        bad.append("%s/%d: no Exercises section" % (theme, w))
+                        continue
+                    animated = s.ev("() => Object.keys(PHASE_MAP).filter(id => TRAINING_DATA.EXERCISES[id])[0]")
+                    probe = """() => {
+                        const r = e => { const b = e.getBoundingClientRect(); return [b.left, b.right, b.width]; };
+                        const v = document.getElementById('view-exercises'), lay = v.querySelector('.dx-layout');
+                        const figs = [...v.querySelectorAll('.bm-fig')].filter(f => f.getBoundingClientRect().width > 0).map(r);
+                        const unlit = v.querySelector('.bm-r--off');
+                        return { over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                                 figs, view: r(v), lay: r(lay), vw: document.documentElement.clientWidth,
+                                 fill: unlit ? getComputedStyle(unlit).fill : 'x' };
+                    }"""
+                    for label, go in (("list", lambda: None),
+                                      ("page", lambda: (s.put("[data-dx-q]", "pike"), s.tap('[data-dx-open="shoulder_4"]'))),
+                                      ("animated", lambda: (s.tap("[data-dx-back]"), s.put("[data-dx-q]", s.ev("id => EXERCISE_DB[id].name", animated)),
+                                                            s.tap('[data-dx-open="%s"]' % animated)))):
+                        go()
+                        s.pg.wait_for_timeout(300)
+                        m = s.ev(probe)
+                        tag = "%s/%d/%s" % (theme, w, label)
+                        checks = {
+                            "no horizontal overflow": m["over"] == 0,
+                            "the body map is on screen": len(m["figs"]) >= 2 and all(f[2] > 60 for f in m["figs"]),
+                            "the layout fills its view (no stranded side)": m["lay"][0] - m["view"][0] <= 2 and m["view"][1] - m["lay"][1] <= 2,
+                            "unlit fill resolves": m["fill"] not in ("", "none"),
+                        }
+                        bad += ["%s: %s" % (tag, k) for k, ok in checks.items() if not ok]
+                        out.append("%s over %d, %d figs, layout %d-%d of view %d-%d" % (
+                            tag, m["over"], len(m["figs"]), round(m["lay"][0]), round(m["lay"][1]), round(m["view"][0]), round(m["view"][1])))
+                    errs += s.errors
+                finally:
+                    s.close()
+    finally:
+        VIEWPORT = saved
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "; ".join(out), errs
+
+
+@case("D7", "Offline after install: every new file is served from the service worker's cache")
+def d7(pw):
+    import socket
+    import subprocess
+    import time
+    root = pathlib.Path(os.environ.get("HELTH_INDEX") or ROOT / "index.html").resolve().parent
+    sock = socket.socket(); sock.bind(("127.0.0.1", 0)); port = sock.getsockname()[1]; sock.close()
+    srv = subprocess.Popen([sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1", "--directory", str(root)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    browser = None
+    try:
+        for _ in range(50):
+            try:
+                socket.create_connection(("127.0.0.1", port), 0.2).close(); break
+            except OSError:
+                time.sleep(0.1)
+        html = (root / "index.html").read_text()
+        sw = (root / "service-worker.js").read_text()
+        scripts = re.findall(r'<script src="((?:fitness|vendor)/[^"]+)"', html)
+        missing = [x for x in scripts if './' + x not in sw]
+        browser = pw.chromium.launch()
+        ctx = browser.new_context(viewport=VIEWPORT, timezone_id=TZ, locale="en-IN")
+        pg = ctx.new_page()
+        errors = []
+        pg.on("pageerror", lambda e: errors.append("PAGEERROR: " + str(e)))
+        pg.goto("http://127.0.0.1:%d/index.html" % port)
+        pg.wait_for_function("() => navigator.serviceWorker && navigator.serviceWorker.controller", timeout=20000)
+        pg.wait_for_timeout(1500)   # addAll finished before the worker took control
+        ctx.set_offline(True)
+        served = {}
+        pg.on("response", lambda r: served.__setitem__(r.url, (r.status, r.from_service_worker)))
+        pg.reload()
+        try:
+            pg.wait_for_function("() => window.App && window.App.directory", timeout=8000)
+        except PlaywrightError:
+            pass
+        new_files = [x for x in scripts if "directory" in x or "bodymap" in x or "content/" in x]
+        not_cached = [x for x in new_files if not any(u.endswith("/" + x) and v == (200, True) for u, v in served.items())]
+        page = pg.evaluate("""() => { if (!window.App || !App.directory) return { h1: null, guides: 0, map: false, knuckles: false };
+            App.directory.open('push_2');
+            return { h1: document.querySelector('#view-exercises h1').innerText.trim(),
+                     guides: Object.keys(EXERCISE_CONTENT).length, map: !!window.BODY_MAP,
+                     knuckles: /knuckles/i.test(document.getElementById('view-exercises').innerText) }; }""")
+        checks = {
+            "every fitness and vendor script in index.html is in PRECACHE": not missing,
+            "the new files come from the worker, status 200, offline": new_files and not not_cached,
+            "the directory runs offline: Push-up's page, 150 guides, the map": page["h1"] == "Push-up" and page["guides"] == 150 and page["map"] and page["knuckles"],
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "%d new files checked, not from cache %s, missing from PRECACHE %s; page %s" % (len(new_files), not_cached, missing, page), errors
+    finally:
+        if browser:
+            browser.close()
+        srv.terminate()
+
+
+def visible_views(s: Session) -> list:
+    return s.ev("() => [...document.querySelectorAll('section.view')].filter(v => !v.classList.contains('hide')).map(v => v.dataset.view)")
+
+
+def open_page(s: Session, query: str, ex_id: str):
+    s.put("[data-dx-q]", query)
+    s.pg.wait_for_timeout(150)
+    s.tap('[data-dx-open="%s"]' % ex_id)
+    s.pg.wait_for_timeout(300)
+
+
+@case("R4a", "Exercises: Train this never puts a left-out slot back in your program; a live slot and an unstarted coverage slot still offer it")
+def r4a(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        open_section(s, "program")
+        s.tap('[data-slot-toggle="dip"][data-on="0"]')
+        s.pg.wait_for_timeout(300)
+        off_before = bool((s.state()["training"]["slots"].get("dip") or {}).get("off"))
+        if not open_exercises(s):
+            return NO_SECTION + (s.errors,)
+        open_page(s, "bench dip", "dip_1")
+        offered = n_visible(s, "[data-dx-train]")
+        note = text_of(s, ".dx-side .card:last-child")
+        if offered:   # a tree that still offers it: press it and record what it wrote
+            s.tap("[data-dx-train]")
+            s.pg.wait_for_timeout(300)
+        dip = s.state()["training"]["slots"].get("dip") or {}
+        s.tap("[data-dx-back]")
+        # Four-Way Neck Isometric: a coverage slot with no record, not its first rung
+        open_page(s, "four-way neck", "acc_neck_fourway")
+        cov_rec = "neck" in s.state()["training"]["slots"]
+        cov_offered = n_visible(s, "[data-dx-train]")
+        s.tap("[data-dx-back]")
+        open_page(s, "archer push", "push_5")
+        live_offered = n_visible(s, "[data-dx-train]")
+        checks = {
+            "the dip slot was left out by Program's own button": off_before,
+            "no Train this on a left-out slot": offered == 0,
+            "the page says it is left out, and where to add it": "left out" in note.lower() and "program" in note.lower(),
+            "the dip slot stays out": bool(dip.get("off")),
+            "an unstarted coverage slot still offers it": not cov_rec and cov_offered == 1,
+            "a live slot still offers it": live_offered == 1,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "left out %s; offered %d; dip after %s/off %s; note %r; coverage %d, live %d" % (
+                off_before, offered, dip.get("exerciseId"), dip.get("off"), note[:90], cov_offered, live_offered), s.errors
+    finally:
+        s.close()
+
+
+@case("R4b", "Exercises: Back returns to where you opened the page from, and the nav opens the list, after a page was left by the nav")
+def r4b(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        open_section(s, "skills")
+        s.pg.locator("[data-skillguide]").first.click()
+        s.pg.wait_for_timeout(300)
+        begin(s)                         # leave the skill's page by the nav
+        log_set(s, 0, 0, 7)
+        s.tap('[data-guide="0"]')
+        s.pg.wait_for_timeout(300)
+        label = text_of(s, "[data-dx-back]")
+        s.tap("[data-dx-back]")
+        s.pg.wait_for_timeout(300)
+        landed = visible_views(s)
+        resumed = n_visible(s, "#complete-session")
+        kept = draft(s)["exercises"][0]["sets"][0]["value"]
+        open_today(s)                    # shape 2: a page left for Muscles, then Exercises from the nav
+        s.tap('[data-guide="0"]')
+        s.pg.wait_for_timeout(300)
+        opened = visible_views(s) == ["exercises"]
+        open_section(s, "muscles")
+        open_section(s, "exercises")
+        rows = len(exercises_rows(s))
+        back_btns = n_visible(s, "[data-dx-back]")
+        checks = {
+            "Back names the workout": "workout" in label.lower(),
+            "Back lands on the workout": landed == ["today"] and resumed == 1,
+            "the typed set is still there": kept == 7,
+            "the nav opens the list, not the old page": opened and rows == 150 and back_btns == 0,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "back %r; landed %s, Complete %d, set %s; page opened again %s, then from the nav %d rows, %d Back buttons" % (
+                label, landed, resumed, kept, opened, rows, back_btns), s.errors
+    finally:
+        s.close()
+
+
+@case("R4c", "Exercises: a loaded movement's last sessions print their weight, and Best says it counts reps at any weight")
+def r4c(pw):
+    s = Session(pw, now=ist(2026, 10, 3, 12, 0))
+    try:
+        onboard(s)
+
+        def curl(i, kgs):
+            sess = fake_session(i, "mini", [fake_exercise("acc_curl_db", "accessory", "reps", [12] * len(kgs))])
+            sess["dateISO"], sess["dayKey"], sess["kind"] = "2026-10-0%dT06:00:00.000Z" % i, "2026-10-0%d" % i, "mini"
+            for st, kg in zip(sess["exercises"][0]["sets"], kgs):
+                st["weight"] = kg
+            return sess
+        add_sessions(s, [curl(1, [5, 5, 5]), curl(2, [12.5, 12.5, 10])])
+        s.ev("() => { App.getState().prs.push({ id: 'pr_r4c', exerciseId: 'acc_curl_db', exercise: 'Dumbbell Curl', kind: 'reps', value: 12, dateISO: '2026-10-01T06:00:00.000Z' }); App.saveState(); }")
+        if not open_exercises(s):
+            return NO_SECTION + (s.errors,)
+        open_page(s, "dumbbell curl", "acc_curl_db")
+        prog = text_of(s, ".dx-side .card:last-child").replace("\n", " ")
+        checks = {
+            "a uniform session prints its weight once": "12 / 12 / 12 at 5 kg" in prog,
+            "a mixed session prints each set's weight": "12 at 12.5 kg / 12 at 12.5 kg / 12 at 10 kg" in prog,
+            "Best says what it counts": "any weight" in prog,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "page %r" % prog[:260], s.errors
+    finally:
+        s.close()
+
+
+@case("R4d", "Exercises: one row click is one render, however many times you went Back to the list")
+def r4d(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        if not open_exercises(s):
+            return NO_SECTION + (s.errors,)
+        # instrumentation only: count App.refresh calls; the clicks are real
+        s.ev("() => { window.__r = 0; const f = App.refresh; App.refresh = function () { window.__r++; return f.apply(this, arguments); }; }")
+        counts = []
+        for _ in range(6):
+            s.ev("() => { window.__r = 0; }")
+            s.pg.locator('[data-dx-open="push_2"]').first.click()
+            s.pg.wait_for_timeout(150)
+            counts.append(s.ev("() => window.__r"))
+            s.tap("[data-dx-back]")
+            s.pg.wait_for_timeout(150)
+        return counts == [1] * 6, "refreshes per click after 0-5 Backs: %s" % counts, s.errors
+    finally:
+        s.close()
+
+
+@case("R4e", "The Fitness nav bar's nine destinations fit one row at 1440 px in every palette")
+def r4e(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        s.pg.set_viewport_size({"width": 1440, "height": 950})
+        s.pg.wait_for_timeout(200)
+        themes = s.ev("() => Hub.theme.list().map(t => t.id || t)")
+        out = []
+        for th in themes:
+            s.ev("id => Hub.theme.apply(id)", th)
+            s.pg.wait_for_timeout(60)
+            out.append([th] + s.ev("""() => { const n = document.getElementById('nav'), b = [...n.querySelectorAll('.nav__btn')].filter(x => x.offsetParent);
+                const w = b.reduce((a, x) => a + x.getBoundingClientRect().width, 0);
+                return [b.length, new Set(b.map(x => Math.round(x.getBoundingClientRect().top))).size, Math.round(w), n.clientWidth]; }"""))
+        wrapped = [o for o in out if o[2] != 1]
+        ok = len(out) >= 2 and not wrapped and all(o[1] == 9 for o in out)
+        return ok, "%d palettes; wrapped %s; Selene %s buttons, %s rows, %s of %s px" % (
+            len(out), [o[0] for o in wrapped], out[0][1], out[0][2], out[0][3], out[0][4]), s.errors
+    finally:
+        s.close()
+
+
+@case("R4f", "Exercises: the muscle-filter map says selected / not selected, once, and draws no heat ramp")
+def r4f(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        if not open_exercises(s):
+            return NO_SECTION + (s.errors,)
+        s.pg.locator('.bm-r--tap[data-g="biceps"]').first.click()
+        s.pg.wait_for_timeout(300)
+        labels = s.ev("() => [...new Set([...document.querySelectorAll('[data-dx-map] .bm-r--tap')].map(x => x.getAttribute('aria-label')))]")
+        ramps = s.pg.locator("[data-dx-map] .bm-legend__ramp").count()
+        others = [l for l in labels if not l.startswith("Biceps")]
+        checks = {
+            "the selected group reads 'Biceps — selected'": "Biceps — selected" in labels,
+            "every other group reads 'not selected'": others and all(l.endswith("— not selected") for l in others),
+            "nothing says 'not worked'": not any("not worked" in l for l in labels),
+            "no heat ramp for a two-state filter": ramps == 0,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "%d labels, e.g. %s; ramps %d" % (len(labels), [l for l in labels if "Biceps" in l] + others[:2], ramps), s.errors
+    finally:
+        s.close()
+
 
 
 def main() -> int:

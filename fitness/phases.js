@@ -348,6 +348,7 @@
         '<div class="phz-head"><div class="phz-head__t">Muscles worked</div>' +
           '<div class="phz-head__s">Phase-by-phase detail isn\'t written for this movement yet — ' +
           'this is the muscle map BASALT already uses to credit your work.</div></div>' +
+        '<div class="phz-map"></div>' +
         '<div class="phz-bars">' +
           rows.map(function (r) {
             var g = meta[r.key] || { label: r.key };
@@ -359,6 +360,10 @@
           }).join("") +
         '</div>' +
       '</div>';
+
+    /* The drawing is the picture; the rows above stay as its text list, since
+       colour alone can't say "secondary" and the small shapes can't be read. */
+    if (App.bodymap) App.bodymap.render(host.querySelector(".phz-map"), { mode: "tiers", profile: map });
   }
 
   function render(host, exId) {
@@ -505,5 +510,5 @@
     paint(data.phases[0].pos, cur.acts);
   }
 
-  App.phases = { render: render, ramp: ramp, hasPhases: function (id) { return !!(window.PHASE_MAP && window.PHASE_MAP[id]); } };
+  App.phases = { render: render, ramp: ramp, opacityFor: opacityFor, tier: TIER, hasPhases: function (id) { return !!(window.PHASE_MAP && window.PHASE_MAP[id]); } };
 })();

@@ -533,8 +533,50 @@
         '</div>';
     }
 
-    el.innerHTML = head + tiles + table + negCard;
+    /* The list beside the map is its text twin: the shapes are 10-30 px wide
+       at 390 px, so the six groups furthest below their floor are also buttons. */
+    var gaps = neg.slice(0, 6).map(function (r) {
+      return '<button class="ms-gap" data-ms-detail="' + r.key + '" type="button">' +
+        '<span class="ms-gap__name">' + esc(r.label) + '</span>' +
+        '<span class="ms-gap__n mono">' + r.direct + ' of ' + r.floor + '</span>' +
+        '<span class="ms-gap__bar">' + bar(Math.round(100 * r.direct / r.floor), r.direct) + '</span>' +
+      '</button>';
+    }).join("");
+
+    var mapCard =
+      '<div class="card mt-4 stack">' +
+        '<div class="card__head"><div class="card__title">Last 7 days</div></div>' +
+        '<div class="ms-map">' +
+          '<div id="ms-map"></div>' +
+          '<div class="stack">' +
+            '<div class="ms-detail__k">' + (neg.length ? 'Furthest below the floor' : 'Every group is at its floor') + '</div>' +
+            (gaps ? '<div class="ms-gaps">' + gaps + '</div>' : '') +
+            (neg.length > 6 ? '<p class="faint text-xs">+ ' + (neg.length - 6) + ' more under Neglected, below.</p>' : '') +
+          '</div>' +
+        '</div>' +
+        '<p class="faint text-xs">Shaded by direct sets in the last 7 days against each group\'s weekly floor: ' +
+        'grey is none, red is at or above the floor. It ignores the window selector below. ' +
+        'Tap a shape or a row for the same detail.</p>' +
+      '</div>';
+
+    el.innerHTML = head + tiles + mapCard + table + negCard;
+    renderMap(el.querySelector("#ms-map"), model(s, 7));
     wire(el);
+  }
+
+  /* --- the 7-day heat map: direct sets against the floor ------------------- */
+  function renderMap(host, rows7) {
+    if (!host || !App.bodymap) return;
+    var by = {}, values = {};
+    rows7.forEach(function (r) {
+      by[r.key] = r;
+      values[r.key] = r.floor > 0 ? Math.min(1, r.direct / r.floor) : 0;
+    });
+    App.bodymap.render(host, {
+      mode: "heat", values: values,
+      label: function (k) { return by[k].direct + " of " + by[k].floor + " direct sets, 7 d"; },
+      legend: ["None", "At the floor"]
+    }, { onTap: openDetail });
   }
 
   /* --- detail modal: what trains this group, and where it stands ---------- */

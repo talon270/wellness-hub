@@ -534,9 +534,9 @@ Every stage reruns the full suite: `check-workout.py`, `check-syncmerge.js`, `ch
 **What to paste.** Use the same text in every build window, changing only the window and the step:
 
 ```
-You are window W10 of plans/PLAN-fitness-control-and-coverage.md. Read that
+You are window W20 of plans/PLAN-fitness-control-and-coverage.md. Read that
 plan and plans/PROGRESS-fitness-control-and-coverage.md in full, then do step
-3.3 and nothing else, following Part G's rules. Append your progress entry
+4.8 and nothing else, following Part G's rules. Append your progress entry
 when you're done, then stop.
 ```
 
@@ -545,7 +545,7 @@ In W1 only, add one sentence: *The progress log doesn't exist yet, so create it.
 Review windows get this instead:
 
 ```
-You are review window R2 of plans/PLAN-fitness-control-and-coverage.md. Read
+You are review window R4 of plans/PLAN-fitness-control-and-coverage.md. Read
 the plan, the progress log and the Stage 2 diff (git diff -- fitness js tools
 service-worker.js index.html README.md). Re-run every harness in Part F, drive
 the changed screens yourself, and report findings ranked with the house

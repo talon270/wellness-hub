@@ -182,6 +182,7 @@
         <section class="view hide" id="view-program"    data-view="program"></section>
         <section class="view hide" id="view-skills"     data-view="skills"></section>
         <section class="view hide" id="view-muscles"    data-view="muscles"></section>
+        <section class="view hide" id="view-exercises"  data-view="exercises"></section>
         <section class="view hide" id="view-running"    data-view="running"></section>
         <section class="view hide" id="view-progress"   data-view="progress"></section>
         <section class="view hide" id="view-evaluation" data-view="evaluation"></section>
@@ -515,9 +516,16 @@
 <script src="fitness/basalt.js"></script>   <!-- the calisthenics engine -->
 <script src="fitness/muscles.data.js"></script> <!-- exercise -> muscle map -->
 <script src="fitness/coverage.js"></script>     <!-- which coverage slots a finisher or mini-session picks -->
+<script src="fitness/bodymap.data.js"></script> <!-- front/back body drawing, one region per muscle group -->
+<script src="fitness/content/batch-a.js"></script>  <!-- written exercise guides: push, shoulder, dip -->
+<script src="fitness/content/batch-b.js"></script>  <!-- guides: row, pull, squat, hinge, core -->
+<script src="fitness/content/batch-c1.js"></script> <!-- guides: upper-body coverage -->
+<script src="fitness/content/batch-c2.js"></script> <!-- guides: lower-body and trunk coverage -->
 <script src="fitness/phases.data.js"></script>  <!-- per-phase activation + pose rigs -->
 <script src="fitness/phases.js"></script>       <!-- phase visualiser in the guide modal -->
+<script src="fitness/bodymap.js"></script>      <!-- body map renderer: tiers in the guide, heat on Muscles -->
 <script src="fitness/muscles.js"></script>      <!-- muscle coverage + conditioning levels -->
+<script src="fitness/directory.js"></script>    <!-- the Exercises section: every movement, its guide, muscles and your history -->
 
 <div id="wh-tour" class="wh-tour" hidden role="dialog" aria-modal="true" aria-label="Guided tour">
   <div id="wh-tour-spot" class="wh-tour-spot"></div>

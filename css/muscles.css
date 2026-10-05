@@ -217,3 +217,22 @@
 @media (prefers-reduced-motion: reduce) {
   .ms-strip__done { transition: none; }
 }
+
+/* --- 7-day map card: the figure beside its text twin ---------------------- */
+.ms-map {
+  display: grid; gap: var(--sp-5); align-items: center;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+.ms-gaps { display: grid; gap: var(--sp-2); }
+.ms-gap {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px var(--sp-3); align-items: center;
+  padding: var(--sp-3); border-radius: var(--r-sm);
+  background: var(--ink-700); border: 1px solid transparent;
+  color: var(--text-200); font: inherit; text-align: left; cursor: pointer;
+  transition: border-color .16s var(--ease);
+}
+.ms-gap:hover { border-color: var(--line-2); }
+.ms-gap__name { font-weight: 600; color: var(--text-100); }
+.ms-gap__n { font-size: var(--fs-xs); color: var(--warn); }
+.ms-gap__bar { grid-column: 1 / -1; display: flex; }
+.ms-gap .ms-bar { background: var(--ink-650); }

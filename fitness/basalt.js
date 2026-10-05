@@ -4938,6 +4938,10 @@
      EXERCISE GUIDE MODAL
      ----------------------------------------------------------------------- */
   function openGuideModal(exId) {
+    /* The Exercises section is the guide now (plan E3): the workout, Skills and
+       the directory open the same page. The modal below stays as the fallback
+       for a build where directory.js didn't load. */
+    if (window.App && App.directory && App.directory.has(exId) && App.directory.open(exId)) return;
     var ex = (window.EXERCISE_DB && window.EXERCISE_DB[exId]) || (DB && DB.getExercise && DB.getExercise(exId));
     if (!ex) {
       // Fallback: try looking up by pattern + level from DB
