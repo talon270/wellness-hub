@@ -264,8 +264,13 @@
     var week = weekWork(s);
     var last = lastTrainedMap(s);
     var targets = weeklyTargets(s);
+    /* Direct sets (primary mover only) in the last 7 days, from the same
+       count the finisher picks by, so this screen and the selector can't
+       disagree about what is short. */
+    var cov = window.Coverage ? window.Coverage.status(s.sessions, App.lib.today(), []) : {};
 
     return GROUPS.map(function (g) {
+      var c = cov[g.key] || { direct: 0, floor: 0 };
       var total   = all[g.key] || 0;
       var inWin   = win[g.key] || 0;
       var w7      = week[g.key] || 0;
@@ -274,6 +279,7 @@
       var info    = levelInfo(total);
       return {
         key: g.key, label: g.label, short: g.short, region: g.region,
+        direct: c.direct, floor: c.floor, floorVia: (window.MUSCLE_FLOORS && window.MUSCLE_FLOORS[g.key] || {}).via,
         target: target, targetFor: targets.template,
         work: total, windowWork: inWin, week: w7,
         ratio: ratio, bucket: bucketFor(ratio, w7), bucketLabel: BUCKET_LABEL[bucketFor(ratio, w7)],
@@ -284,14 +290,18 @@
     });
   }
 
-  /* Groups untouched for 7+ days, worst first. Drives the Neglected list. */
+  /* Groups below their weekly floor of direct sets, furthest short first
+     (plan D4). Biceps that only ever assist in rows read "On target" against
+     the template (F7) but sit here at 0 of 6. "No direct work for 7+ days" is
+     the same test: every floor is above 0. */
   function neglected(s) {
+    var short = function (r) { return (r.floor - r.direct) / r.floor; };
     return model(s, 7).filter(function (r) {
-      return r.lastDays == null || r.lastDays >= 7;
+      return r.floor > 0 && r.direct < r.floor;
     }).sort(function (a, b) {
       var av = a.lastDays == null ? 9999 : a.lastDays;
       var bv = b.lastDays == null ? 9999 : b.lastDays;
-      return bv - av;
+      return (short(b) - short(a)) || (bv - av);
     });
   }
 
@@ -464,7 +474,7 @@
         App.util.statTile("Groups trained", trainedThisWeek + "<small>/" + rows.length + "</small>", "in the last 7 days") +
         App.util.statTile("Avg conditioning", "L" + avgLevel.toFixed(1), "across all groups") +
         App.util.statTile("Total work", String(totalWork), "work units, all time") +
-        App.util.statTile("Neglected", String(neg.length), neg.length ? "7+ days untouched" : "nothing overdue") +
+        App.util.statTile("Neglected", String(neg.length), neg.length ? "below the weekly floor" : "every group at its floor") +
       '</div>';
 
     var seg = '<div class="seg ms-seg" id="ms-window">' + WINDOWS.map(function (w) {
@@ -479,6 +489,8 @@
           '<span class="ms-row__bar">' + bar(r.pct, r.work) +
             '<span class="ms-row__units mono">' + r.work + ' units</span></span>' +
           '<span class="ms-row__win mono">' + r.windowWork + '</span>' +
+          '<span class="ms-row__direct mono' + (r.direct < r.floor ? ' is-short' : '') + '">' + r.direct + ' of ' + r.floor +
+            '<span class="ms-row__dsuffix"> direct sets, 7 d</span></span>' +
           '<span class="ms-row__heat"><span class="ms-dot ms-dot--' + r.bucket + '"></span>' + r.bucketLabel + '</span>' +
           '<span class="ms-row__last mono">' + lastText(r.lastDays) + '</span>' +
         '</button>';
@@ -493,13 +505,15 @@
           '<div class="ms-row ms-row--head">' +
             '<span>Group</span><span>Conditioning</span><span>Progress</span>' +
             '<span class="ms-row__win">' + esc(winLabel) + '</span>' +
-            '<span>Vs. target</span><span>Last</span>' +
+            '<span>Direct sets (7 d)</span><span>Vs. your template</span><span>Last</span>' +
           '</div>' +
           tableRows +
         '</div>' +
         '<p class="faint text-xs">Conditioning is accumulated training volume, not a strength measurement — ' +
         'the work-unit count next to each level is the whole of it. A rep is one unit; five seconds of a hold is one unit. ' +
-        'Levels never decay; "this week" is what tells you whether something has gone cold.</p>' +
+        'Levels never decay; "this week" is what tells you whether something has gone cold. ' +
+        '<b>Direct sets</b> count only exercises where the group is a primary mover, against a weekly floor of 3 for the groups your main slots train and 6 for those only coverage work reaches (3 for rotator cuff, neck and shins). ' +
+        'The floors are product choices, not validated minimums. <b>Vs. your template</b> measures against your own template\'s weekly volume, so a group the template barely trains can read On target there.</p>' +
       '</div>';
 
     var negCard = "";
@@ -508,12 +522,12 @@
         '<div class="card mt-4 stack">' +
           '<div class="card__head"><div class="card__title">Neglected</div>' +
             '<span class="badge">' + neg.length + ' group' + (neg.length === 1 ? "" : "s") + '</span></div>' +
-          '<p class="muted text-sm">Nothing here for a week or more. Each one lists the movements that would fix it.</p>' +
+          '<p class="muted text-sm">Below the weekly floor of direct sets, furthest short first. A group your main slots only assist, like biceps in rows, shows up here even when Vs. your template reads On target. Each one lists the movements that would fix it.</p>' +
           '<div class="ms-neg">' + neg.map(function (r) {
             return '<button class="ms-neg__item" data-ms-detail="' + r.key + '" type="button">' +
               '<span class="ms-neg__name">' + esc(r.label) + '</span>' +
-              '<span class="ms-neg__meta mono">' + lastText(r.lastDays) + '</span>' +
-              '<span class="ms-neg__go">Show movements →</span>' +
+              '<span class="ms-neg__meta mono">' + r.direct + ' of ' + r.floor + ' direct</span>' +
+              '<span class="ms-neg__go">Last trained ' + lastText(r.lastDays) + ' · show movements →</span>' +
             '</button>';
           }).join("") + '</div>' +
         '</div>';
@@ -569,7 +583,9 @@
         '<div class="ms-detail__grid">' +
           '<div><div class="ms-detail__k">This week</div><div class="ms-detail__v mono">' + row.week + '</div></div>' +
           '<div><div class="ms-detail__k">Weekly target</div><div class="ms-detail__v mono">' + row.target + '</div><div class="faint text-xs">' + esc(row.targetFor) + ' · assumes ' + WEEK.sets + ' sets a slot</div></div>' +
-          '<div><div class="ms-detail__k">Status</div><div class="ms-detail__v">' + row.bucketLabel + '</div></div>' +
+          '<div><div class="ms-detail__k">Direct sets (7 d)</div><div class="ms-detail__v mono">' + row.direct + ' of ' + row.floor + '</div>' +
+            '<div class="faint text-xs">floor of ' + row.floor + ' from ' + (row.floorVia === "main" ? 'your main slots' : 'coverage work') + ' · a product choice</div></div>' +
+          '<div><div class="ms-detail__k">Vs. your template</div><div class="ms-detail__v">' + row.bucketLabel + '</div></div>' +
           '<div><div class="ms-detail__k">Last trained</div><div class="ms-detail__v mono">' + lastText(row.lastDays) + '</div></div>' +
         '</div>' +
         '<div class="ms-detail__k mt-3">Movements that train it</div>' +

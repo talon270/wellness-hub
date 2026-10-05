@@ -20,6 +20,17 @@
  *      it maps to exists.
  *   6. The two Stage 2 movements have a DB entry, a muscle map row and a phase
  *      entry, and every phase entry is well formed.
+ *   7. The nine equipment tokens, and the exercises plan C5 moved onto the four
+ *      new ones (bands, parallettes, dipBars, lowBar), exactly as written.
+ *   8. Grips: the capable exercises exist, are push-ups, and carry no setup
+ *      that would clash with a grip; the pain swaps that name a grip.
+ *   9. Joint stress: every exercise has an entry, every joint is reachable,
+ *      and every score is 1 or 2 on a known joint.
+ *  10. Coverage slots (plan D2, Stage 3): each slot has the plan's number of
+ *      exercises, all `accessory` in the DB with cues, mistakes and an injury
+ *      line; the coverage rep ranges ignore your goal; band moves have a
+ *      tension setup; the neck carries its safety copy. A slot the plan
+ *      lists for a later step is reported as pending, not skipped silently.
  *
  * Reads the DB by running basalt.js's two data blocks in a sandbox. Exits
  * non-zero on any failure, so it can gate a commit.
@@ -53,6 +64,8 @@ let failed = false;
 const fail = (msg) => { failed = true; console.error("  ✗ " + msg); };
 const ok = (msg) => console.log("  ✓ " + msg);
 const section = (t) => console.log("\n" + t);
+const TOKENS = new Set(["pullupBar", "dumbbells", "bench", "kettlebells", "rings",
+  "bands", "parallettes", "dipBars", "lowBar"]);
 const flat = (eq) => [].concat(...eq.map((t) => (Array.isArray(t) ? t : [t])));
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 
@@ -149,7 +162,6 @@ section("slots");
 /* -- 4. equipment, units, ranges ------------------------------------------ */
 section("equipment, units and ranges");
 {
-  const TOKENS = new Set(["pullupBar", "dumbbells", "bench", "kettlebells", "rings"]);
   const bad = [];
   for (const [id, e] of Object.entries(EX)) {
     const d = DB[id];
@@ -159,8 +171,10 @@ section("equipment, units and ranges");
     if (!same(tokens, d.equipment || [])) bad.push(`${id}: equipment ${JSON.stringify(e.equipment)} ≠ DB ${JSON.stringify(d.equipment)}`);
     const timed = e.kind === "hold" || e.kind === "skill";
     if (timed !== (d.mode === "hold")) bad.push(`${id}: kind ${e.kind} but DB mode "${d.mode}"`);
-    if (e.kind === "loaded") {
-      if (e.loadMode !== "perHand" && e.loadMode !== "total") bad.push(`${id}: loaded needs loadMode perHand|total`);
+    /* A hold can be loaded too (a farmer hold: seconds at a weight). Training
+       reads loadMode on any kind, and K-hold in check-training.js runs one. */
+    if (e.kind === "loaded" || (e.kind === "hold" && e.loadMode)) {
+      if (e.loadMode !== "perHand" && e.loadMode !== "total") bad.push(`${id}: ${e.kind} with a load needs loadMode perHand|total`);
       if (!tokens.some((t) => TD.LOAD_STEP_KG[t])) bad.push(`${id}: loaded but no implement with a load step`);
     } else if (e.loadMode) bad.push(`${id}: loadMode on a ${e.kind} exercise`);
     if (e.perSide && e.kind !== "loaded") bad.push(`${id}: perSide is only for loaded; unilateral implies it`);
@@ -207,7 +221,7 @@ section("setups");
   const bad = [];
   for (const [id, s] of Object.entries(TD.SETUPS)) {
     if (!EX[id]) bad.push(`${id}: no such exercise`);
-    if (!["surface", "bodyAngle", "band"].includes(s.key)) bad.push(`${id}: setup key "${s.key}"`);
+    if (!["surface", "bodyAngle", "band", "lean"].includes(s.key)) bad.push(`${id}: setup key "${s.key}"`);
     if (s.values.length < 2) bad.push(`${id}: a setup needs at least two values`);
     if (new Set(s.values.map((v) => v.id)).size !== s.values.length) bad.push(`${id}: duplicate setup ids`);
   }
@@ -258,6 +272,179 @@ section("Stage 2 movements and phases");
   }
   bad.forEach(fail);
   if (!bad.length) ok(`push_incline and squat_split are complete; ${Object.keys(W.PHASE_MAP).length} phase entries well formed`);
+}
+
+/* -- 8. the equipment split (plan C5) -------------------------------------- */
+section("equipment tokens");
+{
+  // Plan C5, verbatim. An array entry is any-of.
+  const C5 = {
+    pull_alt_bandassist: ["pullupBar", "bands"],
+    dip_2: ["lowBar"], dip_4: ["lowBar"], dip_3: ["dipBars"],
+    dip_6: ["dipBars", ["dumbbells", "kettlebells"]],
+    pull_alt_australian: [["lowBar", "rings"]],
+    skill_frontlever_1: [["pullupBar", "rings"]], skill_frontlever_2: [["pullupBar", "rings"]],
+    skill_frontlever_3: [["pullupBar", "rings"]], skill_frontlever_4: [["pullupBar", "rings"]],
+    core_3: [["bench", "parallettes"]], core_4: [["bench", "parallettes"]],
+    skill_lsit_1: [["bench", "parallettes"]], skill_lsit_2: [["bench", "parallettes"]],
+    skill_lsit_3: [["bench", "parallettes"]], skill_vsit: [["bench", "parallettes"]]
+  };
+  const bad = [];
+  for (const [id, want] of Object.entries(C5))
+    if (JSON.stringify(EX[id].equipment) !== JSON.stringify(want))
+      bad.push(`${id}: ${JSON.stringify(EX[id].equipment)}, plan C5 says ${JSON.stringify(want)}`);
+  // every new token is used, and the old catch-all is only used by real bars
+  for (const t of ["bands", "parallettes", "dipBars", "lowBar"])
+    if (!Object.values(EX).some((e) => flat(e.equipment).includes(t))) bad.push(`token ${t} is used by no exercise`);
+  // EQUIP_LABEL lives in a UI block the sandbox doesn't run, so read its keys from the text.
+  const lm = basalt.match(/var EQUIP_LABEL = (\{[\s\S]*?\});/);
+  const labels = lm ? vm.runInNewContext("(" + lm[1] + ")") : {};
+  if (!lm) bad.push("could not find EQUIP_LABEL in basalt.js");
+  for (const t of TOKENS) if (!labels[t]) bad.push(`EQUIP_LABEL has no label for ${t}`);
+  bad.forEach(fail);
+  if (!bad.length) ok(`${Object.keys(C5).length} exercises carry plan C5's tokens; all ${TOKENS.size} tokens are used and labelled`);
+}
+
+/* -- 9. grips --------------------------------------------------------------- */
+section("grips");
+{
+  const G = TD.GRIPS, bad = [];
+  const ids = G.values.map((v) => v.id);
+  if (ids.join() !== "palms,knuckles") bad.push(`grip values ${ids.join()}, expected palms,knuckles in that order`);
+  if (new Set(G.exercises).size !== G.exercises.length) bad.push("duplicate grip exercise");
+  for (const id of G.exercises) {
+    const e = EX[id];
+    if (!e) { bad.push(`${id}: no such exercise`); continue; }
+    if (e.slot !== "push") bad.push(`${id}: a grip is for the push slot, not ${e.slot}`);
+    if (e.kind !== "reps" && e.kind !== "eccentric") bad.push(`${id}: kind ${e.kind} can't take a grip`);
+    if (flat(e.equipment).some((t) => t !== "bench")) bad.push(`${id}: needs ${flat(e.equipment).join(", ")}, but a grip is a floor push-up`);
+    if (SETUPS_HAS(id, "grip")) bad.push(`${id}: setup already uses the key grip`);
+  }
+  // the ones the plan keeps on palms
+  for (const id of ["push_3", "push_5", "push_6"]) if (G.exercises.includes(id)) bad.push(`${id} must stay on palms`);
+  // only knuckles relieve a joint, and only by a whole point on a known joint
+  for (const v of G.values) for (const [j, n] of Object.entries(v.relief || {}))
+    if (!TD.JOINTS.includes(j) || n !== 1) bad.push(`grip ${v.id}: relief ${j}:${n}`);
+  if (G.values[0].relief) bad.push("palms is the baseline and relieves nothing");
+  // pain swaps that are a grip
+  const names = new Set();
+  for (const p of Object.values(W.SUBSTITUTIONS)) for (const b of Object.values(p)) for (const s of Object.values(b)) { names.add(s.era1.name); names.add(s.era2.name); }
+  for (const [name, setup] of Object.entries(TD.SUBSTITUTION_SETUPS)) {
+    if (!names.has(name)) bad.push(`SUBSTITUTION_SETUPS "${name}" is not a substitution name`);
+    if (name in TD.SUBSTITUTION_IDS) bad.push(`"${name}" is in both SUBSTITUTION_IDS and SUBSTITUTION_SETUPS`);
+    if (!ids.includes(setup.grip)) bad.push(`"${name}": grip "${setup.grip}"`);
+    if (Object.keys(setup).length !== 1) bad.push(`"${name}": a substitution setup carries only a grip`);
+  }
+  for (const n of ["Fist Push-up", "Knuckle/Parallette Push-up"])
+    if (!TD.SUBSTITUTION_SETUPS[n]) bad.push(`F4: "${n}" must map to a knuckles grip`);
+  bad.forEach(fail);
+  if (!bad.length) ok(`${G.exercises.length} push-ups take a grip; ${Object.keys(TD.SUBSTITUTION_SETUPS).length} pain swaps now name one`);
+  function SETUPS_HAS(id, key) { return TD.SETUPS[id] && TD.SETUPS[id].key === key; }
+}
+
+/* -- 10. joint stress ------------------------------------------------------- */
+section("joint stress");
+{
+  const J = TD.JOINT_STRESS, bad = [];
+  const joints = TD.JOINTS;
+  if (joints.join() !== "wrist,elbow,shoulder,neck,lowerBack,hip,knee,ankle") bad.push(`JOINTS is ${joints.join()}`);
+  for (const id of Object.keys(EX)) if (!J[id]) bad.push(`${id} (${DB[id].name}): no joint-stress entry`);
+  for (const id of Object.keys(J)) if (!EX[id]) bad.push(`joint-stress entry for unknown exercise ${id}`);
+  const used = new Set();
+  for (const [id, row] of Object.entries(J)) {
+    const keys = Object.keys(row);
+    if (!keys.length) bad.push(`${id}: empty entry (every exercise loads some joint)`);
+    for (const [j, n] of Object.entries(row)) {
+      if (!joints.includes(j)) bad.push(`${id}: unknown joint "${j}"`);
+      else used.add(j);
+      if (n !== 1 && n !== 2) bad.push(`${id}.${j}: score ${n} (only 1 or 2; omit zeros)`);
+    }
+  }
+  joints.filter((j) => !used.has(j)).forEach((j) => bad.push(`no exercise loads ${j}: a limitation on it would filter nothing`));
+  // sanity ordering the rubric implies, so a typo can't invert it
+  const order = [["push_1", "push_2", "wrist"], ["push_incline", "push_2", "wrist"], ["push_2", "push_3", "elbow"],
+    ["squat_1", "squat_5", "ankle"], ["pull_alt_bandassist", "pull_4", "shoulder"], ["pull_2", "pull_3", "elbow"]];
+  for (const [lo, hi, j] of order)
+    if (!((J[lo][j] || 0) <= (J[hi][j] || 0))) bad.push(`${lo} loads ${j} more than ${hi}`);
+  // a grip that relieves a joint has to be one the capable exercises load
+  for (const id of TD.GRIPS.exercises)
+    if (!J[id].wrist) bad.push(`${id}: takes a knuckles grip but loads no wrist`);
+  bad.forEach(fail);
+  const twos = Object.values(J).reduce((n, r) => n + Object.values(r).filter((v) => v === 2).length, 0);
+  const all = Object.values(J).reduce((n, r) => n + Object.keys(r).length, 0);
+  if (!bad.length) ok(`${Object.keys(J).length} exercises scored on ${joints.length} joints (${all} scores, ${twos} of them 2)`);
+}
+
+/* -- 11. coverage slots (plan D2) ------------------------------------------- */
+section("coverage slots");
+{
+  /* Plan D2's table, counted: how many exercises each coverage slot holds. The
+     first seven are step 3.1, the other eight step 3.2, so all fifteen must
+     exist now and the 64 total is checked. */
+  const PLAN_D2 = {
+    curl: 5, lateral: 4, reardelt: 5, cuff: 4, traps: 3, neck: 3, grip: 5,
+    quad: 6, hamstring: 5, calf: 4, shin: 2, adductor: 4, abductor: 4, antirot: 6, backext: 4
+  };
+  const STEP_3_1 = ["curl", "lateral", "reardelt", "cuff", "traps", "neck", "grip"];
+  const STEP_3_2 = ["quad", "hamstring", "calf", "shin", "adductor", "abductor", "antirot", "backext"];
+  const MUST_EXIST = STEP_3_1.concat(STEP_3_2);
+  const LIGHT = ["cuff", "neck", "shin"];              // 12–20 reps, the rest 10–15
+  const bad = [];
+  const covSlots = Object.entries(SLOTS).filter(([, s]) => s.coverage).map(([k]) => k);
+  const present = covSlots.filter((k) => k in PLAN_D2);
+  MUST_EXIST.filter((k) => !covSlots.includes(k)).forEach((k) => bad.push(`coverage slot "${k}" (step ${STEP_3_1.includes(k) ? "3.1" : "3.2"}) doesn't exist`));
+  covSlots.filter((k) => !(k in PLAN_D2)).forEach((k) => bad.push(`coverage slot "${k}" is not in plan D2`));
+  Object.keys(SLOTS).filter((k) => k in PLAN_D2 && !SLOTS[k].coverage).forEach((k) => bad.push(`slot "${k}" is a plan D2 slot but isn't marked coverage: true`));
+
+  let total = 0;
+  for (const slot of present) {
+    const ids = Object.keys(EX).filter((id) => EX[id].slot === slot);
+    total += ids.length;
+    if (ids.length !== PLAN_D2[slot]) bad.push(`${slot}: ${ids.length} exercises, plan D2 says ${PLAN_D2[slot]}`);
+    if (!Array.isArray(SLOTS[slot].trains) || !SLOTS[slot].trains.length) bad.push(`${slot}: no \`trains\``);
+    for (const id of ids) {
+      const d = DB[id] || {};
+      if (!id.startsWith(`acc_${slot}_`)) bad.push(`${id}: coverage ids are acc_${slot}_<slug>`);
+      if (d.pattern !== "accessory") bad.push(`${id}: DB pattern "${d.pattern}", plan D2 says accessory`);
+      if (!((d.cues || []).length >= 3 && d.cues.length <= 5)) bad.push(`${id}: ${(d.cues || []).length} cues (3–5)`);
+      if (!((d.mistakes || []).length >= 1 && d.mistakes.length <= 2)) bad.push(`${id}: ${(d.mistakes || []).length} mistakes (1–2)`);
+      if (!d.readiness || !d.injury) bad.push(`${id}: missing readiness or injury`);
+      if (EX[id].kind === "skill") bad.push(`${id}: a skill-kind move can't be a coverage exercise (plan decisions table)`);
+      // plan decisions table: coverage reps are 10–15 whatever your goal, 12–20 for cuff, neck and shins
+      if (["reps", "loaded", "unilateral"].includes(EX[id].kind)) {
+        const want = LIGHT.includes(slot) ? [12, 20] : [10, 15];
+        for (const goal of [undefined, "strength", "size", "both"]) {
+          const r = TD.rangeFor(id, goal);
+          if (r.lo !== want[0] || r.hi !== want[1]) bad.push(`${id}: ${goal || "no goal"} → ${r.lo}–${r.hi}, plan says ${want.join("–")}`);
+        }
+      }
+      // a band loads a movement, so it carries a tension setup, light to heavy (plan C5)
+      if (flat(EX[id].equipment).includes("bands") && EX[id].kind === "reps") {
+        const st = TD.SETUPS[id];
+        if (!st || st.key !== "band" || st.values.map((v) => v.id).join() !== "light,medium,heavy") bad.push(`${id}: a band move needs a band setup light,medium,heavy`);
+      }
+    }
+  }
+  // the three moves plan D2 marks "(branch)": off the path, offered by a main exercise, never a skill
+  for (const id of ["acc_hamstring_slrdl", "acc_calf_bentknee", "acc_antirot_deadbug"]) {
+    const e = EX[id];
+    if (!e) { bad.push(`${id}: plan D2 names it as a branch move and it doesn't exist`); continue; }
+    if (e.branch !== "skill" || e.kind === "skill") bad.push(`${id}: a branch move is branch "skill" with a non-skill kind (got ${e.branch}/${e.kind})`);
+    if (!Object.values(EX).some((o) => o.branch === "main" && o.offer.includes(id))) bad.push(`${id}: no main exercise offers it`);
+  }
+  // the first catalogue hold you load by the side: seconds at a weight (plan 2.2's note)
+  { const e = EX.acc_antirot_suitcase;
+    if (!e || e.kind !== "hold" || !e.loadMode) bad.push("acc_antirot_suitcase: plan D2 calls it a loaded hold (kind hold with a loadMode)"); }
+  // the neck's safety copy, and "avoid neck" excluding the whole slot (plan D2, C3)
+  if (present.includes("neck"))
+    for (const id of Object.keys(EX).filter((i) => EX[i].slot === "neck")) {
+      const inj = (DB[id] || {}).injury || "";
+      if (!/dizz/i.test(inj) || !/tingl/i.test(inj) || !/jerk/i.test(inj)) bad.push(`${id}: the neck injury line must mention jerking, dizziness and tingling`);
+      if (TD.JOINT_STRESS[id].neck !== 2) bad.push(`${id}: neck stress must be 2 so "avoid neck" excludes the slot`);
+    }
+  if (total !== 64) bad.push(`${total} coverage exercises, plan D2 says 64`);
+  bad.forEach(fail);
+  if (!bad.length) ok(`${present.length} coverage slots, ${total} exercises, each at the plan's count`);
 }
 
 console.log(failed ? "\nFAILED\n" : "\nOK\n");

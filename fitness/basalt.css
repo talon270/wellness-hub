@@ -1172,6 +1172,25 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 .pg-trow { display:grid; grid-template-columns:84px 1fr auto; gap:var(--sp-3); align-items:center; }
 .pg-trow__p { font-size:var(--fs-xs); color:var(--text-300); text-transform:capitalize; }
 .pg-trow__n { font-size:var(--fs-sm); color:var(--text-100); min-width:0; overflow-wrap:break-word; }
+/* Your controls over a slot (plan C2, C4): the buttons under a row, and the
+   panel they open. One wrapper per slot so the row and its panel are one card. */
+.pg-slot { display:grid; gap:var(--sp-3); min-width:0; }
+.pg-acts { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.pg-panel { border-top:1px solid var(--line); padding-top:var(--sp-3); min-width:0; }
+/* Weekday pins on a coverage slot (plan D3). The pressed tint is the primary
+   colour in both themes; aria-pressed carries the state in words. */
+.pg-pins { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:6px; }
+.pg-pins .btn.is-on { background:var(--primary-soft); color:var(--primary); border-color:var(--primary); }
+.pk-row { display:flex; flex-wrap:wrap; gap:var(--sp-2); align-items:center; }
+.pk-row .swap-opt { flex:1 1 220px; width:auto; grid-template-columns:auto 1fr; }
+.pk-tags { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:4px; }
+.pk-tags:empty { display:none; }
+.pk-acts { display:flex; gap:6px; flex-wrap:wrap; }
+#set-weights [hidden] { display:none !important; }
+@media (max-width: 520px) {
+  .pg-trow { grid-template-columns:64px 1fr; }
+  .pg-trow > .kv__v { grid-column:2; }
+}
 .bench-row { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); padding:var(--sp-3) 0; border-bottom:1px solid var(--line); }
 .bench-row:last-child { border-bottom:0; }
 .bench-row__meta { min-width:0; }

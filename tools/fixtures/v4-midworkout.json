@@ -1,0 +1,912 @@
+{
+ "_note": "localStorage as the Stage 1 build (schema v4, git c7015a2 plus the plan's W1 harness, no fix applied) left it, captured 2026-10-03 by real clicks, with the clock set to Asia/Kolkata dates: onboarded on 27 Sep with a pull-up bar, dumbbells, bench and kettlebells (rotation template); the assessment answers were Push-up, Dead Hang, Pause Squat, Hip Thrust, Hollow Body Hold, Pike Push-up and Parallel Bar Dip, so the dip slot holds dip_3; one finished workout on 27 Sep and one on 29 Sep, every set rated Just right; then the next workout begun at 07:30 IST on 1 Oct with three sets logged on its first movement and not finished. K9 in plans/PLAN-fitness-control-and-coverage.md seeds the Stage 2 upgrade test from it, and Stage 2's step 2.3 checks that Parallel Bar Dip makes it infer dipBars. Never regenerate it with a newer build: its value is that a v4 build wrote it.",
+ "ironframe.ui": {
+  "muscle.seenLevels": {
+   "chest": 1,
+   "delts_front": 1,
+   "delts_side": 1,
+   "triceps": 1,
+   "lats": 1,
+   "upper_back": 1,
+   "lower_back": 1,
+   "biceps": 1,
+   "forearms": 1,
+   "abs": 1,
+   "obliques": 1,
+   "glutes": 1,
+   "quads": 1,
+   "hamstrings": 1
+  },
+  "section": "today",
+  "today.workout": {
+   "dayType": "legs",
+   "startedISO": "2026-10-01T02:00:01.289Z",
+   "warmup": [
+    false,
+    false,
+    false,
+    false,
+    false
+   ],
+   "cooldown": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "exercises": [
+    {
+     "slot": "squat",
+     "pattern": "squat",
+     "id": "squat_2",
+     "name": "Pause Squat",
+     "level": 2,
+     "mode": "reps",
+     "unit": "reps",
+     "equipment": [],
+     "cues": [
+      "Descend into a full squat as normal.",
+      "Hold the bottom position for 3 seconds, staying tight.",
+      "Keep the chest up and knees tracking the toes during the pause.",
+      "Drive up explosively out of the hole."
+     ],
+     "mistakes": [
+      "Relaxing or 'bouncing' in the bottom instead of holding tension.",
+      "Letting the chest fall forward during the pause."
+     ],
+     "readiness": "Advance at 15 reps with a controlled 3-sec pause each.",
+     "injury": "The pause builds control that protects the knees in deeper variations.",
+     "rx": {
+      "exerciseId": "squat_2",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       6,
+       12
+      ],
+      "unit": "reps",
+      "acceptedAt": "2026-09-27T12:30:01.826Z",
+      "why": "your assessment \u2014 unverified until you log it"
+     },
+     "range": [
+      6,
+      12
+     ],
+     "target": 6,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 120,
+     "sets": [
+      {
+       "value": 7,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": 8,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": 9,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    },
+    {
+     "slot": "hinge",
+     "pattern": "hinge",
+     "id": "hinge_2",
+     "name": "Hip Thrust",
+     "level": 2,
+     "mode": "reps",
+     "unit": "reps",
+     "equipment": [
+      "bench"
+     ],
+     "cues": [
+      "Upper back on a bench, feet flat, shins vertical at the top.",
+      "Tuck the chin and ribs down to keep a neutral spine.",
+      "Drive the hips up until the torso is parallel to the floor.",
+      "Pause and squeeze the glutes, then lower under control."
+     ],
+     "mistakes": [
+      "Hyperextending the back instead of finishing with the glutes.",
+      "Letting the knees cave in on the way up."
+     ],
+     "readiness": "Advance at 15 reps with a full lockout and pause.",
+     "injury": "Keep the chin tucked to avoid loading the neck/lumbar.",
+     "rx": {
+      "exerciseId": "hinge_2",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       6,
+       12
+      ],
+      "unit": "reps",
+      "acceptedAt": "2026-09-27T12:30:01.826Z",
+      "why": "your assessment \u2014 unverified until you log it"
+     },
+     "range": [
+      6,
+      12
+     ],
+     "target": 6,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 120,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    },
+    {
+     "slot": "core",
+     "pattern": "core",
+     "id": "core_2",
+     "name": "Hollow Body Hold",
+     "level": 2,
+     "mode": "hold",
+     "unit": "sec",
+     "equipment": [],
+     "cues": [
+      "Lie on your back, press the lower back flat into the floor.",
+      "Lift the shoulders and legs, arms overhead.",
+      "Hold a shallow 'banana' shape with constant abdominal tension.",
+      "Lower the arms/legs to make it easier, raise them to make it harder."
+     ],
+     "mistakes": [
+      "Lower back arching off the floor (the cardinal sin).",
+      "Holding the breath instead of staying braced."
+     ],
+     "readiness": "Advance at a 30-sec hold with legs low (also the Era I core benchmark).",
+     "injury": "Keep the lumbar pinned \u2014 arching turns this into a back exercise.",
+     "rx": {
+      "exerciseId": "core_2",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       15,
+       30
+      ],
+      "unit": "sec",
+      "acceptedAt": "2026-09-27T12:30:01.826Z",
+      "why": "your assessment \u2014 unverified until you log it"
+     },
+     "range": [
+      15,
+      30
+     ],
+     "target": 15,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 60,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    }
+   ],
+   "notes": "",
+   "setCount": 3,
+   "volumeMode": "standard",
+   "recovery": null,
+   "dayKey": "2026-10-01"
+  },
+  "rt": null
+ },
+ "ironframe.state.v1": {
+  "version": 4,
+  "meta": {
+   "createdAt": "2026-09-27T12:30:00.169Z",
+   "updatedAt": "2026-10-01T02:00:01.289Z",
+   "onboarded": true
+  },
+  "profile": {
+   "name": "",
+   "age": null,
+   "sex": "male",
+   "heightCm": null,
+   "weightKg": null,
+   "goal": "both",
+   "weightDirection": null,
+   "activity": "moderate",
+   "bmi": null,
+   "tdee": 2800,
+   "surplusTarget": 3300,
+   "macros": {
+    "protein": 116,
+    "carbs": 413,
+    "fat": 92
+   },
+   "hydrationTargetL": 3.2
+  },
+  "equipment": {
+   "pullupBar": true,
+   "dumbbells": true,
+   "bench": true,
+   "kettlebells": true,
+   "rings": false,
+   "nothing": false
+  },
+  "prefs": {
+   "restDefaultSec": 120,
+   "restHoldSec": 60,
+   "volumeMode": "standard",
+   "sessionLength": "focused",
+   "template": "rotation"
+  },
+  "running": {
+   "goal": null,
+   "startISO": null,
+   "runDays": [
+    3,
+    6,
+    0
+   ],
+   "runLog": [],
+   "streak": {
+    "count": 0,
+    "lastISO": null,
+    "best": 0
+   },
+   "weekOffset": 0,
+   "askedWeek": null,
+   "moved": {}
+  },
+  "era": 1,
+  "benchmarks": {
+   "pushups": {
+    "label": "15 clean push-ups",
+    "metric": "reps",
+    "target": 15,
+    "current": 0,
+    "complete": false
+   },
+   "pull": {
+    "label": "5 pull-ups / 20 inverted rows",
+    "metric": "reps",
+    "target": 5,
+    "altTarget": 20,
+    "current": 0,
+    "complete": false
+   },
+   "lsit": {
+    "label": "30s L-sit tuck hold",
+    "metric": "sec",
+    "target": 30,
+    "current": 0,
+    "complete": false
+   },
+   "bulgarian": {
+    "label": "10 Bulgarian split squats /leg",
+    "metric": "reps",
+    "target": 10,
+    "current": 0,
+    "complete": false
+   },
+   "hollow": {
+    "label": "30s hollow body hold",
+    "metric": "sec",
+    "target": 30,
+    "current": 0,
+    "complete": false
+   }
+  },
+  "tiers": {
+   "push": {
+    "level": 2,
+    "repsTarget": 12,
+    "progress": 0
+   },
+   "pull": {
+    "level": 1,
+    "repsTarget": 5,
+    "progress": 0
+   },
+   "squat": {
+    "level": 2,
+    "repsTarget": 14,
+    "progress": 0
+   },
+   "hinge": {
+    "level": 2,
+    "repsTarget": 14,
+    "progress": 0
+   },
+   "core": {
+    "level": 2,
+    "repsTarget": 15,
+    "progress": 0
+   },
+   "shoulder": {
+    "level": 1,
+    "repsTarget": 6,
+    "progress": 0
+   },
+   "dip": {
+    "level": 3,
+    "repsTarget": 8,
+    "progress": 0
+   }
+  },
+  "currentPhase": {
+   "number": 1,
+   "startISO": "2026-09-27T12:30:00.169Z",
+   "lengthDays": 28,
+   "action": "start",
+   "weighIns": [],
+   "template": "rotation"
+  },
+  "sessions": [
+   {
+    "id": "s_1790512204500",
+    "dateISO": "2026-09-27T12:30:04.500Z",
+    "dayKey": "2026-09-27",
+    "type": "push",
+    "exercises": [
+     {
+      "key": "push_2",
+      "pattern": "push",
+      "name": "Push-up",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "push",
+      "rx": {
+       "exerciseId": "push_2",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        6,
+        12
+       ],
+       "unit": "reps",
+       "acceptedAt": "2026-09-27T12:30:01.826Z",
+       "why": "your assessment \u2014 unverified until you log it"
+      }
+     },
+     {
+      "key": "shoulder_1",
+      "pattern": "shoulder",
+      "name": "Pike Push-up",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "shoulder",
+      "rx": {
+       "exerciseId": "shoulder_1",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        6,
+        12
+       ],
+       "unit": "reps",
+       "acceptedAt": "2026-09-27T12:30:01.826Z",
+       "why": "your assessment \u2014 unverified until you log it"
+      }
+     },
+     {
+      "key": "dip_3",
+      "pattern": "dip",
+      "name": "Parallel Bar Dip",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "dip",
+      "rx": {
+       "exerciseId": "dip_3",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        6,
+        12
+       ],
+       "unit": "reps",
+       "acceptedAt": "2026-09-27T12:30:01.826Z",
+       "why": "your assessment \u2014 unverified until you log it"
+      }
+     },
+     {
+      "key": "core_2",
+      "pattern": "core",
+      "name": "Hollow Body Hold",
+      "era2": false,
+      "accessory": false,
+      "mode": "hold",
+      "unit": "sec",
+      "sets": [
+       {
+        "reps": 17,
+        "weight": 0
+       },
+       {
+        "reps": 17,
+        "weight": 0
+       },
+       {
+        "reps": 17,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "core",
+      "rx": {
+       "exerciseId": "core_2",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        15,
+        30
+       ],
+       "unit": "sec",
+       "acceptedAt": "2026-09-27T12:30:01.826Z",
+       "why": "your assessment \u2014 unverified until you log it"
+      }
+     }
+    ],
+    "warmupDone": false,
+    "cooldownDone": false,
+    "notes": "",
+    "volume": 81,
+    "completed": true,
+    "flags": []
+   },
+   {
+    "id": "s_1790686803204",
+    "dateISO": "2026-09-29T13:00:03.204Z",
+    "dayKey": "2026-09-29",
+    "type": "pull",
+    "exercises": [
+     {
+      "key": "pull_1",
+      "pattern": "pull",
+      "name": "Dead Hang",
+      "era2": false,
+      "accessory": false,
+      "mode": "hold",
+      "unit": "sec",
+      "sets": [
+       {
+        "reps": 27,
+        "weight": 0
+       },
+       {
+        "reps": 27,
+        "weight": 0
+       },
+       {
+        "reps": 27,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "pull",
+      "rx": {
+       "exerciseId": "pull_1",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        25,
+        45
+       ],
+       "unit": "sec",
+       "acceptedAt": "2026-09-27T12:30:01.826Z",
+       "why": "your assessment \u2014 unverified until you log it"
+      }
+     },
+     {
+      "key": "pull_alt_tabledoor",
+      "pattern": "pull",
+      "name": "Table / Door-Edge Row",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "row",
+      "rx": {
+       "exerciseId": "pull_alt_tabledoor",
+       "setup": {
+        "bodyAngle": "kneesBent"
+       },
+       "sets": 3,
+       "range": [
+        6,
+        12
+       ],
+       "unit": "reps",
+       "acceptedAt": "2026-09-27T12:30:01.826Z",
+       "why": "not sure at setup \u2014 the first movement"
+      }
+     },
+     {
+      "key": "hinge_2",
+      "pattern": "hinge",
+      "name": "Hip Thrust",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       },
+       {
+        "reps": 8,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "hinge",
+      "rx": {
+       "exerciseId": "hinge_2",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        6,
+        12
+       ],
+       "unit": "reps",
+       "acceptedAt": "2026-09-27T12:30:01.826Z",
+       "why": "your assessment \u2014 unverified until you log it"
+      }
+     },
+     {
+      "key": "core_2",
+      "pattern": "core",
+      "name": "Hollow Body Hold",
+      "era2": false,
+      "accessory": false,
+      "mode": "hold",
+      "unit": "sec",
+      "sets": [
+       {
+        "reps": 17,
+        "weight": 0
+       },
+       {
+        "reps": 17,
+        "weight": 0
+       },
+       {
+        "reps": 17,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "core",
+      "rx": {
+       "exerciseId": "core_2",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        15,
+        30
+       ],
+       "unit": "sec",
+       "acceptedAt": "2026-09-27T12:30:01.826Z",
+       "why": "your assessment \u2014 unverified until you log it"
+      }
+     }
+    ],
+    "warmupDone": false,
+    "cooldownDone": false,
+    "notes": "",
+    "volume": 72,
+    "completed": true,
+    "flags": []
+   }
+  ],
+  "bodyweightLog": [],
+  "measurements": [],
+  "sleepLog": [],
+  "nutritionLog": [],
+  "prs": [
+   {
+    "id": "pr_1790512204500_push_2",
+    "exerciseId": "push_2",
+    "exercise": "Push-up",
+    "kind": "reps",
+    "value": 8,
+    "dateISO": "2026-09-27T12:30:04.500Z"
+   },
+   {
+    "id": "pr_1790512204500_shoulder_1",
+    "exerciseId": "shoulder_1",
+    "exercise": "Pike Push-up",
+    "kind": "reps",
+    "value": 8,
+    "dateISO": "2026-09-27T12:30:04.500Z"
+   },
+   {
+    "id": "pr_1790512204500_dip_3",
+    "exerciseId": "dip_3",
+    "exercise": "Parallel Bar Dip",
+    "kind": "reps",
+    "value": 8,
+    "dateISO": "2026-09-27T12:30:04.500Z"
+   },
+   {
+    "id": "pr_1790512204500_core_2",
+    "exerciseId": "core_2",
+    "exercise": "Hollow Body Hold",
+    "kind": "hold",
+    "value": 17,
+    "dateISO": "2026-09-27T12:30:04.500Z"
+   },
+   {
+    "id": "pr_1790686803204_pull_1",
+    "exerciseId": "pull_1",
+    "exercise": "Dead Hang",
+    "kind": "hold",
+    "value": 27,
+    "dateISO": "2026-09-29T13:00:03.204Z"
+   },
+   {
+    "id": "pr_1790686803204_pull_alt_tabledoor",
+    "exerciseId": "pull_alt_tabledoor",
+    "exercise": "Table / Door-Edge Row",
+    "kind": "reps",
+    "value": 8,
+    "dateISO": "2026-09-29T13:00:03.204Z"
+   },
+   {
+    "id": "pr_1790686803204_hinge_2",
+    "exerciseId": "hinge_2",
+    "exercise": "Hip Thrust",
+    "kind": "reps",
+    "value": 8,
+    "dateISO": "2026-09-29T13:00:03.204Z"
+   }
+  ],
+  "goals": [],
+  "streak": {
+   "count": 2,
+   "lastISO": "2026-09-29",
+   "best": 2
+  },
+  "flagsHistory": [],
+  "phaseHistory": [],
+  "training": {
+   "slots": {
+    "push": {
+     "exerciseId": "push_2",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-09-27T12:30:01.826Z",
+     "why": "your assessment \u2014 unverified until you log it"
+    },
+    "row": {
+     "exerciseId": "pull_alt_tabledoor",
+     "setup": {
+      "bodyAngle": "kneesBent"
+     },
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-09-27T12:30:01.826Z",
+     "why": "not sure at setup \u2014 the first movement"
+    },
+    "pull": {
+     "exerciseId": "pull_1",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      25,
+      45
+     ],
+     "unit": "sec",
+     "acceptedAt": "2026-09-27T12:30:01.826Z",
+     "why": "your assessment \u2014 unverified until you log it"
+    },
+    "squat": {
+     "exerciseId": "squat_2",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-09-27T12:30:01.826Z",
+     "why": "your assessment \u2014 unverified until you log it"
+    },
+    "hinge": {
+     "exerciseId": "hinge_2",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-09-27T12:30:01.826Z",
+     "why": "your assessment \u2014 unverified until you log it"
+    },
+    "core": {
+     "exerciseId": "core_2",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      15,
+      30
+     ],
+     "unit": "sec",
+     "acceptedAt": "2026-09-27T12:30:01.826Z",
+     "why": "your assessment \u2014 unverified until you log it"
+    },
+    "shoulder": {
+     "exerciseId": "shoulder_1",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-09-27T12:30:01.826Z",
+     "why": "your assessment \u2014 unverified until you log it"
+    },
+    "dip": {
+     "exerciseId": "dip_3",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-09-27T12:30:01.826Z",
+     "why": "your assessment \u2014 unverified until you log it"
+    }
+   },
+   "decisions": {},
+   "assessment": {
+    "at": "2026-09-27T12:30:01.826Z",
+    "answers": {
+     "push": "push_2",
+     "pull": "pull_1",
+     "squat": "squat_2",
+     "hinge": "hinge_2",
+     "core": "core_2",
+     "shoulder": "shoulder_1",
+     "dip": "dip_3"
+    }
+   }
+  },
+  "recoveryBlocks": []
+ }
+}

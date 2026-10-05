@@ -7,13 +7,18 @@
  * Three assertions, and the second one is the important one:
  *
  *   1. Every exercise id in EXERCISE_DB has an explicit entry in MUSCLE_MAP.
- *      (The pattern fallback is a safety net, not a substitute.)
+ *      (The pattern fallback is a safety net, not a substitute.) The id list
+ *      in tools/exercise-ids.tsv must match the DB, so a new exercise can't
+ *      slip past this audit by being left out of the list.
  *
  *   2. Every group in MUSCLE_GROUPS is reachable — it appears as `primary` on
  *      at least one exercise. A group nothing can train is a dead tile in the
  *      UI and an unearnable badge. Writing this check FIRST is what would have
  *      caught the five phantom groups (neck, calves, adductors, traps, rear
- *      delts) that an imported taxonomy brought in.
+ *      delts) that an imported taxonomy brought in. Stage 3 (plan D1) brought
+ *      those five back with three more, each with a coverage slot that trains
+ *      it, so there is no `assist` exemption any more: a group with no primary
+ *      fails, unless it is listed in PENDING_PRIMARY below.
  *
  *   3. The weekly-target model (MUSCLE_WEEK) covers every slot of every
  *      template in fitness/basalt.js, and no template leaves a group untrained
@@ -38,10 +43,21 @@ const ids = fs
     return { id, pattern, name };
   });
 
-// muscles.data.js is a plain IIFE that writes to `window`. Give it one.
-const sandbox = { window: {}, console };
+// muscles.data.js and training.data.js are plain IIFEs that write to `window`.
+// The DB lives in basalt.js blocks 2 and 7 (the same trick check-training-data.js
+// uses); the other blocks need a real DOM, so they are skipped.
+const sandbox = { window: {}, console, document: { readyState: "complete", addEventListener() {} } };
+sandbox.window.App = { util: { escapeHtml: (s) => s }, registerView() {} };
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(path.join(root, "fitness/muscles.data.js"), "utf8"), sandbox);
+const basaltSrc = fs.readFileSync(path.join(root, "fitness/basalt.js"), "utf8");
+for (const part of basaltSrc.split(/(?=\/\* ===== BASALT script block \d)/)) {
+  if (/^\/\* ===== BASALT script block (2|7) /.test(part)) vm.runInContext(part, sandbox);
+}
+for (const f of ["fitness/muscles.data.js", "fitness/phases.data.js", "fitness/training.data.js"]) {
+  vm.runInContext(fs.readFileSync(path.join(root, f), "utf8"), sandbox, { filename: f });
+}
+const DBIDS = Object.keys(sandbox.window.EXERCISE_DB);
+const TD = sandbox.window.TRAINING_DATA;
 
 const GROUPS = sandbox.window.MUSCLE_GROUPS;
 const MAP = sandbox.window.MUSCLE_MAP;
@@ -53,7 +69,41 @@ const ok = (msg) => console.log("  ✓ " + msg);
 
 const groupKeys = new Set(GROUPS.map((g) => g.key));
 
+/* Plan D1: the 22 groups, in the plan's words. A group added or dropped
+   without changing this list (and the plan) is a decision nobody made. */
+const PLAN_D1_GROUPS = [
+  "chest", "delts_front", "delts_side", "upper_back", "lats", "triceps", "biceps",
+  "forearms", "abs", "obliques", "lower_back", "glutes", "quads", "hamstrings",
+  "delts_rear", "traps", "rotator_cuff", "neck", "abductors", "adductors", "calves", "shins"
+];
+
+/* Groups still waiting for a coverage slot. Step 3.2 wrote the last eight
+   (quads, hamstrings, obliques, lower back, adductors, abductors, calves,
+   shins), so every group has a primary movement and this list is empty. The
+   machinery stays: a listed group fails the moment a coverage slot trains it,
+   so an entry can't go stale. */
+const PENDING_PRIMARY = [];
+
 console.log(`\nmuscle map audit — ${ids.length} exercises, ${GROUPS.length} groups\n`);
+
+/* -- 0. the taxonomy is the plan's, and the id list is the DB's ------------ */
+{
+  const want = new Set(PLAN_D1_GROUPS);
+  const extra = [...groupKeys].filter((k) => !want.has(k));
+  const absent = PLAN_D1_GROUPS.filter((k) => !groupKeys.has(k));
+  extra.forEach((k) => fail(`group "${k}" is not in plan D1's 22`));
+  absent.forEach((k) => fail(`plan D1 group "${k}" is missing from MUSCLE_GROUPS`));
+  if (GROUPS.length !== groupKeys.size) fail("duplicate group key in MUSCLE_GROUPS");
+  GROUPS.filter((g) => g.assist).forEach((g) => fail(`group "${g.key}" is still flagged assist:true; plan D1 removes the flag`));
+  GROUPS.filter((g) => g.region !== "front" && g.region !== "back").forEach((g) => fail(`group "${g.key}": region "${g.region}"`));
+  if (!extra.length && !absent.length) ok(`the ${GROUPS.length} groups are plan D1's, none flagged assist`);
+
+  const tsv = new Set(ids.map((e) => e.id)), db = new Set(DBIDS);
+  const notInTsv = DBIDS.filter((id) => !tsv.has(id)), notInDb = [...tsv].filter((id) => !db.has(id));
+  notInTsv.forEach((id) => fail(`${id} is in EXERCISE_DB but not in tools/exercise-ids.tsv`));
+  notInDb.forEach((id) => fail(`${id} is in tools/exercise-ids.tsv but not in EXERCISE_DB`));
+  if (!notInTsv.length && !notInDb.length) ok(`tools/exercise-ids.tsv lists exactly the ${DBIDS.length} ids in EXERCISE_DB`);
+}
 
 /* -- 1. every exercise mapped ------------------------------------------- */
 const unmapped = ids.filter((e) => !MAP[e.id]);
@@ -105,27 +155,16 @@ for (const prof of Object.values(MAP)) {
 }
 /* A group must be reachable at a rate that can actually level it, which means
    appearing as primary or secondary somewhere. Stabiliser-only (0.15 share) is
-   not enough — that is a dead tile wearing a number.
-
-   Groups explicitly flagged `assist: true` are exempt from needing a PRIMARY
-   movement, because in a calisthenics library some muscles genuinely never lead
-   — the spinal erectors and obliques brace, they are not trained directly. The
-   flag has to be deliberate, which is the point: it is a claim someone made on
-   purpose, not a gap nobody noticed. */
-const assistOnly = new Set(GROUPS.filter((g) => g.assist).map((g) => g.key));
-
-const dead = [...groupKeys].filter(
-  (k) => primaryCount[k] === 0 && !assistOnly.has(k)
-);
+   not enough — that is a dead tile wearing a number. */
+const pending = new Set(PENDING_PRIMARY);
+const dead = [...groupKeys].filter((k) => primaryCount[k] === 0 && !pending.has(k));
 if (dead.length) {
-  dead.forEach((k) =>
-    fail(`group "${k}" is never a primary target and is not flagged assist:true — it can never level up honestly`)
-  );
+  dead.forEach((k) => fail(`group "${k}" is never a primary target, so it can never level up honestly`));
 } else {
-  ok("every non-assist group is the primary target of at least one exercise");
+  ok(`every group is the primary target of at least one exercise, except the pending ones (${pending.size} awaiting step 3.2's slots)`);
 }
 
-const unreachable = [...groupKeys].filter((k) => secondaryCount[k] === 0 && primaryCount[k] === 0);
+const unreachable = [...groupKeys].filter((k) => secondaryCount[k] === 0 && primaryCount[k] === 0 && !pending.has(k));
 if (unreachable.length) {
   unreachable.forEach((k) =>
     fail(`group "${k}" only ever appears as a stabiliser (0.15 share) — it cannot realistically level`)
@@ -134,11 +173,52 @@ if (unreachable.length) {
   ok("every group accrues at primary or secondary rate somewhere");
 }
 
-if (assistOnly.size) {
-  console.log(
-    "\n  note: assist-only groups (no primary movement exists in this library): " +
-    [...assistOnly].join(", ")
-  );
+// the pending list can't go stale: a listed group that is already served must come off it
+const coverSlots = Object.entries(TD.SLOTS).filter(([, sl]) => sl.coverage);
+const slotFor = (k) => coverSlots.filter(([, sl]) => (sl.trains || []).includes(k)).map(([key]) => key);
+for (const k of pending) {
+  if (!groupKeys.has(k)) fail(`PENDING_PRIMARY names "${k}", which is not a group`);
+  else if (slotFor(k).length)
+    fail(`"${k}" is in PENDING_PRIMARY but coverage slot [${slotFor(k)}] already trains it — delete it from the list`);
+}
+if (pending.size) {
+  console.log("\n  PENDING (step 3.2 writes their slots; this list must be empty then): " + [...pending].join(", "));
+}
+
+/* Plan D1 + D3: every group has a weekly floor of direct (primary) sets, and
+   says who tops it up. `main` groups only ever train through the main slots, so
+   every template has to clear them. `coverage` groups are topped up by a
+   coverage slot, so each needs a slot that names it in `trains`, and every
+   exercise of that slot has to count as direct work for it. */
+const FLOORS = sandbox.window.MUSCLE_FLOORS;
+if (!FLOORS) fail("fitness/muscles.data.js has no MUSCLE_FLOORS");
+else {
+  const bad = [];
+  for (const k of groupKeys) {
+    const f = FLOORS[k];
+    if (!f) { bad.push(`${k}: no floor`); continue; }
+    if (!(Number.isInteger(f.sets) && f.sets > 0)) bad.push(`${k}: sets ${f.sets}`);
+    if (f.via !== "main" && f.via !== "coverage") bad.push(`${k}: via "${f.via}"`);
+    if (f.via === "coverage" && !pending.has(k) && !slotFor(k).length) bad.push(`${k}: a coverage group with no coverage slot that trains it`);
+    if (f.via === "main" && slotFor(k).length) bad.push(`${k}: a main group, but coverage slot ${slotFor(k)} trains it`);
+  }
+  Object.keys(FLOORS).filter((k) => !groupKeys.has(k)).forEach((k) => bad.push(`${k}: a floor for a group that doesn't exist`));
+  for (const [key, sl] of coverSlots) {
+    const trains = sl.trains || [];
+    if (!trains.length) bad.push(`slot ${key}: coverage slot with no \`trains\``);
+    trains.forEach((g) => { if (!groupKeys.has(g)) bad.push(`slot ${key}: trains unknown group "${g}"`); });
+    const members = Object.entries(TD.EXERCISES).filter(([, e]) => e.slot === key).map(([id]) => id);
+    for (const id of members)
+      for (const g of trains)
+        if (!(MAP[id] && MAP[id].primary.includes(g))) bad.push(`${id}: in slot ${key} but ${g} is not a primary there, so its sets would not count as direct ${g} work`);
+    const free = (id) => [].concat(...TD.EXERCISES[id].equipment).length === 0;
+    if (!sl.first.some(free)) bad.push(`slot ${key}: no equipment-free first rung`);
+  }
+  bad.forEach(fail);
+  if (!bad.length) {
+    const by = (v) => Object.values(FLOORS).filter((f) => f.via === v).length;
+    ok(`${groupKeys.size} floors (${by("main")} main, ${by("coverage")} coverage); ${coverSlots.length} coverage slots each train a group they are primary for`);
+  }
 }
 
 /* -- 5. every exercise reaches at least one group ------------------------ */
@@ -219,11 +299,15 @@ console.log(`\nweekly-target model — ${templateIds.length} templates read from
 templateIds.forEach((id) => {
   const tpl = TEMPLATES[id];
   measured[id] = measure(tpl);
-  const untrained = [...groupKeys].filter((k) => !(measured[id][k] > 0));
+  /* Only the groups the main slots train have to clear the template: a
+     coverage group has no template target, because its floor is what measures
+     it (plan F7: a target built from the template's own slots is circular). */
+  const mainGroups = [...groupKeys].filter((k) => FLOORS && FLOORS[k] && FLOORS[k].via === "main");
+  const untrained = mainGroups.filter((k) => !(measured[id][k] > 0));
   if (untrained.length) {
     untrained.forEach((k) => fail(`${id}: ${tpl.label} never trains ${k}, so its target would be 0`));
   } else {
-    ok(`${pad(id, 11)} ${tpl.perWeek}/wk over ${tpl.order.join(" + ")} — all ${groupKeys.size} groups trained`);
+    ok(`${pad(id, 11)} ${tpl.perWeek}/wk over ${tpl.order.join(" + ")} — all ${mainGroups.length} main groups trained`);
   }
 });
 console.log("\n  " + pad("group", 18) + templateIds.map((id) => pad(id, 12)).join(""));

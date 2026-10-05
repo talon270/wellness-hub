@@ -325,16 +325,33 @@
     return Array.from(best.values());
   }
 
-  /* `training` (BASALT schema v4). Every record in it travels whole: merging
-     field by field — what mergeFields does to nested objects — can pair one
-     device's exercise with the other's setup and stamp the result as the
-     newest choice. A record keeps the newer stamp; a tie, or a record with no
-     stamp on either side, keeps local.
+  /* `training` (BASALT schema v4, v5, v6). Every record in it travels whole:
+     merging field by field — what mergeFields does to nested objects — can
+     pair one device's exercise with the other's setup and stamp the result as
+     the newest choice. A record keeps the newer stamp; a tie, or a record with
+     no stamp on either side, keeps local.
        slots       newer `acceptedAt`. A carried-over slot has none, so it
                    loses to any prescription actually accepted elsewhere.
+                   Hold and custom sets/range (v5) live on the slot record.
        decisions   keyed "exerciseId|sessionId", so they union; the newer
                    `at` takes a shared key.
-       assessment  one record, newer `at`. */
+       exclusions  (v5) keyed by exercise id, the same way. One is never
+                   deleted, only re-stamped "allowed", so the newer `at` is
+                   your latest answer on any device.
+       assessment, grip, limitations (v5)
+                   one record each, newer `at`. Clearing one has to write a
+                   stamped record, never null: null has no stamp, so any
+                   record on the other device beats it.
+       equipmentCheck (v5) local's whenever local has the key — Object.
+                   assign's default — because each device ran its own upgrade
+                   over its own equipment. A local save still in v4's shape
+                   has no key, so it takes the file's.
+       pins        (v6) keyed by coverage slot, newer `at` per slot. A clear
+                   is a stamped record with no days, never a deleted key.
+     Coverage slots (v6) are slots, and mini-sessions are sessions: the rules
+     above and the sessions union cover them. The v5 and v6 keys are written
+     only when a side has them, so a merge of two v4 saves still comes out in
+     v4's shape. */
   function newerRecord(f, l, stamp) {
     if (!isObj(f)) return l === undefined ? f : l;
     if (!isObj(l)) return f;
@@ -349,11 +366,17 @@
   function mergeTraining(f, l) {
     if (!isObj(f)) return l;
     if (!isObj(l)) return f;
-    return Object.assign({}, f, l, {
+    var out = Object.assign({}, f, l, {
       slots: recordsByStamp(f.slots, l.slots, "acceptedAt"),
       decisions: recordsByStamp(f.decisions, l.decisions, "at"),
       assessment: newerRecord(f.assessment, l.assessment, "at")
     });
+    if (f.exclusions || l.exclusions) out.exclusions = recordsByStamp(f.exclusions, l.exclusions, "at");
+    if (f.pins || l.pins) out.pins = recordsByStamp(f.pins, l.pins, "at");
+    ["grip", "limitations"].forEach(function (k) {
+      if (k in f || k in l) out[k] = newerRecord(f[k], l[k], "at");
+    });
+    return out;
   }
 
   function mergeIronframe(file, local) {
@@ -363,6 +386,15 @@
     IRON_ID_ARRAYS.forEach(function (f) { out[f] = unionById(file[f], local[f]); });
     out.prs = mergePRs(file.prs, local.prs);
     if (file.training || local.training) out.training = mergeTraining(file.training, local.training);
+    /* The weights you own (v5): per implement, like `equipment`, local
+       winning — but each implement's record whole, never field by field, or
+       one device's fixed list pairs with the other's step and maximum. An
+       implement only the file lists comes in. Every v5 save starts with {}, so
+       an implement you've never set up takes the other device's. */
+    if (isObj(file.equipmentLoads) || isObj(local.equipmentLoads)) {
+      out.equipmentLoads = Object.assign({}, isObj(file.equipmentLoads) && file.equipmentLoads,
+                                         isObj(local.equipmentLoads) && local.equipmentLoads);
+    }
     if (out.running) {
       /* A copy: when only one side has `running`, mergeFields hands back that
          side's own object, and the inputs must not be mutated. */

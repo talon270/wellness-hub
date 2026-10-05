@@ -7,8 +7,12 @@
      · C6   the v4 `training` records: each one whole, the newer stamp wins
      · T13  a Stage 1 device and two v4 devices sync in rounds; v4 data intact
      · R1-3 an edited session, goal or re-logged run reaches the other device
+     · K10  v5's exclusions, grip and limitations: the newer stamp wins
+     · K10b v5's weights you own: per implement, whole, local wins
+     · V6   v6's coverage pins by stamp, per slot; mini-sessions union by id
 
-   plans/PLAN-workout-progression.md, Part E. The browser cases (S1-S5, S8-S21,
+   plans/PLAN-workout-progression.md, Part E; K10, K10b and V6 are
+   plans/PLAN-fitness-control-and-coverage.md, Part F. The browser cases (S1-S5, S8-S21,
    T11-T12) live in tools/check-workout.py. T13's other half — the Stage 1
    device opening the merged save read-only — is S9's mechanism there.
 
@@ -217,6 +221,107 @@ test("P4-sync", "Recovery blocks union by id; an early end travels", (M) => {
   const onDesk = view(M.mergePayload(phone, desk).ironframe), onPhone = view(M.mergePayload(desk, phone).ironframe);
   const want = "rb_a:2026-10-03,rb_b:open";
   return { ok: onDesk === want && onPhone === want, measured: "desktop " + onDesk + ", phone " + onPhone };
+});
+
+/* ---- v5 · control (plans/PLAN-fitness-control-and-coverage.md C6) -------- */
+/* A excludes Diamond Push-up and Shrimp Squat on the 5th and switches push-ups
+   to knuckles on the 6th; B allows Diamond anyway on the 6th, chose palms on
+   the 5th and is the only one with joint limitations. Each record keeps its
+   newer stamp, on both devices; a stamp tie keeps the local record. */
+test("K10", "Exclusions, grip and limitations: the newer stamp wins on both devices", (M) => {
+  const v5 = (t) => payload({ version: 5, training: Object.assign(training({ push: slot("push_2", T5) }), t) });
+  const A = v5({
+    exclusions: { push_3: { state: "excluded", at: T5, why: "by you" }, squat_4: { state: "excluded", at: T5, why: "by you" } },
+    grip: { push: "knuckles", at: T6 }, limitations: null });
+  const B = v5({
+    exclusions: { push_3: { state: "allowed", at: T6, why: "allowed anyway" } },
+    grip: { push: "palms", at: T5 }, limitations: { wrist: "careful", knee: "avoid", at: T5 } });
+  const before = JSON.stringify([A, B]);
+  const onA = M.mergePayload(B, A).ironframe.training;   // A pulls B's file
+  const onB = M.mergePayload(A, B).ironframe.training;   // B pulls A's file
+  const want = JSON.stringify({
+    exclusions: { push_3: B.ironframe.training.exclusions.push_3, squat_4: A.ironframe.training.exclusions.squat_4 },
+    grip: A.ironframe.training.grip, limitations: B.ironframe.training.limitations });
+  const view = (t) => JSON.stringify({
+    exclusions: Object.keys(t.exclusions || {}).sort().reduce((o, k) => (o[k] = t.exclusions[k], o), {}),
+    grip: t.grip, limitations: t.limitations });
+  const tieA = v5({ grip: { push: "knuckles", at: T6 } }), tieB = v5({ grip: { push: "palms", at: T6 } });
+  const tie = M.mergePayload(tieA, tieB).ironframe.training.grip.push;
+  const v4 = M.mergePayload(payload({ version: 4, training: training({ push: slot("push_2", T5) }) }),
+    payload({ version: 4, training: training({ push: slot("push_2", null) }) })).ironframe.training;
+  const checks = {
+    "A ends on the newer records": view(onA) === want,
+    "B ends on the newer records": view(onB) === want,
+    "a stamp tie keeps local": tie === "palms",
+    "two v4 saves gain no v5 keys": !["exclusions", "grip", "limitations"].some((k) => k in v4),
+    "inputs unchanged": JSON.stringify([A, B]) === before
+  };
+  const bad = Object.keys(checks).filter((k) => !checks[k]);
+  const show = (t) => "push_3 " + ((t.exclusions || {}).push_3 || {}).state + ", squat_4 " + ((t.exclusions || {}).squat_4 || {}).state +
+    ", grip " + (t.grip || {}).push + ", limits " + (t.limitations ? Object.keys(t.limitations).filter((k) => k !== "at").join("+") : "none");
+  return { ok: !bad.length, measured: (bad.length ? "failed: " + bad.join("; ") + " | " : "") +
+    "A: " + show(onA) + "; B: " + show(onB) + "; tie keeps " + tie };
+});
+
+/* The weights you own (C5) are per implement and per device: the local record
+   wins whole, so one device's fixed list never pairs with the other's step,
+   and an implement only the file lists comes in. */
+test("K10b", "Weights you own: per implement, whole, local wins", (M) => {
+  const fixed = { mode: "fixed", kg: [5, 7.5, 12.5] };
+  const adj = { mode: "adjustable", stepKg: 2, maxKg: null }, kb = { mode: "adjustable", stepKg: 4, maxKg: 24 };
+  const A = payload({ version: 5, equipmentLoads: { dumbbells: fixed } });
+  const B = payload({ version: 5, equipmentLoads: { dumbbells: adj, kettlebells: kb } });
+  const onA = M.mergePayload(B, A).ironframe.equipmentLoads;
+  const onB = M.mergePayload(A, B).ironframe.equipmentLoads;
+  const checks = {
+    "A keeps its own dumbbells, whole": same(onA.dumbbells, fixed),
+    "A takes B's kettlebells": same(onA.kettlebells, kb),
+    "B keeps its own dumbbells, whole": same(onB.dumbbells, adj),
+    "B keeps its kettlebells": same(onB.kettlebells, kb)
+  };
+  const bad = Object.keys(checks).filter((k) => !checks[k]);
+  return { ok: !bad.length, measured: (bad.length ? "failed: " + bad.join("; ") + " | " : "") +
+    "A dumbbells " + JSON.stringify(onA.dumbbells) + "; B dumbbells " + JSON.stringify(onB.dumbbells) };
+});
+
+/* v6 (plan D5): a coverage pin is one record per slot, so the newer `at`
+   wins slot by slot, and a cleared pin is a stamped record with no days.
+   Mini-sessions are sessions: they union by id like any other (the control
+   half of this case — the rule predates v6). */
+test("V6", "Pins by stamp, slot by slot; mini-sessions union by id", (M) => {
+  const mini = (id, day) => Object.assign(session(id, day), { dayKey: day, type: "mini", kind: "mini" });
+  const v6 = (pins, sessions) => payload({ version: 6, sessions,
+    training: Object.assign(training({ push: slot("push_2", T5) }), { pins }) });
+  const A = v6({ curl: { days: [1, 3], at: T5 }, neck: { days: [2], at: T6 } },
+    [session("s_1", "2026-10-01"), mini("s_2", "2026-10-02")]);
+  const B = v6({ curl: { days: [], at: T6 }, calf: { days: [5], at: T5 } },
+    [session("s_1", "2026-10-01"), mini("s_3", "2026-10-03")]);
+  const before = JSON.stringify([A, B]);
+  const onA = M.mergePayload(B, A).ironframe;   // A pulls B's file
+  const onB = M.mergePayload(A, B).ironframe;   // B pulls A's file
+  const sorted = (p) => JSON.stringify(Object.keys(p || {}).sort().reduce((o, k) => (o[k] = p[k], o), {}));
+  const want = sorted({ curl: B.ironframe.training.pins.curl, neck: A.ironframe.training.pins.neck,
+                        calf: B.ironframe.training.pins.calf });
+  const tie = M.mergePayload(v6({ curl: { days: [1], at: T6 } }, []), v6({ curl: { days: [4], at: T6 } }, []))
+    .ironframe.training.pins.curl.days[0];
+  const v5 = M.mergePayload(payload({ version: 5, training: training({ push: slot("push_2", T5) }) }),
+    payload({ version: 5, training: training({ push: slot("push_2", null) }) })).ironframe.training;
+  const minis = (o) => o.sessions.filter((x) => x.kind === "mini").map((x) => x.id).sort().join(",");
+  const checks = {
+    "A ends on the newer pin per slot": sorted(onA.training.pins) === want,
+    "B ends on the newer pin per slot": sorted(onB.training.pins) === want,
+    "a newer cleared pin beats an older one": (onA.training.pins || {}).curl && onA.training.pins.curl.days.length === 0,
+    "a stamp tie keeps local": tie === 4,
+    "both keep every session, minis still tagged": ids(onA.sessions).join() === "s_1,s_2,s_3" &&
+      ids(onB.sessions).join() === "s_1,s_2,s_3" && minis(onA) === "s_2,s_3" && minis(onB) === "s_2,s_3",
+    "two v5 saves gain no pins": !("pins" in v5),
+    "inputs unchanged": JSON.stringify([A, B]) === before
+  };
+  const bad = Object.keys(checks).filter((k) => !checks[k]);
+  const show = (p) => Object.keys(p || {}).sort().map((k) => k + " [" + p[k].days + "]").join(", ");
+  return { ok: !bad.length, measured: (bad.length ? "failed: " + bad.join("; ") + " | " : "") +
+    "A pins: " + show(onA.training.pins) + "; B pins: " + show(onB.training.pins) + "; tie keeps [" + tie +
+    "]; sessions A " + ids(onA.sessions) + " (minis " + minis(onA) + ")" };
 });
 
 function main() {

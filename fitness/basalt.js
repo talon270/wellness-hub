@@ -45,7 +45,7 @@
     }
   ];
   var UI_KEY        = "ironframe.ui";        // tiny, non-schema UI prefs
-  var SCHEMA_VERSION = 4;                    // v2: prefs.sessionLength · v3: repaired progression targets · v4: training prescriptions
+  var SCHEMA_VERSION = 6;                    // v2: prefs.sessionLength · v3: repaired progression targets · v4: training prescriptions · v5: equipment split, weights, exclusions, limitations, grip · v6: coverage slots, the finisher, pins, mini-sessions
 
   /* ----------------------------------------------------------------------
      STATIC PROGRAM DATA — Level 1–6 progressions per movement pattern.
@@ -132,15 +132,27 @@
         hydrationTargetL: 3.2
       },
 
-      /* — Equipment (pre-checks per spec) — */
+      /* — Equipment (pre-checks per spec) — the last four (v5) split what
+         "pull-up bar" and "bench" used to stand for (training.data.js) — */
       equipment: {
         pullupBar: false,
         dumbbells: true,
         bench: true,
         kettlebells: true,
         rings: false,
-        nothing: false
+        nothing: false,
+        bands: false,
+        parallettes: false,
+        dipBars: false,
+        lowBar: false
       },
+
+      /* — The weights you own (v5, plan C5), per implement: { mode:
+         "adjustable", stepKg, maxKg } or { mode: "fixed", kg: [...] }. An
+         implement with no record steps as it always did, by
+         TRAINING_DATA.LOAD_STEP_KG with no maximum — so {} is today's
+         behaviour, and that number lives in one place. — */
+      equipmentLoads: {},
 
       /* — User preferences (editable in Settings) — */
       prefs: {
@@ -153,7 +165,10 @@
         sessionLength: "focused", // "short" | "focused" | "full"
         /* The template (engine TEMPLATES). null is the rotation, which every
            save had before templates existed; it stays until you choose. */
-        template: null
+        template: null,
+        /* v6: "on" appends about 20 minutes of coverage work to every main
+           workout (engine.buildWorkout, plan D3). Off until you turn it on. */
+        finisher: "off"
       },
 
       /* — Running program (fixed run days; the lifting follows your last session, so the two can land together) —
@@ -209,6 +224,7 @@
 
       /* — Logged collections (filled by Parts 2,4,5,6) — */
       sessions: [],         // { id, dateISO, type, exercises:[{key,pattern,sets:[{reps,weight}],difficulty}], difficulty, notes, completed, warmupDone, cooldownDone, flags:[] }
+                            // v6: kind "mini" (type "mini") is a mini-session, absent is a main one; a finisher exercise carries finisher: true
       bodyweightLog: [],    // { dateISO, kg }
       measurements: [],     // { dateISO, chest, waist, hips, arms, thighs }
       sleepLog: [],         // { dateISO, hours, quality }
@@ -223,11 +239,39 @@
          slots       slot name -> { exerciseId, setup, sets, range, unit,
                      acceptedAt, why }: the one prescription each slot trains
          decisions   "exerciseId|sessionId" -> { choice, at }: your Step up /
-                     Repeat answer to the evidence ending at that session
+                     Repeat answer to the evidence ending at that session.
+                     A double step adds `steps: 2`; "Set slot to X kg" is
+                     { choice: "load", kg, at } (engine.decide)
          assessment  null until the Stage 2 onboarding records one
          Sessions copy the prescription onto each exercise as `rx` from v4 on;
-         a session without `rx` is never evidence (fitness/training.js). */
-      training: { slots: {}, decisions: {}, assessment: null },
+         a session without `rx` is never evidence (fitness/training.js).
+         v5 (plans/PLAN-fitness-control-and-coverage.md C3, C1, C6):
+         exclusions  exerciseId -> { state: "excluded" | "none" | "allowed",
+                     at, why }: excluded, included again, or Allow anyway
+                     past a joint limit. Never deleted: each re-stamps it
+         slots (v5)  a slot's rx may also carry hold: true (step-ups paused)
+                     and custom: { sets, range, unit } (plan C4), and a push
+                     rx setup.grip "knuckles" (absent is palms)
+         limitations null, or { wrist: "careful" | "avoid", …, at }
+         grip        null, or { push: "knuckles" | "palms", at }
+         equipmentCheck  null, or what the v5 upgrade turned on and why:
+                     { at, inferred: { dipBars: { id, from: "session" | "slot" } } }.
+                     The Equipment check card (step 2.5) reads it; dismissing
+                     the card belongs in ironframe.ui, per device, like v4's
+                     upgrade card (UPGRADE_SEEN_KEY).
+         A cleared limitations or grip is a stamped record, never null: null
+         has no stamp and loses every sync (js/syncmerge.js).
+         v6 (plan D3, D5):
+         slots (v6)  a coverage slot (TRAINING_DATA.SLOTS[x].coverage) gets
+                     its record the first time a finished workout trains one
+                     of its picks, at its first allowed rung, why "added for
+                     coverage" and acceptedAt null, like a carried-over slot
+         pins        slot -> { days: [0-6, 0 = Sunday], at }: coverage slots
+                     the finisher and mini-sessions put first on those
+                     weekdays (fitness/coverage.js). No days is no pin, so a
+                     clear is a stamped record too */
+      training: { slots: {}, decisions: {}, assessment: null,
+                  exclusions: {}, limitations: null, grip: null, equipmentCheck: null, pins: {} },
 
       /* — Recovery blocks (plan D3) — one record per block, so two devices
          union them by id: { id, startKey, startedISO, days, reason:
@@ -260,6 +304,13 @@
       state = deepMerge(defaultState(), state);
       if (state.version < 3) repairTargets(state);   // v2 -> v3, see below
       if (state.version < 4) toV4(state);            // v3 -> v4, after the repaired targets
+      if (state.version < 5) toV5(state);            // v4 -> v5, after v4's slots exist
+      /* v5 -> v6 is additive: prefs.finisher ("off") and training.pins ({})
+         come from the defaults above, and a session with no `kind` is a main
+         one, which every session before v6 was. The bump is the guard: a v5
+         build opens a save holding coverage slots and mini-sessions
+         read-only instead of misreading them — its recoveryOffer would call
+         recommend on a coverage exercise it doesn't know. */
       state.version = SCHEMA_VERSION;
     } else {
       // Same version: still backfill keys added during default development.
@@ -411,6 +462,58 @@
     return slots;
   }
 
+  /* v4 -> v5 · THE EQUIPMENT SPLIT (plans/PLAN-fitness-control-and-coverage.md, C6)
+     ----------------------------------------------------------------------
+     Four tokens now say what "pull-up bar" and "bench" used to stand for
+     (training.data.js, F5). Read as false, a save that trained Parallel Bar
+     Dips on v4 would open on v5 owning no dip bars, and its dip slot would
+     quietly fall back to an easier movement. So each one is turned on when
+     your own data says you have it:
+       · a logged session performed an exercise that needs it, or
+       · a slot holds one that needs it AND you own the v4 token it was split
+         from (V5_SPLIT_FROM), so the slot was trainable before the upgrade.
+         Without a pull-up bar the v4 dip slot was already falling back;
+         turning dip bars on would change that workout, not keep it.
+     "Needs it" means your other equipment doesn't already meet that
+     requirement: Australian Row with rings owned infers no low bar.
+
+     Everything else is additive. v5's other keys come from the defaults
+     (the deep merge above), and slots, sessions and decisions are untouched.
+     An onboarded save also records what was turned on and why, for the
+     one-time Equipment check card; a new profile picks its equipment in
+     onboarding instead.
+
+     Throws without training.data.js, as toV4 does: load() keeps the raw
+     save and opens Fitness read-only. */
+  var V5_SPLIT_FROM = { bands: "pullupBar", dipBars: "pullupBar", lowBar: "pullupBar", parallettes: "bench" };
+  function toV5(state) {
+    var TDATA = window.TRAINING_DATA;
+    if (!TDATA || !TDATA.EXERCISES) throw new Error("v5 migration needs fitness/training.data.js");
+    var eq = state.equipment, tr = state.training, inferred = {};
+    if (!isObj(eq) || !isObj(tr)) return;   // healState replaces both with defaults
+    function infer(id, from) {
+      ((TDATA.EXERCISES[id] || {}).equipment || []).forEach(function (t) {
+        var any = Array.isArray(t) ? t : [t];
+        if (any.some(function (u) { return eq[u]; })) return;
+        var tok = any.filter(function (u) { return u in V5_SPLIT_FROM; })[0];
+        if (!tok || (from === "slot" && !eq[V5_SPLIT_FROM[tok]])) return;
+        eq[tok] = true;
+        inferred[tok] = { id: id, from: from };
+      });
+    }
+    (Array.isArray(state.sessions) ? state.sessions : []).forEach(function (s) {
+      (s && Array.isArray(s.exercises) ? s.exercises : []).forEach(function (ex) {
+        if (ex && !ex.skipped && Array.isArray(ex.sets) &&
+            ex.sets.some(function (st) { return Number(st && st.reps) > 0; })) infer(ex.key, "session");
+      });
+    });
+    var slots = isObj(tr.slots) ? tr.slots : {};
+    Object.keys(slots).forEach(function (k) {
+      if (slots[k] && !slots[k].off) infer(slots[k].exerciseId, "slot");
+    });
+    if (state.meta && state.meta.onboarded) tr.equipmentCheck = { at: new Date().toISOString(), inferred: inferred };
+  }
+
   /* Deep-merge `source` onto a fresh `base` so newly-added schema keys are
      always present even on older saves (arrays/values from source win). */
   function deepMerge(base, source) {
@@ -538,14 +641,18 @@
     });
 
     // 2) Core objects must exist with required sub-keys (backfill from defaults).
-    ["profile","equipment","prefs","tiers","benchmarks","currentPhase","streak","meta","running","training"].forEach(function (key) {
+    ["profile","equipment","equipmentLoads","prefs","tiers","benchmarks","currentPhase","streak","meta","running","training"].forEach(function (key) {
       if (!s[key] || typeof s[key] !== "object" || Array.isArray(s[key])) { s[key] = def[key]; fixed++; }
     });
     // running.runLog must be an array
     if (s.running && !Array.isArray(s.running.runLog)) { s.running.runLog = []; fixed++; }
-    // training's two maps must be objects (a sync can deliver anything)
-    ["slots", "decisions"].forEach(function (key) {
+    // training's maps must be objects (a sync can deliver anything)
+    ["slots", "decisions", "exclusions", "pins"].forEach(function (key) {
       if (!isObj(s.training[key])) { s.training[key] = {}; fixed++; }
+    });
+    // ...and its single records an object or null
+    ["limitations", "grip", "equipmentCheck"].forEach(function (key) {
+      if (s.training[key] != null && !isObj(s.training[key])) { s.training[key] = null; fixed++; }
     });
 
     // 3) Every tier needs numeric level/progress and a reps target.
@@ -1056,8 +1163,95 @@
     { key: "dumbbells",  label: "Dumbbells" },
     { key: "bench",      label: "Bench" },
     { key: "kettlebells",label: "Kettlebells" },
-    { key: "rings",      label: "Gymnastic rings" }
+    { key: "rings",      label: "Gymnastic rings" },
+    { key: "bands",      label: "Resistance bands" },
+    { key: "parallettes",label: "Parallettes" },
+    { key: "dipBars",    label: "Dip bars" },
+    { key: "lowBar",     label: "Waist-height bar" }
   ];
+  var WEIGHT_IMPLEMENTS = [["dumbbells", "Dumbbells"], ["kettlebells", "Kettlebells"]];
+  var LIMIT_JOINTS = [["wrist", "Wrist"], ["elbow", "Elbow"], ["shoulder", "Shoulder"], ["neck", "Neck"],
+                      ["lowerBack", "Lower back"], ["hip", "Hip"], ["knee", "Knee"], ["ankle", "Ankle"]];
+
+  /* Weights you have (plan C5): per implement, adjustable (a step and an
+     optional heaviest) or a fixed list. No record is today's behaviour, so the
+     form shows that rather than inventing one. */
+  function weightSpec(impl) {
+    var rec = (STATE.equipmentLoads || {})[impl];
+    return rec || { mode: "adjustable", stepKg: window.TRAINING_DATA.LOAD_STEP_KG[impl], maxKg: null };
+  }
+  function populateWeights() {
+    var host = document.getElementById("set-weights");
+    if (!host) return;
+    host.innerHTML = WEIGHT_IMPLEMENTS.map(function (w) {
+      var sp = weightSpec(w[0]), fixed = sp.mode === "fixed";
+      return '<div class="field" data-w="' + w[0] + '"><span class="field__label">' + w[1] + '</span>' +
+        '<div class="seg" data-w-mode="' + w[0] + '">' +
+          '<button class="seg__btn' + (fixed ? "" : " is-active") + '" data-wm="adjustable" type="button">Adjustable</button>' +
+          '<button class="seg__btn' + (fixed ? " is-active" : "") + '" data-wm="fixed" type="button">Fixed weights</button></div>' +
+        '<div class="set-grid mt-2" data-w-adj="' + w[0] + '"' + (fixed ? " hidden" : "") + '>' +
+          '<label class="field"><span class="field__label">Step (kg)</span><input class="input" id="set-w-' + w[0] + '-step" type="number" min="0.5" max="50" step="0.5" inputmode="decimal" value="' + (sp.stepKg != null ? sp.stepKg : "") + '"></label>' +
+          '<label class="field"><span class="field__label">Heaviest (kg)</span><input class="input" id="set-w-' + w[0] + '-max" type="number" min="0.5" max="200" step="0.5" inputmode="decimal" placeholder="no limit" value="' + (sp.maxKg != null ? sp.maxKg : "") + '"></label></div>' +
+        '<label class="field mt-2" data-w-fix="' + w[0] + '"' + (fixed ? "" : " hidden") + '><span class="field__label">Weights you have (kg, commas)</span>' +
+          '<input class="input" id="set-w-' + w[0] + '-list" type="text" inputmode="decimal" placeholder="5, 7.5, 12.5" value="' + escapeHtml((sp.kg || []).join(", ")) + '"></label></div>';
+    }).join("");
+    host.querySelectorAll("[data-w-mode]").forEach(function (seg) {
+      seg.querySelectorAll("[data-wm]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var impl = seg.dataset.wMode, fixed = b.dataset.wm === "fixed";
+          seg.querySelectorAll("[data-wm]").forEach(function (x) { x.classList.toggle("is-active", x === b); });
+          host.querySelector('[data-w-adj="' + impl + '"]').hidden = fixed;
+          host.querySelector('[data-w-fix="' + impl + '"]').hidden = !fixed;
+        });
+      });
+    });
+  }
+  /* The records the form describes, or { error } with the sentence to show
+     inline. Nothing is written here. */
+  function readWeights() {
+    var out = {}, v = function (id) { return document.getElementById(id).value.trim(); };
+    for (var i = 0; i < WEIGHT_IMPLEMENTS.length; i++) {
+      var impl = WEIGHT_IMPLEMENTS[i][0], name = WEIGHT_IMPLEMENTS[i][1].toLowerCase();
+      var fixed = document.querySelector('[data-w-mode="' + impl + '"] .is-active').dataset.wm === "fixed";
+      if (fixed) {
+        var kg = v("set-w-" + impl + "-list").split(/[,\s]+/).filter(Boolean).map(Number);
+        if (!kg.length || kg.some(function (x) { return !(x > 0 && x <= 200); }))
+          return { error: "List the " + name + " you have as kilograms between 0.5 and 200, separated by commas." };
+        out[impl] = { mode: "fixed", kg: kg.filter(function (x, j) { return kg.indexOf(x) === j; }).sort(function (a, b) { return a - b; }) };
+      } else {
+        var step = Number(v("set-w-" + impl + "-step")), max = v("set-w-" + impl + "-max");
+        if (!(step >= 0.5 && step <= 50)) return { error: "The " + name + " step is between 0.5 and 50 kg." };
+        if (max !== "" && !(Number(max) >= step && Number(max) <= 200)) return { error: "The heaviest " + name + " can't be lighter than one step, or over 200 kg. Leave it blank for no limit." };
+        out[impl] = { mode: "adjustable", stepKg: step, maxKg: max === "" ? null : Number(max) };
+      }
+    }
+    return out;
+  }
+
+  /* Joint limits (plan C3): a select per joint. */
+  function populateLimits() {
+    var host = document.getElementById("set-limits"), L = STATE.training.limitations || {};
+    if (!host) return;
+    host.innerHTML = LIMIT_JOINTS.map(function (j) {
+      var cur = L[j[0]] || "none";
+      return '<label class="field"><span class="field__label">' + j[1] + '</span><select class="select" data-limit="' + j[0] + '" aria-label="' + j[1] + ' limit">' +
+        [["none", "No limit"], ["careful", "Careful"], ["avoid", "Avoid"]].map(function (o) {
+          return '<option value="' + o[0] + '"' + (cur === o[0] ? " selected" : "") + '>' + o[1] + '</option>';
+        }).join("") + '</select></label>';
+    }).join("");
+  }
+  function readLimits() {
+    var out = {};
+    document.querySelectorAll("#set-limits [data-limit]").forEach(function (sel) { if (sel.value !== "none") out[sel.dataset.limit] = sel.value; });
+    return out;
+  }
+  function setSettingsError(msg) {
+    var el = document.getElementById("set-err");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.hidden = !msg;
+    if (msg) el.scrollIntoView({ block: "nearest" });
+  }
 
   function populateSettings() {
     var s = STATE;
@@ -1079,6 +1273,9 @@
       b.classList.toggle("is-active", b.dataset.lengthdefault === curLen);
     });
     populateThemePicker();
+    populateWeights();
+    populateLimits();
+    setSettingsError("");
 
     // goal segment
     document.querySelectorAll("#set-goal .seg__btn").forEach(function (b) {
@@ -1105,6 +1302,11 @@
 
   function saveSettings() {
     var s = STATE;
+    /* Read first, so a bad weight list stops the save before anything else
+       is written, and says why where you're looking. */
+    var weights = readWeights();
+    if (weights.error) { setSettingsError(weights.error); return; }
+    setSettingsError("");
     var name = document.getElementById("set-name").value.trim();
     var age = parseInt(document.getElementById("set-age").value, 10);
     var h = parseFloat(document.getElementById("set-height").value);
@@ -1138,6 +1340,19 @@
     document.querySelectorAll("#set-equip [data-equip]").forEach(function (b) {
       s.equipment[b.dataset.equip] = b.classList.contains("is-on");
     });
+
+    /* weights: only a record that differs from what applies now is written,
+       so an untouched form leaves a save with no record as it was */
+    if (!s.equipmentLoads) s.equipmentLoads = {};
+    Object.keys(weights).forEach(function (impl) {
+      if (JSON.stringify(weights[impl]) !== JSON.stringify(weightSpec(impl))) s.equipmentLoads[impl] = weights[impl];
+    });
+    /* limits are stamped, and re-stamped only when they change */
+    var limits = readLimits(), had = s.training.limitations || {};
+    if (JSON.stringify(limits) !== JSON.stringify(Object.keys(had).filter(function (k) { return k !== "at"; }).sort().reduce(function (o, k) { o[k] = had[k]; return o; }, {}))) {
+      var lr = App.engine.setLimitations(limits);
+      if (lr && lr.error) { setSettingsError(lr.error); return; }
+    }
 
     /* save selected colour scheme */
     var selTheme = document.querySelector("#set-theme-grid [data-settheme].is-active");
@@ -1678,13 +1893,13 @@
     readiness:"Advance at a 30-sec hold with legs low (also the Era I core benchmark).",
     injury:"Keep the lumbar pinned — arching turns this into a back exercise." });
 
-  def({ id:"core_3", pattern:"core", name:"Tuck L-Sit", level:3, era:1, mode:"hold", unit:"sec", equipment:["bench"],
+  def({ id:"core_3", pattern:"core", name:"Tuck L-Sit", level:3, era:1, mode:"hold", unit:"sec", equipment:["bench","parallettes"],
     cues:["Support on parallettes, bench edges, or the floor.","Depress the shoulders and lock the elbows straight.","Lift the hips and tuck the knees toward the chest.","Hold with the shoulders pulled down, chest tall."],
     mistakes:["Shrugging the shoulders up to the ears.","Bending the elbows to fake the lift."],
     readiness:"Advance at a 30-sec tuck hold (also the Era I L-sit benchmark).",
     injury:"Strong wrist demand on the floor — use parallettes if wrists complain." });
 
-  def({ id:"core_4", pattern:"core", name:"L-Sit", level:4, era:1, mode:"hold", unit:"sec", equipment:["bench"],
+  def({ id:"core_4", pattern:"core", name:"L-Sit", level:4, era:1, mode:"hold", unit:"sec", equipment:["bench","parallettes"],
     cues:["From a tuck L-sit, extend both legs straight out, parallel to the floor.","Push the floor down hard and keep the shoulders depressed.","Point the toes and keep the legs locked together.","Hold without leaning back to cheat the angle."],
     mistakes:["Bending the knees as fatigue sets in.","Rounding back and dropping the hips below the hands."],
     readiness:"Advance at a 20-sec full L-sit with locked legs.",
@@ -1752,19 +1967,19 @@
     readiness:"Advance at 15 reps with the elbows bending to 90°.",
     injury:"Stop before the shoulders roll forward — limit depth to protect them." });
 
-  def({ id:"dip_2", pattern:"dip", name:"Straight Bar Dip", level:2, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+  def({ id:"dip_2", pattern:"dip", name:"Straight Bar Dip", level:2, era:1, mode:"reps", unit:"reps", equipment:["lowBar"],
     cues:["Support on a straight bar at hip height, arms locked.","Lean slightly forward, keeping the bar close to the body.","Lower until the bar reaches the lower chest.","Press up to a strong lockout, chest proud."],
     mistakes:["Letting the bar drift away from the torso.","Collapsing the chest forward at the bottom."],
     readiness:"Advance at 10 controlled reps to chest depth.",
     injury:"Keep the shoulders packed down to avoid impingement." });
 
-  def({ id:"dip_3", pattern:"dip", name:"Parallel Bar Dip", level:3, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+  def({ id:"dip_3", pattern:"dip", name:"Parallel Bar Dip", level:3, era:1, mode:"reps", unit:"reps", equipment:["dipBars"],
     cues:["Support on parallel bars, arms locked, body slightly forward.","Lower until the shoulders are just below the elbows.","Keep the elbows tracking back, not flaring wide.","Press to a full lockout, depressing the shoulders."],
     mistakes:["Dropping below safe depth and stressing the shoulder.","Flaring the elbows out to the sides."],
     readiness:"Advance at 12 strict reps to parallel depth.",
     injury:"Build depth gradually — the bottom is the vulnerable position." });
 
-  def({ id:"dip_4", pattern:"dip", name:"Korean Dip", level:4, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+  def({ id:"dip_4", pattern:"dip", name:"Korean Dip", level:4, era:1, mode:"reps", unit:"reps", equipment:["lowBar"],
     cues:["On a straight bar, position the body behind the bar.","Lower with the bar tracking up toward the upper chest/neck.","Keep tension through the shoulders and lats.","Press back to lockout under control."],
     mistakes:["Losing shoulder control in the deep stretched position.","Using momentum to bounce out of the bottom."],
     readiness:"Advance at 8 controlled reps with the stretched setup.",
@@ -1776,7 +1991,7 @@
     readiness:"Advance at 8 controlled reps with a turned-out lockout.",
     injury:"The instability is the point — but back off if the shoulders feel unstable." });
 
-  def({ id:"dip_6", pattern:"dip", name:"Weighted Dip", level:6, era:1, mode:"reps", unit:"reps", equipment:["dumbbells"],
+  def({ id:"dip_6", pattern:"dip", name:"Weighted Dip", level:6, era:1, mode:"reps", unit:"reps", equipment:["dipBars","dumbbells","kettlebells"],
     cues:["Add load via a dip belt or a dumbbell held between the feet.","Keep the same strict parallel-bar mechanics.","Lower under full control with the added weight.","Press to a complete lockout each rep."],
     mistakes:["Reducing depth to manage the load.","Swinging the legs/weight for momentum."],
     readiness:"Mastery: progress load while keeping 6–8 strict reps.",
@@ -1855,6 +2070,18 @@
     WARMUPS[p[0]] = WARMUPS[p[1]];
     COOLDOWNS[p[0]] = COOLDOWNS[p[1]];
   });
+  /* A mini-session (plan D3) is 2–6 light coverage movements on any day,
+     upper or lower body, so its warm-up is short and touches both: about
+     two and a half minutes in, a minute and a half out. */
+  WARMUPS.mini = [
+    { name:"Cat-Cow Flow", detail:"8 cycles", seconds:45, cue:"Move the whole spine slowly through flexion and extension." },
+    { name:"Arm Circles", detail:"10 each direction", seconds:40, cue:"Small circles growing to big ones, to warm the shoulders before the small muscles work." },
+    { name:"Hip Circles & Leg Swings", detail:"8 each, both legs", seconds:60, cue:"Open the hips, then swing front to back to loosen the hamstrings." }
+  ];
+  COOLDOWNS.mini = [
+    { name:"Child's Pose", detail:"45 sec", seconds:45, cue:"Sink the hips back and breathe slowly." },
+    { name:"Standing Forward Fold", detail:"40 sec", seconds:40, cue:"Let the torso hang to ease the back and hamstrings." }
+  ];
 
   /* ==========================================================================
      4) SUBSTITUTIONS
@@ -2221,8 +2448,11 @@
   var DB = window.DB;
 
   var ROTATION = ["push", "pull", "legs", "fullbody"];
+  /* "mini" is a mini-session's type (plan D3): never in a template's order,
+     so it's labelled here and nowhere else in the schedule. */
   var DAY_LABEL = { push: "Push Day", pull: "Pull Day", legs: "Leg Day", fullbody: "Full Body",
-                    fullA: "Full Body A", fullB: "Full Body B", upper: "Upper", lower: "Lower" };
+                    fullA: "Full Body A", fullB: "Full Body B", upper: "Upper", lower: "Lower",
+                    mini: "Accessory session" };
   var DAY_DESC = {
     push: "Press, shoulders, dips & core — anterior chain power.",
     pull: "Pulls, posterior chain & core — build the back.",
@@ -2310,12 +2540,12 @@
      antagonist the day is otherwise missing. Every added pattern already has
      a complete tier ladder in DB, so this adds no new exercise content.
 
-     The added movement is marked `accessory: true` and is deliberately
-     EXCLUDED from tier progression and rep-target adaptation, exactly as
-     era-2 accessories already are. Without that, three sets of accessory
-     pull on push day would advance your real pull ladder and move your real
-     pull rep target — you would be levelling a pattern from support work
-     while never doing a dedicated session for it. */
+     The added movement is marked `accessory: true` (a badge in the preview)
+     and carries its slot's `rx`, so it IS evidence for that slot's step
+     (PROGRESS-workout-progression.md, W8): it is the same exercise at the
+     same prescription, done the same way. Nothing changes on its own — a
+     step is offered and still needs your yes. Its set count is the base
+     one, so it compares with the slot's own sessions. */
   var DAY_ACCESSORY = {
     push: "pull",       // antagonist balance for a push-dominant day
     pull: "push",
@@ -2395,6 +2625,10 @@
   };
   function volumeModeOf(name) { return name === "extended" || name === "max" ? "extended" : "standard"; }
 
+  /* A mini-session's size (plan D3): 2 to 6 coverage movements, the
+     finisher's four (Coverage.DEFAULT_PICKS) unless you ask for another. */
+  var MINI_PICKS = [2, 6];
+
   var engine = {
     ROTATION: ROTATION, DAY_LABEL: DAY_LABEL, DAY_DESC: DAY_DESC,
     DAY_PATTERNS: DAY_PATTERNS, TARGET_SETS: TARGET_SETS,
@@ -2420,11 +2654,23 @@
         });
     },
 
+    /* Completed main sessions, in the same order: every session except
+       mini-sessions (plan D3). Scheduling reads these — the rotation, the
+       rest gate, done-today, the next session, and liftOn and the run clash
+       through them — and so does attendance, which counts mini-sessions on
+       a line of their own. So a mini-session on a rest day leaves it a rest
+       day and the next session where it was. History, PRs, evidence,
+       muscles, the streak and the Hub's fitness habit read every session. */
+    mainSessions: function () {
+      return engine.completedSessions().filter(function (x) { return !engine.isMini(x); });
+    },
+    isMini: function (x) { return !!x && x.kind === "mini"; },
+
     /* The template's next day after your last session. A last session from
        another template (you just switched) starts the new one at its first
        day. */
     recommendedDayType: function () {
-      return nextDayAfter(templateOf(App.getState()), engine.completedSessions());
+      return nextDayAfter(templateOf(App.getState()), engine.mainSessions());
     },
 
     /* The movement a pattern trains now: its slot's prescription (v4), else
@@ -2437,26 +2683,42 @@
              (t && DB.byLevel(pattern, t.level)) || DB.ladder(pattern)[0];
     },
 
-    /* The prescription a slot trains today, with your equipment applied
-       (plan C3). Returns { rx, note } — a copy, never the stored record — or
-       null when the slot is turned off or nothing on it is possible (the pull
-       slot without a bar). Without the equipment, the nearest easier movement
-       on the slot's path that you can do is prescribed instead, and `note`
-       says why. */
+    /* What Training's rules read from your save: equipment, decisions,
+       goal, exclusions, limitations, grip and the weights you own. */
+    ctx: function () { return trainingCtx(App.getState()); },
+
+    /* The prescription a slot trains today, with your equipment,
+       exclusions and joint limits applied (plan C3). Returns { rx, note,
+       blocked } — a copy, never the stored record — or null when the slot is
+       turned off or nothing on it is possible (the pull slot without a bar).
+       When the slot's own exercise isn't allowed, the nearest easier movement
+       you're allowed is prescribed instead; `blocked` says why
+       ("equipment" | "excluded" | a joint) and `note` says it in a sentence.
+       The stored slot is never changed: buy the gear or lift the exclusion
+       and it's back. */
     prescriptionFor: function (slot) {
-      var s = App.getState(), eq = s.equipment, T = window.Training;
+      var s = App.getState(), ctx = trainingCtx(s);
       var rec = s.training.slots[slot], t = s.tiers[slot];
       if (rec && rec.off) return null;
       var rx = rec || (t ? rxStart(slot + "_" + t.level, { why: "carried over from Level " + t.level }) : null);
-      if (rx && T.owns(eq, rx.exerciseId)) return { rx: JSON.parse(JSON.stringify(rx)), note: "" };
-      var alt = rx ? nearestOwned(rx.exerciseId, eq) : null;
-      var first = (TD().SLOTS[slot].first || []).filter(function (id) { return T.owns(eq, id); })[0];
-      if (!alt && first) alt = rxStart(first);
+      var why = rx ? window.Training.blocked(ctx, rx.exerciseId, gripOf(rx)) : null;
+      if (rx && !why) return { rx: JSON.parse(JSON.stringify(rx)), note: "", blocked: null };
+      var alt = rx ? nearestAllowed(rx, ctx) : null;
+      var first = firstAllowed(slot, ctx);
+      if (!alt && first) alt = rxStart(first, { grip: standingGrip(s, slot), custom: rx && rx.custom });
       if (!alt) return null;
-      var note = rx ? (DB.getExercise(rx.exerciseId) || {}).name + " needs " + missingGear(rx.exerciseId, eq) +
-        ", which isn't in your equipment — this is the closest movement you can do without it." : "";
+      var note = rx ? blockedNote(rx.exerciseId, why, s.equipment) : "";
       alt.why = note || alt.why;
-      return { rx: alt, note: note };
+      return { rx: alt, note: note, blocked: why };
+    },
+
+    /* Why prescriptionFor has nothing (R3-3): what blocks the slot's own
+       movement, else its first rung — "equipment" | "excluded" | a joint.
+       Equipment isn't the only reason: avoid neck empties the neck slot. */
+    unavailableReason: function (slot) {
+      var s = App.getState(), rec = s.training.slots[slot], live = rec && !rec.off;
+      return window.Training.blocked(trainingCtx(s), live ? rec.exerciseId : TD().SLOTS[slot].first[0],
+        live ? gripOf(rec) : undefined);
     },
 
     /* The slots a day trains, in order, each with its prescription.
@@ -2490,17 +2752,30 @@
       return out;
     },
 
-    /* Every exercise a slot can swap to, for the swap lists: owned first,
-       then main path before optional, then by level. No Era gate — loaded
-       movements show to anyone whose equipment covers them. */
+    /* Every exercise a slot can swap to, for the swap lists: allowed first,
+       then those a careful joint warns on, then blocked ones (gear you lack,
+       excluded, a joint you avoid); within each, main path before optional,
+       then by level. No Era gate — loaded movements show to anyone whose
+       equipment covers them. The lists hide excluded ones until you ask. */
     slotOptions: function (slot) {
-      var s = App.getState(), EXS = TD().EXERCISES;
+      var EXS = TD().EXERCISES;
       var list = Object.keys(EXS).filter(function (id) { return EXS[id].slot === slot && DB.getExercise(id); })
         .map(function (id) { return DB.getExercise(id); });
       var rank = function (x) {
-        return (window.Training.owns(s.equipment, x.id) ? 0 : 1000) + (EXS[x.id].branch === "main" ? 0 : 100) + (x.level || 50);
+        var st = engine.swapStatus(slot, x.id);
+        return (st.blocked ? 1000 : st.careful.length ? 500 : 0) + (EXS[x.id].branch === "main" ? 0 : 100) + (x.level || 50);
       };
       return list.sort(function (a, b) { return rank(a) - rank(b); });
+    },
+
+    /* One swap-list row's standing for you, at the grip the slot would use:
+       { missing: the gear you lack ("" when owned), blocked: "equipment" |
+       "excluded" | a joint | null, careful: [joints] }. */
+    swapStatus: function (slot, id) {
+      var s = App.getState(), ctx = trainingCtx(s), rec = s.training.slots[slot];
+      var grip = gripCapable(id) ? standingGrip(s, slot) || gripOf(rec) : null;
+      return { missing: gearMissing(id, s.equipment), blocked: window.Training.blocked(ctx, id, grip),
+               careful: carefulFor(ctx, id, grip) };
     },
 
     /* One workout exercise from a prescription. Its rx is the copy the
@@ -2549,13 +2824,34 @@
     /* A workout is the day's slots, each at its prescription (slotsFor).
        `overrides` maps a slot to an exercise id chosen in the preview's Swap:
        that exercise at the bottom of its range, for this session only.
+       `grips` maps a slot to today's grip ("knuckles" | "palms"), the
+       Knuckles today toggle (plan C1): the same prescription on that grip,
+       so it isn't a swap, and a knuckles session is evidence for palms.
+
+       Custom sets (plan C4) replace the base count for that slot; +1 set
+       adds to them, a deload phase scales them and a recovery block cuts
+       them ×0.6, as with everyone else's three.
 
        The Era-II accessory that used to be appended here is gone with the Era
        gate (plan C3): it appeared only once every Era I benchmark was
        cleared. Loaded movements are in every slot's Swap list instead, for
-       anyone who owns the gear. */
-    buildWorkout: function (dayType, overrideMode, overrideLength, overrides) {
-      var s = App.getState();
+       anyone who owns the gear.
+
+       Coverage (plan D3), picked by fitness/coverage.js for the day you're
+       logging to, each at its slot's prescription and the base set count,
+       carrying `reason` ("Biceps: 0 of 6 direct sets this week"):
+         · the finisher: with prefs.finisher "on" (o.finisher overrides it),
+           four picks after the main slots, marked `finisher: true`, with the
+           main slots' sets counted toward each group's week;
+         · a mini-session: dayType "mini" is picks only — o.n of them, 2 to 6,
+           four by default — with its own short warm-up and cool-down, and
+           the workout says kind: "mini".
+       A pick swaps through `overrides` like any slot, and overrides[slot]
+       === false leaves it out for this session. A recovery block cuts them
+       too. */
+    buildWorkout: function (dayType, overrideMode, overrideLength, overrides, grips, o) {
+      o = o || {};
+      var s = App.getState(), mini = dayType === "mini";
       var lengthName = overrideLength || (s.prefs && s.prefs.sessionLength) || "focused";
       var ph = s.currentPhase || {};
       var vf = Number(ph.volumeFactor) || 1;                 // deload phases < 1
@@ -2566,34 +2862,67 @@
          rest any more: not the mode, and not a consolidation phase (D4). */
       /* A recovery block (D3) cuts every count to x 0.6 and drops the mode:
          nothing rises inside it. */
-      var rb = engine.recoveryOn(Hub.viewDate());
-      var modeName = vf < 1 || rb ? "standard" : volumeModeOf(overrideMode || (s.prefs && s.prefs.volumeMode));
+      var dayKey = Hub.viewDate(), rb = engine.recoveryOn(dayKey);
+      var modeName = vf < 1 || rb || mini ? "standard" : volumeModeOf(overrideMode || (s.prefs && s.prefs.volumeMode));
       var mode = VOLUME_MODES[modeName];
 
       var setCount = Math.min(6, Math.max(2, baseSetCount + mode.sets));
       if (rb) { baseSetCount = window.Training.recoverySets(baseSetCount); setCount = window.Training.recoverySets(setCount); }
 
-      var exercises = engine.slotsFor(dayType, lengthName).map(function (it) {
-        var rx = it.rx, pick = overrides && overrides[it.slot];
+      /* A slot's count: custom sets in place of the base three, then the
+         same mode, phase and block rules. */
+      var countFor = function (rx, accessory) {
+        var c = rx.custom && rx.custom.sets;
+        if (!c) return accessory ? baseSetCount : setCount;
+        var base = Math.max(1, Math.round(c * vf)), n = accessory ? base : Math.min(6, base + mode.sets);
+        return rb ? window.Training.recoverySets(n) : n;
+      };
+      /* One exercise from a slot's prescription, with this session's swap
+         and grip; `count` is its set count before them. */
+      var make = function (slot, baseRx, count, accessory, note) {
+        var rx = baseRx, pick = overrides && overrides[slot], grip = (grips && grips[slot]) || null;
         var swapped = !!(pick && pick !== rx.exerciseId && window.TRAINING_DATA.EXERCISES[pick]);
-        if (swapped) rx = rxStart(pick, { why: "swapped for this session" });
-        return engine.exerciseFromRx(it.slot, rx, it.accessory ? baseSetCount : setCount, 1,
-          { accessory: it.accessory, note: swapped ? "" : it.note, swapped: swapped });
+        if (swapped) rx = rxStart(pick, { why: "swapped for this session", grip: grip || standingGrip(s, slot) });
+        else rx = withGrip(rx, grip);
+        return engine.exerciseFromRx(slot, rx, count, 1, { accessory: accessory, note: swapped ? "" : note, swapped: swapped });
+      };
+      var exercises = mini ? [] : engine.slotsFor(dayType, lengthName).map(function (it) {
+        return make(it.slot, it.rx, countFor(it.rx, it.accessory), it.accessory, it.note);
       });
-      return {
+      var finisher = !mini && (o.finisher != null ? !!o.finisher : (s.prefs && s.prefs.finisher) === "on");
+      if (mini || finisher) {
+        var notes = {};
+        var picks = window.Coverage.pick(s.sessions, dayKey, {
+          rxFor: function (slot) { var pr = engine.prescriptionFor(slot); if (pr) notes[slot] = pr.note; return pr && pr.rx; },
+          planned: exercises.map(function (ex) { return { id: ex.id, sets: ex.sets.length }; }),
+          pins: s.training.pins || {},
+          n: mini ? lib.clamp(Math.round(Number(o.n) || window.Coverage.DEFAULT_PICKS), MINI_PICKS[0], MINI_PICKS[1])
+                  : window.Coverage.DEFAULT_PICKS
+        });
+        picks.forEach(function (p) {
+          if (overrides && overrides[p.slot] === false) return;
+          var ex = make(p.slot, p.rx, countFor(p.rx, true), false, notes[p.slot]);
+          if (finisher) ex.finisher = true;
+          ex.reason = p.reason;
+          exercises.push(ex);
+        });
+      }
+      var w = {
         dayType: dayType,
         startedISO: lib.iso(),
         warmup: DB.warmup(dayType).map(function () { return false; }),
         cooldown: DB.cooldown(dayType).map(function () { return false; }),
         exercises: exercises,
         notes: "",
-        setCount: setCount,
+        setCount: mini ? baseSetCount : setCount,
         volumeMode: modeName,
         /* The block this workout was cut for; finalize stamps the session so
            it is never evidence. Set here, not at save time, so the flag
            always matches the sets that were prescribed. */
         recovery: rb ? rb.id : null
       };
+      if (mini) w.kind = "mini";
+      return w;
     },
 
     /* A pain flag on an exercise: what was logged is a substitute movement, so
@@ -2648,6 +2977,7 @@
              current slot: a draft begun before the v4 upgrade has none, and
              saves without one (T12) — it is history, never evidence. */
           if (ex.slot) out.slot = ex.slot;
+          if (ex.finisher) out.finisher = true;
           if (ex.rx) out.rx = rxAsLogged(ex, out.sets);
           return out;
         }),
@@ -2658,8 +2988,28 @@
         completed: true,
         flags: []
       };
+      if (workout.kind === "mini") session.kind = "mini";
       if (workout.recovery) session.recovery = workout.recovery;
       session.volume = engine.sessionVolume({ exercises: workout.exercises });
+
+      /* A coverage slot gets its record the first time a finished workout
+         trains one of its picks (plan D3): its first allowed rung, which is
+         what prescriptionFor gives a slot with no record, so it's the pick
+         itself unless you swapped it for the day. acceptedAt stays null —
+         nobody chose it — so a choice made on another device outranks it in
+         a sync. From here a coverage slot is a slot like any other: its
+         card, steps and Change exercise. A discarded workout writes none,
+         and neither does a pick left at 0 sets or skipped (R3-2). */
+      session.exercises.forEach(function (ex) {
+        var def = ex.slot && TD().SLOTS[ex.slot];
+        if (!def || !def.coverage || s.training.slots[ex.slot]) return;
+        if (ex.skipped || !ex.sets.some(function (st) { return st.reps > 0; })) return;
+        var pr = engine.prescriptionFor(ex.slot);
+        if (!pr) return;
+        pr.rx.acceptedAt = null;
+        pr.rx.why = "added for coverage";
+        s.training.slots[ex.slot] = pr.rx;
+      });
 
       /* A loaded slot whose load isn't known yet takes the weight you just
          logged (rxAsLogged) onto the slot itself. Left on the session alone,
@@ -2695,10 +3045,13 @@
       });
 
       /* 4) injury flags -> flagsHistory */
-      workout.exercises.forEach(function (ex) {
+      workout.exercises.forEach(function (ex, i) {
         if (ex.flag && ex.flag.bodyPart) {
           var f = {
-            id: "f_" + Date.now() + "_" + ex.pattern,
+            /* The position keeps two flags in one session apart: every
+               coverage movement shares the pattern "accessory", and a sync
+               unions flags by id. */
+            id: "f_" + Date.now() + "_" + i + "_" + ex.pattern,
             dateISO: session.dateISO,
             /* The exercise that hurt, not the one a pain swap moved to. */
             exerciseKey: ex.flag.fromId || ex.id, pattern: ex.pattern,
@@ -2742,7 +3095,7 @@
        template's perWeek is what attendance is measured against, and the gate
        never blocks a day just because the week's count is reached. */
     restDayInfo: function (s) {
-      var done = engine.completedSessions(), tpl = templateOf(App.getState()), today = lib.today();
+      var done = engine.mainSessions(), tpl = templateOf(App.getState()), today = lib.today();
       if (!done.length) return { isRest: false };
       var lastKey = lib.sessionDay(done[done.length - 1]);
       /* Trained today already: doneTodayInfo's state, not this gate. Past
@@ -2771,7 +3124,7 @@
        app went on recommending the very session you had just logged while the
        calendar had already moved on to the day after your rest day. */
     doneTodayInfo: function (s) {
-      var done = engine.completedSessions();
+      var done = engine.mainSessions();
       if (!done.length) return { isDone: false };
       var todayKey = lib.today();
       var todays = done.filter(function (x) { return lib.sessionDay(x) === todayKey; });
@@ -2794,7 +3147,7 @@
        projected schedule. Uses the same rule as restDayInfo (day right after
        your last session is rest) instead of the old Mon/Tue/Thu/Fri guess. */
     nextSession: function (s) {
-      var done = engine.completedSessions();
+      var done = engine.mainSessions();
       var todayKey = lib.today();
       var type = engine.recommendedDayType();
       if (!done.length) {
@@ -2827,8 +3180,7 @@
     recommendFor: function (slot) {
       var s = App.getState(), rx = s.training.slots[slot];
       if (!rx || rx.off) return null;
-      return window.Training.recommend(s.sessions.filter(function (x) { return x.completed; }), rx,
-        { equipment: s.equipment, decisions: s.training.decisions, goal: s.profile.goal || "both" });
+      return window.Training.recommend(s.sessions.filter(function (x) { return x.completed; }), rx, trainingCtx(s));
     },
 
     /* Your answer to a slot's recommendation: "step" takes the step it
@@ -2837,20 +3189,46 @@
        new evidence asks again. Taking a step replaces the slot's prescription
        with a stamped one, and a numbered ladder movement moves the old tier
        level with it — the only way a level changes now that points are off.
+       "step2" takes both steps of a double offer (F9), stored as a "step"
+       with `steps: 2`. "load" answers an off-load reading (F1): the slot keeps
+       everything but its load, which becomes the weight you logged, stored
+       as { choice: "load", kg, at }. "option" steps into one of a ready
+       slot's optional branch moves (`to`, an id in rec.optionSteps — plan
+       C2), stored as { choice: "option", to, at }.
        Returns the new slot prescription, the unchanged one, or null. */
-    decide: function (slot, choice) {
+    decide: function (slot, choice, to) {
       var s = App.getState(), rec = engine.recommendFor(slot);
-      /* Nothing to answer, or "step" with no step on offer: write nothing. */
-      if (!rec || !rec.key || (choice === "step" && !rec.step)) return null;
-      /* Nothing rises inside a recovery block (D3). Stepping back is allowed. */
+      var option = choice === "option" && rec && rec.optionSteps.filter(function (o) { return o.rx.exerciseId === to; })[0];
+      /* Nothing to answer, an answer this card never offers, or a step with
+         no step on offer: write nothing. */
+      if (!rec || !rec.key || ["step", "step2", "load", "repeat", "option"].indexOf(choice) < 0 ||
+          (choice === "step" && !rec.step) || (choice === "step2" && !rec.double) ||
+          (choice === "load" && rec.why !== "off-load") || (choice === "option" && !option)) return null;
+      /* Nothing rises inside a recovery block (D3). Stepping back is allowed,
+         and so is setting the load you actually lifted. */
       /* Today, not the logging date: the choice is made now (R3-4). */
-      if (choice === "step" && rec.action === "ready" && engine.recoveryOn(lib.today())) return null;
+      if ((choice === "step" || choice === "step2" || choice === "option") && rec.action === "ready" &&
+          engine.recoveryOn(lib.today())) return null;
       var at = lib.iso(), from = s.training.slots[slot];
-      s.training.decisions[rec.key] = { choice: choice, at: at };
-      if (choice === "step" && rec.step) {
-        var rx = rec.step.rx, name = (DB.getExercise(from.exerciseId) || {}).name || from.exerciseId;
+      if (choice === "load") {
+        var kept = JSON.parse(JSON.stringify(from));
+        kept.setup.loadKg = rec.loggedKg;
+        kept.acceptedAt = at;
+        kept.why = "set to the weight you logged";
+        s.training.decisions[rec.key] = { choice: "load", kg: rec.loggedKg, at: at };
+        s.training.slots[slot] = kept;
+        App.saveState();
+        return kept;
+      }
+      s.training.decisions[rec.key] = choice === "step2" ? { choice: "step", steps: 2, at: at }
+        : choice === "option" ? { choice: "option", to: to, at: at } : { choice: choice, at: at };
+      if (choice === "step" || choice === "step2" || choice === "option") {
+        var rx = (choice === "option" ? option : choice === "step2" ? rec.steps[1] : rec.step).rx;
+        var name = (DB.getExercise(from.exerciseId) || {}).name || from.exerciseId;
         rx.acceptedAt = at;
-        rx.why = (rec.action === "reduce" ? "stepped back from " : "stepped up from ") + name;
+        rx.why = (choice === "option" ? "stepped into it from " : rec.action === "reduce" ? "stepped back from " : "stepped up from ") + name;
+        /* Hold is the slot's, not the movement's: it stays on through a step back. */
+        if (from.hold) rx.hold = true;
         s.training.slots[slot] = rx;
         var lvl = ladderLevel(slot, rx.exerciseId);
         if (lvl && s.tiers[slot]) s.tiers[slot].level = lvl;
@@ -2927,7 +3305,7 @@
       (s.prefs || (s.prefs = {})).template = id;
       var names = TEMPLATES[id].order.some(function (d) { return DAY_PATTERNS[d].indexOf("row") >= 0; });
       if (names && !s.training.slots.row) {
-        var first = (TD().SLOTS.row.first || []).filter(function (x) { return window.Training.owns(s.equipment, x); })[0];
+        var first = firstAllowed("row", trainingCtx(s));
         if (first) s.training.slots.row = rxStart(first, { at: lib.iso(), why: "part of the " + TEMPLATES[id].label + " template" });
       }
       App.recountStreak(s);                     // the gap follows the template's pace (R3-1)
@@ -2938,13 +3316,14 @@
        same exercise and setup with the goal's range, stamped so a sync keeps
        it. Holds, skills and eccentrics come back unchanged and aren't
        touched, and neither is rest — GOAL_REST_SEC is for new profiles.
-       Doesn't save; Settings does. Returns the slots that changed. */
+       Neither is a range you set yourself (plan C4): it survives a goal
+       change. Doesn't save; Settings does. Returns the slots that changed. */
     setGoal: function (goal) {
       var s = App.getState(), changed = [], at = lib.iso();
       if (!TD().GOAL_RANGES[goal]) return changed;
       s.profile.goal = goal;
       Object.keys(s.training.slots).forEach(function (slot) {
-        var rx = s.training.slots[slot], r = rx && !rx.off && rx.range && TD().rangeFor(rx.exerciseId, goal);
+        var rx = s.training.slots[slot], r = rx && !rx.off && rx.range && !(rx.custom && rx.custom.range) && TD().rangeFor(rx.exerciseId, goal);
         if (!r || (r.lo === rx.range[0] && r.hi === rx.range[1])) return;
         rx = JSON.parse(JSON.stringify(rx));
         rx.range = [r.lo, r.hi];
@@ -2953,6 +3332,160 @@
         changed.push(slot);
       });
       return changed;
+    },
+
+    /* --- Your control over the plan (plan C1–C4) ---
+       Each call stamps what it writes, so a sync keeps the newer, and saves.
+       A refusal writes nothing and returns { error } with the sentence to
+       show inline, never a modal. */
+
+    /* Choose and keep (C2): `id` becomes the slot's prescription, at the
+       bottom of its range, until a step or another choice moves it. Any of
+       the slot's exercises except a skill attempt — branches and loaded ones
+       too, past the end of a path. o: { setup, loadKg }; a setup the
+       exercise doesn't have falls back to its first, and without a load the
+       first session's weight sets it, as before. Your grip, custom
+       sets/range and hold carry over. Returns the new prescription. */
+    chooseExercise: function (slot, id, o) {
+      o = o || {};
+      var s = App.getState(), e = TD().EXERCISES[id], from = s.training.slots[slot];
+      var name = (DB.getExercise(id) || {}).name || id;
+      if (!TD().SLOTS[slot] || !e || e.slot !== slot) return { error: "That movement isn't part of this slot." };
+      if (e.kind === "skill") return { error: name + " is a skill attempt — it stays in Skills." };
+      /* A grip the picker set wins over your standing one: it's what you'll do. */
+      var grip = gripCapable(id) ? (o.setup && o.setup.grip) || standingGrip(s, slot) : null;
+      var why = window.Training.blocked(trainingCtx(s), id, grip);
+      if (why === "equipment") return { error: name + " needs " + missingGear(id, s.equipment) + ", which isn't in your equipment." };
+      if (why === "excluded") return { error: name + " is on your excluded list — include it again first." };
+      if (why) return { error: name + " loads your " + jointWord(why) + " heavily, which you asked to avoid — use Allow anyway on it first." };
+      var kg = Number(o.loadKg);
+      var rx = rxStart(id, { setup: o.setup, loadKg: e.loadMode && kg > 0 ? kg : null, grip: grip,
+                             custom: from && !from.off ? from.custom : null, at: lib.iso(), why: "chosen by you" });
+      if (from && from.hold) rx.hold = true;
+      s.training.slots[slot] = rx;
+      var lvl = ladderLevel(slot, id);
+      if (lvl && s.tiers[slot]) s.tiers[slot].level = lvl;
+      App.saveState();
+      return rx;
+    },
+
+    /* Exclude an exercise, include it again, or let it past a joint limit
+       (C3): training.exclusions[id] = { state, at, why }, state "excluded",
+       "none" (included again) or "allowed" (Allow anyway). Never deleted: a
+       deleted key comes back with the next sync. Excluding the exercise a
+       slot trains leaves the slot alone — prescriptionFor gives the nearest
+       easier movement you allow, which is what the picker preselects. */
+    setExcluded: function (id, state, why) {
+      var s = App.getState();
+      if (!TD().EXERCISES[id]) return { error: "That movement isn't in the catalogue." };
+      if (EXCLUSION_STATES.indexOf(state) < 0) return { error: "Exclude, include or allow — nothing else." };
+      var rec = { state: state, at: lib.iso(), why: why || null };
+      (s.training.exclusions || (s.training.exclusions = {}))[id] = rec;
+      App.saveState();
+      return rec;
+    },
+
+    /* Joint limitations (C3), the whole set at once: { wrist: "careful" |
+       "avoid", … }; a joint left out (or "none") has no limit. Clearing all of
+       them writes { at }, never null — null has no stamp and loses a sync.
+       Avoid removes what loads a joint heavily (training.js blocked);
+       careful only warns and ranks lower (carefulFor). A filter by exercise,
+       not an assessment of an injury. */
+    setLimitations: function (map) {
+      var s = App.getState(), out = {};
+      var bad = Object.keys(map || {}).filter(function (j) {
+        return TD().JOINTS.indexOf(j) < 0 || (map[j] && map[j] !== "none" && LIMIT_LEVELS.indexOf(map[j]) < 0);
+      });
+      if (bad.length) return { error: "Unknown joint or limit: " + bad.join(", ") + "." };
+      Object.keys(map || {}).forEach(function (j) { if (LIMIT_LEVELS.indexOf(map[j]) >= 0) out[j] = map[j]; });
+      out.at = lib.iso();
+      s.training.limitations = out;
+      App.saveState();
+      return out;
+    },
+
+    /* Your standing grip for a slot (C1): training.grip = { push: "knuckles",
+       at }, kept for every slot in one record. Palms is written, not
+       cleared. When the slot's exercise takes a grip, its prescription moves
+       onto it, stamped: knuckles sessions count for palms, so going to
+       palms keeps your evidence; going to knuckles starts it again. */
+    setGrip: function (slot, grip) {
+      var s = App.getState(), at = lib.iso();
+      if (!TD().GRIPS.values.some(function (v) { return v.id === grip; })) return { error: "Palms or knuckles." };
+      if (!TD().GRIPS.exercises.some(function (id) { return TD().EXERCISES[id].slot === slot; }))
+        return { error: "This slot's movements don't take a grip." };
+      var old = s.training.grip || {}, rec = {};
+      Object.keys(old).forEach(function (k) { if (k !== "at") rec[k] = old[k]; });
+      rec[slot] = grip; rec.at = at;
+      s.training.grip = rec;
+      var rx = s.training.slots[slot];
+      if (rx && !rx.off && gripCapable(rx.exerciseId) && gripOf(rx) !== (grip === "palms" ? null : grip)) {
+        rx = withGrip(rx, grip);
+        rx.acceptedAt = at;
+        s.training.slots[slot] = rx;
+      }
+      App.saveState();
+      return rec;
+    },
+
+    /* Hold (C4): step-ups pause on the slot; step-back offers still show
+       (training.js). Stamped on the slot's record like any slot edit, and
+       kept through a step back or a new choice. Returns the prescription. */
+    setHold: function (slot, on) {
+      var s = App.getState(), rx = s.training.slots[slot];
+      if (!rx || rx.off) return { error: "There's no movement on this slot to hold." };
+      if (!!rx.hold === !!on) return rx;
+      rx = JSON.parse(JSON.stringify(rx));
+      if (on) rx.hold = true; else delete rx.hold;
+      rx.acceptedAt = lib.iso();
+      s.training.slots[slot] = rx;
+      App.saveState();
+      return rx;
+    },
+
+    /* Custom sets and range (C4): { sets, range: [lo, hi] }, either part
+       optional; null goes back to the goal's. Out of bounds is refused with
+       training.js customError's sentence. Changing sets starts fresh
+       evidence (a different set count never compares); a new range judges
+       the same sessions against the new top. Kept through steps, choices
+       and goal changes. Returns the prescription. */
+    setCustom: function (slot, custom) {
+      var s = App.getState(), rx = s.training.slots[slot];
+      if (!rx || rx.off) return { error: "There's no movement on this slot to set." };
+      if (!rx.range || rx.range[1] == null) return { error: "This movement names no number to set a range against." };
+      var c = {};
+      if (custom && custom.sets != null && custom.sets !== "") c.sets = Number(custom.sets);
+      if (custom && custom.range) c.range = [Number(custom.range[0]), Number(custom.range[1])];
+      var err = window.Training.customError(c, rx.unit);
+      if (err) return { error: err };
+      var r = TD().rangeFor(rx.exerciseId, (s.profile || {}).goal || "both");
+      rx = JSON.parse(JSON.stringify(rx));
+      rx.sets = c.sets != null ? c.sets : r.sets;
+      rx.range = c.range ? c.range : [r.lo, r.hi];
+      if (Object.keys(c).length) { c.unit = rx.unit; rx.custom = c; } else delete rx.custom;
+      rx.acceptedAt = lib.iso();
+      s.training.slots[slot] = rx;
+      App.saveState();
+      return rx;
+    },
+
+    /* Pins (plan D3): a coverage slot goes first in the finisher and a
+       mini-session on these weekdays (0 = Sunday), whatever its shortfall,
+       though never past your equipment, exclusions or limits.
+       training.pins[slot] = { days, at }; no days is no pin, written as a
+       stamped record rather than deleted, so a sync carries the clear.
+       Returns the record. */
+    setPins: function (slot, days) {
+      var s = App.getState(), def = TD().SLOTS[slot];
+      if (!def || !def.coverage) return { error: "Only coverage slots take pins." };
+      var list = (days || []).map(Number);
+      if (list.some(function (d) { return !(d >= 0 && d <= 6 && d === Math.floor(d)); }))
+        return { error: "Days run from 0 (Sunday) to 6 (Saturday)." };
+      var rec = { days: list.filter(function (d, i) { return list.indexOf(d) === i; }).sort(function (a, b) { return a - b; }),
+                  at: lib.iso() };
+      (s.training.pins || (s.training.pins = {}))[slot] = rec;
+      App.saveState();
+      return rec;
     },
 
     _checkPR: function (s, ex, dateISO) {
@@ -3055,38 +3588,104 @@
     return window.Training.startOf(id, opt);
   }
 
-  /* The saved copy of a prescription. A loaded movement whose load isn't
-     known yet takes the weight you logged, when every logged set used the
-     same one: otherwise a 10 kg session and a 20 kg one would compare as the
-     same setup. Mixed weights leave it unknown. */
+  /* The saved copy of a prescription. A loaded movement saves the weight you
+     logged, when every logged set used the same one, whatever was
+     prescribed: prescribed 10 kg and lifted at 5 kg is a 5 kg session (F1).
+     Mixed weights save the load as unknown, so a 10 kg session and a 20 kg
+     one never compare as the same setup. With nothing logged, the
+     prescription is saved as it was. */
   function rxAsLogged(ex, sets) {
     var rx = JSON.parse(JSON.stringify(ex.rx));
-    if (rx.setup && rx.setup.loadMode && rx.setup.loadKg == null) {
+    if (rx.setup && rx.setup.loadMode) {
       var kgs = sets.filter(function (st) { return st.reps > 0; }).map(function (st) { return st.weight; });
-      if (kgs.length && kgs[0] > 0 && kgs.every(function (k) { return k === kgs[0]; })) rx.setup.loadKg = kgs[0];
+      if (kgs.length) {
+        rx.setup.loadKg = kgs[0] > 0 && kgs.every(function (k) { return k === kgs[0]; }) ? kgs[0] : null;
+      }
     }
     return rx;
   }
 
-  /* The nearest easier movement you own, walking back along `next` from an
-     exercise you can't do, at its hardest setup (one step below where you
-     were). null when nothing before it is possible. */
-  function nearestOwned(id, eq) {
-    var EXS = TD().EXERCISES, seen = {}, queue = [id];
+  /* What Training's rules read from a save (training.js, SHAPES), built in
+     one place so a prescription, a recommendation and a swap list can't
+     disagree about what you own, exclude or avoid. */
+  function trainingCtx(s) {
+    var tr = s.training || {};
+    return { equipment: s.equipment, decisions: tr.decisions || {}, goal: (s.profile || {}).goal || "both",
+             exclusions: tr.exclusions || {}, limitations: tr.limitations || null, grip: tr.grip || null,
+             loads: s.equipmentLoads || {} };
+  }
+  function gripCapable(id) { return TD().GRIPS.exercises.indexOf(id) >= 0; }
+  /* An rx's grip, null for palms: the one the joint filter reads for it. */
+  function gripOf(rx) { return (rx && rx.setup && rx.setup.grip) || null; }
+  /* Your standing grip for a slot ("palms" | "knuckles"), or null. */
+  function standingGrip(s, slot) { var g = s.training && s.training.grip; return (g && g[slot]) || null; }
+  /* A copy of rx on `grip`, on a push-up that takes one; any other rx as is. */
+  function withGrip(rx, grip) {
+    if (!grip || !gripCapable(rx.exerciseId)) return rx;
+    var r = JSON.parse(JSON.stringify(rx));
+    r.setup = r.setup || {};
+    if (grip === "palms") delete r.setup.grip; else r.setup.grip = grip;
+    return r;
+  }
+  /* A slot's first entry point that's allowed for you (owned, not excluded,
+     not avoided), or undefined. */
+  function firstAllowed(slot, ctx) {
+    return (TD().SLOTS[slot].first || []).filter(function (x) { return window.Training.allowed(ctx, x); })[0];
+  }
+  /* The joint names a limitation uses, as a sentence says them. */
+  function jointWord(j) { return j === "lowerBack" ? "lower back" : j; }
+  /* The stress that "careful" warns at: the same heavy load "avoid" removes.
+     A product choice, like the rubric it reads. */
+  var CAREFUL_AT = 2;
+  /* What the control calls accept (engine.setExcluded, setLimitations). */
+  var EXCLUSION_STATES = ["excluded", "none", "allowed"];
+  var LIMIT_LEVELS = ["careful", "avoid"];
+  /* Joints you marked careful that an exercise loads heavily, at a grip:
+     the swap lists' warning and their lower rank. Avoid is Training.blocked's.
+     Allow anyway silences both. */
+  function carefulFor(ctx, id, grip) {
+    var L = ctx.limitations || {}, x = (ctx.exclusions || {})[id];
+    if (x && x.state === "allowed") return [];
+    var st = window.Training.stress(id, gripCapable(id) ? grip : null);
+    return TD().JOINTS.filter(function (j) { return L[j] === "careful" && st[j] >= CAREFUL_AT; });
+  }
+
+  /* The nearest easier movement you're allowed, walking back from an
+     exercise you can't do through every exercise whose `next` or `offer`
+     names it (so Archer → Decline), within its slot, at its hardest setup:
+     one step below where you were. Your grip, custom sets/range and the
+     rest carry, as a step's do. Skill attempts are never a slot's exercise.
+     null when nothing before it is possible. */
+  function nearestAllowed(rx, ctx) {
+    var EXS = TD().EXERCISES, slot = EXS[rx.exerciseId].slot, seen = {}, queue = [rx.exerciseId];
+    var grip = gripOf(rx);
+    seen[rx.exerciseId] = true;
     while (queue.length) {
       var cur = queue.shift();
-      var preds = Object.keys(EXS).filter(function (p) { return EXS[p].next.indexOf(cur) >= 0 && !seen[p]; });
+      var preds = Object.keys(EXS).filter(function (p) {
+        return !seen[p] && EXS[p].slot === slot && (EXS[p].next.indexOf(cur) >= 0 || EXS[p].offer.indexOf(cur) >= 0);
+      });
       for (var i = 0; i < preds.length; i++) {
         seen[preds[i]] = true;
-        if (window.Training.owns(eq, preds[i])) {
+        if (EXS[preds[i]].kind !== "skill" && window.Training.allowed(ctx, preds[i], gripCapable(preds[i]) ? grip : null)) {
           var S = TD().SETUPS[preds[i]], hard = {};
           if (S) hard[S.key] = S.values[S.values.length - 1].id;
-          return rxStart(preds[i], { setup: hard });
+          return rxStart(preds[i], { setup: hard, grip: grip, custom: rx.custom });
         }
         queue.push(preds[i]);
       }
     }
     return null;
+  }
+
+  /* Why a slot's own exercise isn't the one prescribed, in a sentence. */
+  function blockedNote(id, why, eq) {
+    var name = (DB.getExercise(id) || {}).name || id;
+    if (why === "equipment") return name + " needs " + missingGear(id, eq) +
+      ", which isn't in your equipment — this is the closest movement you can do without it.";
+    if (why === "excluded") return name + " is on your excluded list — this is the closest easier movement you allow.";
+    return name + " loads your " + jointWord(why) + " heavily, which you asked to avoid — this is the closest easier " +
+      "movement that doesn't. A filter by exercise, not a check of your " + jointWord(why) + ".";
   }
 
   /* "a bench", "a pull-up bar and rings", "dumbbells or kettlebells" */
@@ -3096,6 +3695,16 @@
       return Array.isArray(t) ? !t.some(function (u) { return eq[u]; }) : !eq[t];
     }).map(function (t) { return Array.isArray(t) ? t.map(label).join(" or ") : label(t); });
     return miss.join(" and ") || "equipment";
+  }
+
+  /* What a preview or swap badge says you lack, or "" when you own it. Read
+     through Training.owns, so an any-of list ("dumbbells or kettlebells")
+     reads as any-of: EXERCISE_DB's flat list can't say that (F6). An id
+     outside the catalogue (an old draft) falls back to the DB list, all-of. */
+  function gearMissing(id, eq) {
+    if (TD().EXERCISES[id]) return window.Training.owns(eq, id) ? "" : missingGear(id, eq);
+    return ((DB.getExercise(id) || {}).equipment || []).filter(function (t) { return !eq[t]; })
+      .map(function (t) { return EQUIP_LABEL[t] || t; }).join(" and ");
   }
 
   /* The old ladder's level for an exercise: `<pattern>_<n>` is level n; an
@@ -3137,7 +3746,9 @@
   var EQUIP = [
     { id: "pullupBar", t: "Pull-up bar" }, { id: "dumbbells", t: "Dumbbells" },
     { id: "bench", t: "Bench" }, { id: "kettlebells", t: "Kettlebells" },
-    { id: "rings", t: "Rings" }, { id: "nothing", t: "Just the floor" }
+    { id: "rings", t: "Rings" }, { id: "bands", t: "Resistance bands" },
+    { id: "parallettes", t: "Parallettes" }, { id: "dipBars", t: "Dip bars" },
+    { id: "lowBar", t: "A waist-height bar" }, { id: "nothing", t: "Just the floor" }
   ];
 
   function startDraft() {
@@ -3262,13 +3873,19 @@
 
   /* A slot's main path you can do, easiest first: from its entry points
      along `next`, stopping at the first movement your equipment can't
-     cover. Loaded movements and optional branches are never offered. */
-  function assessPath(slot, eq) {
+     cover. Loaded movements and optional branches are never offered, and
+     nor is one you excluded or whose joint you avoid (plan C3) — a fresh
+     profile has neither, so that's the equipment alone. */
+  function assessCtx(d) {
+    var tr = App.getState().training || {};
+    return { equipment: d.equipment, exclusions: tr.exclusions || {}, limitations: tr.limitations || null };
+  }
+  function assessPath(slot, ctx) {
     var EXS = TD().EXERCISES, out = [], queue = TD().SLOTS[slot].first.slice();
     while (queue.length) {
       var id = queue.shift(), e = EXS[id];
       if (out.indexOf(id) >= 0 || e.slot !== slot || e.branch !== "main" || e.loadMode ||
-          !window.Training.owns(eq, id)) continue;
+          !window.Training.allowed(ctx, id)) continue;
       out.push(id);
       queue = queue.concat(e.next);
     }
@@ -3283,9 +3900,9 @@
   }
 
   function stepAssess() {
-    var eq = onb.draft.equipment, a = onb.draft.assess || (onb.draft.assess = {});
+    var ctx = assessCtx(onb.draft), a = onb.draft.assess || (onb.draft.assess = {});
     var rows = ASSESS_SLOTS.map(function (slot) {
-      var label = TD().SLOTS[slot].label, path = assessPath(slot, eq);
+      var label = TD().SLOTS[slot].label, path = assessPath(slot, ctx);
       if (!path.length) {
         return '<div class="card" style="padding:var(--sp-3) var(--sp-4)"><div class="drow__title">' + label + '</div>' +
           '<div class="drow__sub">' + esc(TD().SLOTS[slot].none || "Nothing on this slot fits your equipment.") + '</div></div>';
@@ -3312,9 +3929,9 @@
      gets its first rung, so a bar bought later has somewhere to start; the
      builder swaps it for the row until then. */
   function assessedSlots(d, at) {
-    var eq = d.equipment, a = d.assess || {}, out = {};
+    var ctx = assessCtx(d), a = d.assess || {}, out = {};
     ASSESS_SLOTS.forEach(function (slot) {
-      var path = assessPath(slot, eq), pick = a[slot];
+      var path = assessPath(slot, ctx), pick = a[slot];
       if (pick === "off") { out[slot] = { off: true, acceptedAt: at, why: "left out at setup" }; return; }
       var id = path.indexOf(pick) >= 0 ? pick : (path[0] || TD().SLOTS[slot].first[0]);
       var why = path.indexOf(pick) >= 0 ? "your assessment — unverified until you log it"
@@ -3328,7 +3945,7 @@
     var slots = assessedSlots(onb.draft, null);
     var rows = ASSESS_SLOTS.map(function (slot) {
       var rx = slots[slot], label = TD().SLOTS[slot].label;
-      var owned = rx && !rx.off && window.Training.owns(onb.draft.equipment, rx.exerciseId);
+      var owned = rx && !rx.off && window.Training.allowed(assessCtx(onb.draft), rx.exerciseId);
       var body = !rx || rx.off ? "Left out" : !owned ? esc(TD().SLOTS[slot].none || "Needs equipment you don't have") :
         esc(DB.getExercise(rx.exerciseId).name) + ' <span class="faint mono">' + rx.sets + ' × ' + rx.range[0] + '–' + rx.range[1] +
         (rx.unit === "sec" ? " s" : "") + '</span>';
@@ -3553,6 +4170,54 @@
       : "Next up is " + (DAY_LABEL[rec] || "") + " tomorrow — your template lets it follow today's session straight away.";
   }
 
+  /* The Accessory session card (plan D3): coverage work on any day, rest
+     days included. It lists the picks the finisher would make, so what you
+     read is what starts. A mini-session moves no rotation, rest gate or
+     attendance (they read main sessions); muscles, PRs, evidence, the
+     streak and the Hub's habit all count it. How many movements (2-6) is
+     remembered on this device. */
+  function miniN() {
+    var n = Math.round(Number(App.util.uiGet("mini.n", null)));
+    return n >= MINI_PICKS[0] && n <= MINI_PICKS[1] ? n : window.Coverage.DEFAULT_PICKS;
+  }
+  function miniCardHtml() {
+    var s = App.getState(), n = miniN(), w = engine.buildWorkout("mini", null, null, {}, {}, { n: n });
+    var restMin = Math.round(restRepPref(s) / 60 * 10) / 10;
+    var mins = Math.round(w.exercises.reduce(function (m, ex) { return m + ex.sets.length * (2.5 + restMin); }, 0));
+    var rows = w.exercises.map(function (ex) {
+      return '<div data-mini-pick="' + ex.slot + '"><div class="kv"><span class="kv__k">' + esc(TD().SLOTS[ex.slot].label) + '</span>' +
+        '<span class="kv__v">' + esc(ex.name) + ' <span class="faint text-xs mono">' + rangeText(ex) + '</span></span></div>' +
+        '<p class="faint text-xs" style="margin:0 0 var(--sp-2)">' + esc(ex.reason) + '</p></div>';
+    }).join("");
+    return '<div class="card mt-4 stack" id="mini-card"><div class="card__head"><div class="card__title">Accessory session</div>' +
+      '<span class="badge">' + (w.exercises.length ? w.exercises.length + ' movements · ~' + mins + ' min' : 'nothing to add') + '</span></div>' +
+      '<p class="muted text-sm">A short session of coverage work on any day, rest days included — the groups your week is shortest on. It doesn\'t move your rotation, a rest day or your attendance. It does count for muscles, PRs, progression evidence and your streak.</p>' +
+      (w.exercises.length
+        ? '<label class="field" style="max-width:8rem"><span class="field__label">Movements</span><select class="select" data-mini-n aria-label="Movements in the accessory session">' +
+            [2, 3, 4, 5, 6].map(function (k) { return '<option value="' + k + '"' + (k === n ? " selected" : "") + '>' + k + '</option>'; }).join("") + '</select></label>' +
+          rows + '<button class="btn btn--secondary btn--block" data-mini-start type="button">Start accessory session</button>'
+        : '<p class="faint text-sm" data-mini-empty>Nothing to add today: every group is at its weekly floor of direct sets or was trained directly in the last 48 hours, or no coverage movement fits your equipment and limits.</p>') +
+    '</div>';
+  }
+  function wireMini(el) {
+    var card = el.querySelector("#mini-card");
+    if (!card) return;
+    var sel = card.querySelector("[data-mini-n]"), go = card.querySelector("[data-mini-start]");
+    if (sel) sel.addEventListener("change", function () {
+      App.util.uiSet("mini.n", Number(sel.value));
+      card.outerHTML = miniCardHtml();
+      wireMini(el);
+    });
+    if (go) go.addEventListener("click", function () {
+      var w = engine.buildWorkout("mini", null, null, {}, {}, { n: miniN() });
+      w.startedISO = lib.iso();
+      w.dayKey = Hub.viewDate();
+      setWorkout(w);
+      App.refresh();
+      App.toast("Accessory session started. Warm up first.", "info");
+    });
+  }
+
   function renderRestDay(el, s, restInfo) {
     var done = engine.completedSessions();
     var last = done[done.length - 1];
@@ -3571,10 +4236,12 @@
         '<span class="badge"><span class="dot"></span>rest</span></div>' +
         '<button class="btn btn--ghost btn--sm" id="rest-train-anyway" type="button">Train anyway →</button>' +
       '</div>' +
+      miniCardHtml() +
       (last ? lastSessionCard(last) : "") +
       streakStripCard(s);
 
     wireRecovery(el);
+    wireMini(el);
     var anyway = document.getElementById("rest-train-anyway");
     if (anyway) anyway.addEventListener("click", function () {
       App.util.uiSet(restOverrideKey(), true);
@@ -3610,10 +4277,12 @@
         '<span class="badge badge--primary"><span class="dot"></span>complete</span></div>' +
         '<button class="btn btn--ghost btn--sm" id="done-train-anyway" type="button">Train again anyway →</button>' +
       '</div>' +
+      miniCardHtml() +
       (last ? lastSessionCard(last) : "") +
       streakStripCard(s);
 
     wireRecovery(el);
+    wireMini(el);
     var anyway = document.getElementById("done-train-anyway");
     if (anyway) anyway.addEventListener("click", function () {
       App.util.uiSet(doneOverrideKey(), true);
@@ -3644,6 +4313,7 @@
       head("Workout", "Session engine", rec ? DAY_LABEL[rec] + " is up next" : "Let's train") +
       recoveryHtml(s) +
       upgradeCardHtml(s) +
+      equipCheckHtml(s) +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Recommended</div>' +
         '<h2 class="display h2" id="today-title">' + DAY_LABEL[rec] + '</h2>' +
@@ -3672,6 +4342,12 @@
             '</button>';
           }).join("") +
         '</div></div>' +
+        /* The finisher (plan D3) is off until you tick this; the pref is what
+           buildWorkout reads, so the preview and Begin can't disagree. */
+        '<div class="vol-mode-row mt-4" id="finisher-row"><div class="field__label mb-2">Finisher</div>' +
+          '<label class="row text-sm" style="gap:var(--sp-2);align-items:center"><input type="checkbox" data-finisher' +
+            ((s.prefs && s.prefs.finisher) === "on" ? " checked" : "") + '> <span>Add a coverage finisher</span></label>' +
+          '<p class="faint text-xs" style="margin:6px 0 0">Four coverage movements for the groups furthest below their weekly floor of direct sets, skipping any you trained directly in the last 48 hours. Off until you tick it. Remove or swap each one in the list below.</p></div>' +
         '<div id="today-preview"></div>' +
         '<button class="btn btn--ghost btn--sm btn--block" id="preview-all-toggle" type="button" style="margin-top:var(--sp-2)">Preview all days ▾</button>' +
         '<div id="all-days-preview" style="display:none"></div>' +
@@ -3681,54 +4357,89 @@
       '</div>' +
       todayRunCard(s) +
       skillReminderCard(s, rec) +
+      miniCardHtml() +
       (last ? lastSessionCard(last) : "") +
       streakStripCard(s);
     if (App.run && App.run.wireNotes) App.run.wireNotes(el);
+    wireMini(el);
 
     var chosen = {
-      day: rec, overrides: {}, workout: null,
+      day: rec, overrides: {}, grips: {}, workout: null,
       volumeMode: volumeModeOf(s.prefs && s.prefs.volumeMode),
       sessionLength: (s.prefs && s.prefs.sessionLength) || "focused"
     };
-    function previewMissing(ex) {
-      return (ex.equipment || []).filter(function (e) { return !s.equipment[e]; });
-    }
+    function previewMissing(ex) { return gearMissing(ex.id, s.equipment); }
     function renderPreview() {
       /* The preview IS the workout Begin starts: one buildWorkout call whose
          object Begin saves as the draft, so the two can't disagree about a
          prescription (T17). Rebuilt on every change of day, mode, length or
          swap. */
-      var w = chosen.workout = engine.buildWorkout(chosen.day, chosen.volumeMode, chosen.sessionLength, chosen.overrides);
+      var w = chosen.workout = engine.buildWorkout(chosen.day, chosen.volumeMode, chosen.sessionLength, chosen.overrides, chosen.grips);
       var restMin = Math.round(restRepPref(s) / 60 * 10) / 10;
-      var estMins = Math.round(w.exercises.length * (w.setCount * 2.5 + restMin * w.setCount));
+      var estMins = Math.round(w.exercises.reduce(function (n, ex) {
+        return n + (ex.finisher ? ex.sets.length : w.setCount) * (2.5 + restMin);
+      }, 0));
       /* The lifting card's half of the A13 note: the run planned for today,
          against the day being previewed rather than the recommended one. */
       var todaysRun = App.run && App.run.isActive() ? App.run.nextRun() : null;
       var clash = todaysRun && todaysRun.item.key === lib.today() ? App.run.clashFor(todaysRun.item, chosen.day) : null;
+      var finShown = false;
+      var finMins = Math.round(w.exercises.filter(function (ex) { return ex.finisher; }).reduce(function (n, ex) {
+        return n + ex.sets.length * (2.5 + restMin);
+      }, 0));
+      /* Picks you removed for this session, each one tap from coming back. A
+         removal doesn't pull in the next-best pick: four is a ceiling. */
+      var removedHtml = function () {
+        var gone = (App.getState().prefs.finisher) === "on" ? Object.keys(chosen.overrides).filter(function (k) { return chosen.overrides[k] === false; }) : [];
+        return gone.length ? '<p class="faint text-xs" data-pv-removed style="margin:var(--sp-2) 0 0">Removed for this session: ' + gone.map(function (k) {
+          return esc(TD().SLOTS[k].label) + ' <button class="btn btn--ghost btn--sm" data-pv-addback="' + k + '" type="button" style="padding:1px 8px">Add back</button>';
+        }).join(" · ") + '</p>' : "";
+      };
       document.getElementById("today-preview").innerHTML =
         (clash ? App.run.clashHtml(clash) : "") +
         '<div class="card card--glass"><div class="card__head"><div class="card__title">Today\'s movements</div>' +
         '<span class="badge">' + w.exercises.length + ' movements · ~' + estMins + ' min</span></div>' +
         w.exercises.map(function (ex) {
           var missing = previewMissing(ex);
-          var warn = missing.length ? ' <span class="badge badge--warn" style="padding:1px 7px">needs gear</span>' : "";
+          var warn = missing ? ' <span class="badge badge--warn" style="padding:1px 7px">needs gear</span>' : "";
           var ovTag = ex.swapped ? ' <span class="badge badge--secondary" style="padding:1px 7px">swapped</span>' : "";
           /* Marked in the UI as well as in the data — an accessory that
              looked identical to primary work would leave you wondering why
              it sits outside the day's usual movements. */
           var accTag = ex.accessory ? ' <span class="badge" style="padding:1px 7px" title="Full length\'s extra movement">accessory</span>' : "";
-          return '<div class="kv" style="align-items:center" data-pv-ex="' + esc(ex.id) + '" data-pv-rx="' + esc(JSON.stringify(ex.rx)) + '">' +
+          var careful = carefulFor(trainingCtx(s), ex.id, gripCapable(ex.id) ? gripOf(ex.rx) : null);
+          var carTag = careful.length ? ' <span class="badge badge--secondary" style="padding:1px 7px" title="You marked this joint careful; this movement loads it heavily">careful: ' + careful.map(jointWord).join(", ") + '</span>' : "";
+          var gripTag = gripOf(ex.rx) === "knuckles" ? ' <span class="badge" style="padding:1px 7px">knuckles</span>' : "";
+          var finHead = ex.finisher && !finShown ? (finShown = true,
+            '<div class="eyebrow" data-pv-fin-head style="margin:var(--sp-4) 0 var(--sp-2)">Finisher · about +' + finMins + ' min · coverage work</div>') : "";
+          return finHead + '<div class="kv" style="align-items:center" data-pv-ex="' + esc(ex.id) + '" data-pv-rx="' + esc(JSON.stringify(ex.rx)) + '"' +
+            (ex.finisher ? ' data-pv-fin="' + ex.slot + '"' : "") + '>' +
             '<span class="kv__k">' + esc(TD().SLOTS[ex.slot].label) + (ex.level ? ' · L' + ex.level : '') + '</span>' +
             '<span class="kv__v" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">' +
             esc(ex.name) + ' <span class="faint text-xs mono">' + rangeText(ex) + '</span>' +
-            warn + ovTag + accTag +
-            '<button class="btn btn--ghost btn--sm" data-pvswap="' + ex.slot + '" type="button" style="padding:2px 10px">Swap</button></span></div>' +
+            warn + ovTag + accTag + gripTag + carTag +
+            '<button class="btn btn--ghost btn--sm" data-pvswap="' + ex.slot + '" type="button" style="padding:2px 10px">Swap</button>' +
+            (ex.finisher ? '<button class="btn btn--ghost btn--sm" data-pv-remove="' + ex.slot + '" type="button" style="padding:2px 10px">Remove</button>' : "") + '</span></div>' +
+            (ex.finisher && ex.reason ? '<p class="faint text-xs" data-pv-cover style="margin:0 0 var(--sp-2)">' + esc(ex.reason) + '</p>' : "") +
             (ex.note ? '<p class="faint text-xs" data-pv-note style="margin:0 0 var(--sp-2)">' + esc(ex.note) + '</p>' : "") +
+            knucklesToday(ex, careful) +
             rxLinesHtml(ex, true);
-        }).join("") + '</div>' +
+        }).join("") + removedHtml() + '</div>' +
         rowOfferHtml(App.getState(), chosen.day);
       document.querySelectorAll("[data-pvswap]").forEach(function (b) {
         b.addEventListener("click", function () { openPreviewSwap(b.dataset.pvswap, chosen, renderPreview); });
+      });
+      document.querySelectorAll("[data-pv-remove]").forEach(function (b) {
+        b.addEventListener("click", function () { chosen.overrides[b.dataset.pvRemove] = false; renderPreview(); });
+      });
+      document.querySelectorAll("[data-pv-addback]").forEach(function (b) {
+        b.addEventListener("click", function () { delete chosen.overrides[b.dataset.pvAddback]; renderPreview(); });
+      });
+      document.querySelectorAll("[data-knuckles-today]").forEach(function (b) {
+        b.addEventListener("change", function () {
+          chosen.grips[b.dataset.knucklesToday] = b.checked ? "knuckles" : "palms";
+          renderPreview();
+        });
       });
       var pv = document.getElementById("today-preview");
       if (clash) App.run.wireNotes(pv);
@@ -3737,12 +4448,23 @@
     }
     renderPreview();
 
+    /* Finisher: the pref buildWorkout reads. Saved at once, so a reload or
+       Begin starts what the list shows. */
+    var fin = el.querySelector("[data-finisher]");
+    if (fin) fin.addEventListener("change", function () {
+      var st = App.getState();
+      st.prefs.finisher = fin.checked ? "on" : "off";
+      App.saveState();
+      renderPreview();
+    });
+
     /* preview of every training day, not just the selected one */
     function renderAllDays() {
       var box = document.getElementById("all-days-preview");
       if (!box) return;
       box.innerHTML = engine.template().order.map(function (d) {
-        var pats = engine.buildWorkout(d, chosen.volumeMode, chosen.sessionLength).exercises;
+        /* Without the finisher: its picks are today's, not that day's. */
+        var pats = engine.buildWorkout(d, chosen.volumeMode, chosen.sessionLength, null, null, { finisher: false }).exercises;
         var moves = pats.map(function (ex) {
           return '<div class="kv"><span class="kv__k">' + esc(TD().SLOTS[ex.slot].label) + (ex.level ? ' · L' + ex.level : '') + '</span>' +
             '<span class="kv__v">' + esc(ex.name) + '</span></div>';
@@ -3768,6 +4490,7 @@
       b.addEventListener("click", function () {
         chosen.day = b.dataset.day;
         chosen.overrides = {};
+        chosen.grips = {};
         document.querySelectorAll("#day-seg .seg__btn").forEach(function (x) { x.classList.toggle("is-active", x === b); });
         document.getElementById("today-title").textContent = DAY_LABEL[chosen.day];
         document.getElementById("today-desc").textContent = DAY_DESC[chosen.day];
@@ -3821,6 +4544,7 @@
     });
 
     wireUpgradeCard(el);
+    wireEquipCheck(el);
     wireRecovery(el);
 
     /* Running-in-Today + skill-reminder buttons */
@@ -3833,32 +4557,63 @@
     });
   }
 
-  /* Preview swap: choose an alternative movement before the session starts. */
-  function openPreviewSwap(slot, chosen, rerender) {
-    var s = App.getState();
-    var all = engine.slotOptions(slot);
-    function missingFor(ex) { return (ex.equipment || []).filter(function (e) { return !s.equipment[e]; }); }
-    var defId = ((engine.prescriptionFor(slot) || {}).rx || {}).exerciseId;
-    var current = chosen.overrides[slot] || defId;
-    var rows = all.map(function (alt) {
-      var missing = missingFor(alt);
-      var doable = missing.length === 0;
-      var isCur = alt.id === current;
-      var tag = isCur ? '<span class="badge badge--primary" style="padding:2px 8px">current</span>'
-        : (doable ? '<span class="badge badge--success" style="padding:2px 8px">ready</span>'
-                  : '<span class="badge badge--warn" style="padding:2px 8px">needs ' + missing.map(function (m) { return (window.EQUIP_LABEL_GLOBAL && window.EQUIP_LABEL_GLOBAL[m]) || m; }).join(", ") + '</span>');
-      return '<button class="swap-opt' + (isCur ? " is-current" : "") + (doable ? "" : " is-locked") + '" data-pvswapto="' + alt.id + '" type="button">' +
+  /* Knuckles today (plan C1): one tick under a push-up row, for this session
+     only. It builds the same prescription on the other grip, so it isn't a
+     swap; a knuckles session still counts as evidence for a palms rx. Your
+     standing choice is Program's Push-ups on. `careful` is the joints this
+     row warns on, to say why knuckles might help. */
+  function knucklesToday(ex, careful) {
+    if (!gripCapable(ex.id) || engine.flagged(ex)) return "";
+    var on = gripOf(ex.rx) === "knuckles", standing = standingGrip(App.getState(), ex.slot) === "knuckles";
+    var hint = on && standing ? "your standing grip is knuckles — untick for palms today"
+      : on ? "front two knuckles, wrist straight"
+      : careful.indexOf("wrist") >= 0 ? "your wrist is marked careful — knuckles keep it straight"
+      : "front two knuckles, wrist straight; counts as evidence for palms";
+    return '<label class="row text-sm" data-pv-grip style="gap:var(--sp-2);align-items:center;margin:0 0 var(--sp-2)">' +
+      '<input type="checkbox" data-knuckles-today="' + ex.slot + '"' + (on ? " checked" : "") + '> <span>Knuckles today</span> ' +
+      '<span class="faint text-xs">— ' + esc(hint) + '</span></label>';
+  }
+
+  /* A swap list's rows for a slot (plan C3): excluded movements are left
+     out unless `showExcluded`, and still a one-off swap away when shown.
+     Each row's badges say why it isn't simply "ready": current, excluded,
+     the gear it needs, a joint you avoid, a joint you're careful with.
+     `attr(alt)` is the row's data attribute. Returns { html, hidden }. */
+  function swapRows(slot, curId, showExcluded, attr) {
+    var hidden = 0;
+    var html = engine.slotOptions(slot).map(function (alt) {
+      var st = engine.swapStatus(slot, alt.id), isCur = alt.id === curId;
+      if (st.blocked === "excluded" && !isCur && !showExcluded) { hidden++; return ""; }
+      var b = function (cls, t) { return '<span class="badge ' + cls + '" style="padding:2px 8px">' + esc(t) + '</span>'; };
+      var tag = isCur ? b("badge--primary", "current")
+        : st.blocked === "excluded" ? b("badge--warn", "excluded")
+        : st.missing ? b("badge--warn", "needs " + st.missing)
+        : st.blocked ? b("badge--warn", "avoiding your " + jointWord(st.blocked))
+        : b("badge--success", "ready");
+      var warn = st.careful.length && !st.blocked ? b("badge--secondary", "careful: " + st.careful.map(jointWord).join(", ")) : "";
+      return '<button class="swap-opt' + (isCur ? " is-current" : "") + (st.blocked ? " is-locked" : "") + '" ' + attr(alt) + ' type="button">' +
         '<span class="swap-opt__lvl">' + swapLevel(alt) + '</span>' +
-        '<span class="swap-opt__main"><span class="swap-opt__name">' + App.util.escapeHtml(alt.name) + '</span>' +
-        '<span class="swap-opt__sub">' + swapSub(alt) + '</span></span>' + tag +
+        '<span class="swap-opt__main"><span class="swap-opt__name">' + esc(alt.name) + '</span>' +
+        '<span class="swap-opt__sub">' + swapSub(alt) + '</span></span>' + warn + tag +
       '</button>';
     }).join("");
+    return { html: html, hidden: hidden };
+  }
+  function showExcludedHtml(n, attr) {
+    return n ? '<button class="btn btn--ghost btn--sm" ' + attr + ' type="button">Show excluded (' + n + ')</button>' : "";
+  }
+
+  /* Preview swap: choose an alternative movement before the session starts. */
+  function openPreviewSwap(slot, chosen, rerender, showExcluded) {
+    var defId = ((engine.prescriptionFor(slot) || {}).rx || {}).exerciseId;
+    var current = chosen.overrides[slot] || defId;
+    var rows = swapRows(slot, current, showExcluded, function (alt) { return 'data-pvswapto="' + alt.id + '"'; });
     var pattern = TD().SLOTS[slot].label.toLowerCase();
 
     ensureSwapModal();
     var body = document.getElementById("pvswap-body");
-    body.innerHTML = '<p class="faint text-xs" style="margin:0 0 var(--sp-3)">Pick a ' + pattern + ' movement to use for this session. "Ready" means you have the gear for it.</p>' +
-      '<div class="swap-list">' + rows + '</div>';
+    body.innerHTML = '<p class="faint text-xs" style="margin:0 0 var(--sp-3)">Pick a ' + pattern + ' movement to use for this session. "Ready" means you have the gear for it and nothing you set rules it out.</p>' +
+      '<div class="swap-list">' + rows.html + '</div>' + showExcludedHtml(rows.hidden, "data-pvswap-excluded");
     document.getElementById("pvswap-title").textContent = "Swap " + pattern.charAt(0).toUpperCase() + pattern.slice(1) + " movement";
     body.querySelectorAll("[data-pvswapto]").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -3868,6 +4623,8 @@
         if (rerender) rerender();
       });
     });
+    var more = body.querySelector("[data-pvswap-excluded]");
+    if (more) more.addEventListener("click", function () { openPreviewSwap(slot, chosen, rerender, true); });
     App.openModal("modal-pvswap");
   }
 
@@ -3931,8 +4688,13 @@
       section("Warm-up", warm.length + " drills", checklist(warm, w.warmup, "warm")) +
       /* exercises */
       '<div class="page-head" style="margin-top:var(--sp-8)"><div class="eyebrow">Work</div>' +
-      '<h2 class="display h3">Main session</h2></div>' +
-      '<div id="ex-list">' + w.exercises.map(function (ex, i) { return exerciseBlock(ex, i, s); }).join("") + '</div>' +
+      '<h2 class="display h3">' + (w.kind === "mini" ? "Accessory session" : "Main session") + '</h2></div>' +
+      '<div id="ex-list">' + w.exercises.map(function (ex, i) {
+        /* The finisher's picks follow the main slots under their own heading. */
+        var fh = ex.finisher && !(i && w.exercises[i - 1].finisher)
+          ? '<div class="eyebrow" data-finisher-head style="margin:var(--sp-6) 0 var(--sp-2)">Finisher · coverage work</div>' : "";
+        return fh + exerciseBlock(ex, i, s);
+      }).join("") + '</div>' +
       /* cooldown */
       section("Cool-down", cool.length + " stretches", checklist(cool, w.cooldown, "cool")) +
       /* notes */
@@ -4009,6 +4771,7 @@
         (skipped ? '<div class="badge badge--warn" style="align-self:flex-start"><span class="dot"></span>Skipped today · ' + esc(prettyPart(ex.flag.bodyPart)) + '</div>' + '<p class="muted text-sm" style="margin:0">' + esc(skipCue) + '</p>'
           : flagged ? '<div class="badge badge--warn" style="align-self:flex-start"><span class="dot"></span>Swapped: ' + esc(ex.flag.substitutedTo || "modified") + '</div>' : "") +
         (ex.swapped ? '<div class="badge badge--secondary" style="align-self:flex-start"><span class="dot"></span>Swapped movement</div>' : "") +
+        (ex.reason ? '<p class="muted text-sm" data-ex-reason style="margin:0">Why this one: ' + esc(ex.reason) + '</p>' : "") +
         (ex.note ? '<p class="muted text-sm" data-ex-note style="margin:0">' + esc(ex.note) + '</p>' : "") +
         (skipped ? "" : rxLinesHtml(ex, false)) +
         (skipped ? "" : '<div>' + sets + '</div>') +
@@ -4257,48 +5020,34 @@
      ----------------------------------------------------------------------- */
   var EQUIP_LABEL = {
     pullupBar: "pull-up bar", dumbbells: "dumbbells", bench: "bench",
-    kettlebells: "kettlebells", rings: "rings"
+    kettlebells: "kettlebells", rings: "rings", bands: "resistance bands",
+    parallettes: "parallettes", dipBars: "dip bars", lowBar: "waist-height bar"
   };
   window.EQUIP_LABEL_GLOBAL = EQUIP_LABEL;
-  function equipNeeded(ex) {
-    var s = App.getState();
-    var missing = (ex.equipment || []).filter(function (e) { return !s.equipment[e]; });
-    return missing;
-  }
-  function openSwapPanel(i, w) {
+  function openSwapPanel(i, w, showExcluded) {
     var ex = w.exercises[i];
     var panel = document.getElementById("swap-panel-" + i);
     if (!panel) return;
-    // Toggle closed if already open
-    if (panel.getAttribute("data-open") === "1") { panel.innerHTML = ""; panel.removeAttribute("data-open"); return; }
+    // Toggle closed if already open (Show excluded redraws it open)
+    if (!showExcluded && panel.getAttribute("data-open") === "1") { panel.innerHTML = ""; panel.removeAttribute("data-open"); return; }
     panel.setAttribute("data-open", "1");
 
-    /* The slot's movements, owned first. A draft from before v4 has no slot;
-       its pattern is the slot it trained. */
-    var all = engine.slotOptions(ex.slot || ex.pattern);
-
-    var rows = all.map(function (alt) {
-      var missing = equipNeeded(alt);
-      var doable = missing.length === 0;
-      var isCurrent = alt.id === ex.id;
-      var tag = isCurrent ? '<span class="badge badge--primary" style="padding:2px 8px">current</span>'
-        : (doable ? '<span class="badge badge--success" style="padding:2px 8px">ready</span>'
-                  : '<span class="badge badge--warn" style="padding:2px 8px">needs ' + missing.map(function (m) { return EQUIP_LABEL[m] || m; }).join(", ") + '</span>');
-      return '<button class="swap-opt' + (isCurrent ? " is-current" : "") + (doable ? "" : " is-locked") + '" data-swapto="' + i + "|" + alt.id + '" type="button"' + (isCurrent ? " disabled" : "") + '>' +
-        '<span class="swap-opt__lvl">' + swapLevel(alt) + '</span>' +
-        '<span class="swap-opt__main"><span class="swap-opt__name">' + esc(alt.name) + '</span>' +
-        '<span class="swap-opt__sub">' + swapSub(alt) + '</span></span>' +
-        tag +
-      '</button>';
-    }).join("");
+    /* The slot's movements, allowed first. A draft from before v4 has no
+       slot; its pattern is the slot it trained. The current one can't be
+       picked again. */
+    var rows = swapRows(ex.slot || ex.pattern, ex.id, showExcluded, function (alt) {
+      return 'data-swapto="' + i + "|" + alt.id + '"' + (alt.id === ex.id ? " disabled" : "");
+    });
 
     panel.innerHTML =
       '<div class="card card--glass stack mt-2" style="border-color:rgba(204,0,0,.25)">' +
         '<div class="row between"><div class="field__label">Swap ' + cap(ex.pattern) + ' movement</div>' +
           '<button class="btn btn--ghost btn--sm" data-swapclose="' + i + '" type="button">Close</button></div>' +
-        '<p class="faint text-xs" style="margin:0">Movements you can do with your current equipment are marked <b style="color:var(--success)">ready</b>. A swapped movement starts at the bottom of its own range, and what you log counts as its history, not the original\'s.</p>' +
-        '<div class="swap-list">' + rows + '</div>' +
+        '<p class="faint text-xs" style="margin:0">Movements you have the gear for, and nothing you set rules out, are marked <b style="color:var(--success)">ready</b>. A swapped movement starts at the bottom of its own range, and what you log counts as its history, not the original\'s.</p>' +
+        '<div class="swap-list">' + rows.html + '</div>' + showExcludedHtml(rows.hidden, 'data-swap-excluded="' + i + '"') +
       '</div>';
+    var more = panel.querySelector("[data-swap-excluded]");
+    if (more) more.addEventListener("click", function () { openSwapPanel(i, w, true); });
 
     panel.querySelectorAll("[data-swapto]").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -4318,7 +5067,7 @@
        movement you did, at the bottom of its range. Keeping the old target
        turned 8 reps into 8 seconds; keeping the old id filed the history
        under a movement you didn't do. */
-    applyMovement(ex, rxStart(newId, { why: "swapped for this session" }));
+    applyMovement(ex, rxStart(newId, { why: "swapped for this session", grip: standingGrip(App.getState(), ex.slot) }));
     ex.swapped = true;
     ex.note = "";
     setWorkout(w);
@@ -4351,7 +5100,14 @@
     var ex = w.exercises[i];
     var parts = DB.bodyPartsFor(ex.pattern);
     var panel = document.getElementById("flag-panel-" + i);
-    if (!parts.length) { panel.innerHTML = '<p class="faint text-xs mt-2">No substitution map for this pattern — rest if needed.</p>'; return; }
+    /* No swap list (coverage work, R3-1): the joints the movement loads, else
+       every joint. The flag still records the pain and keeps the sets out of
+       evidence, and sharp still skips — there is just nothing to swap to. */
+    if (!parts.length) {
+      var load = TD().JOINT_STRESS[ex.id] || {};
+      parts = TD().JOINTS.filter(function (j) { return load[j]; });
+      if (!parts.length) parts = TD().JOINTS.slice();
+    }
     var f = ex.flag || { bodyPart: parts[0], severity: "mild" };
     function draw() {
       var sub = DB.substitute(ex.pattern, f.bodyPart, f.severity, App.getState().era);
@@ -4366,7 +5122,7 @@
           (sub ? '<div class="card" style="padding:var(--sp-3)"><div class="drow__sub">' + (f.severity === "sharp" ? "Suggested — skip it" : "Suggested swap") + '</div>' +
             '<div class="drow__title">' + esc(sub.name) + '</div><p class="muted text-xs mt-2">' + esc(sub.cue) + '</p></div>' : "") +
           '<div class="row" style="gap:var(--sp-2)">' +
-            '<button class="btn btn--secondary btn--sm grow" id="flag-apply-' + i + '">' + (f.severity === "sharp" ? "Skip it today" : "Apply swap") + '</button>' +
+            '<button class="btn btn--secondary btn--sm grow" id="flag-apply-' + i + '">' + (f.severity === "sharp" ? "Skip it today" : sub ? "Apply swap" : "Flag it") + '</button>' +
             (ex.flag ? '<button class="btn btn--ghost btn--sm" id="flag-clear-' + i + '">Clear</button>' : "") +
           '</div>' +
         '</div>';
@@ -4382,15 +5138,24 @@
            exercise never is (C2). Any other substitute keeps the original
            id with the substitute's name and cue. Sharp means skip, so the
            exercise keeps its own name: the saved record says which movement
-           was skipped, not "Skip push pattern". */
+           was skipped, not "Skip push pattern".
+           A substitute that names a grip (Fist Push-up — plan C1) is the
+           same exercise on that grip: its rx says so, it keeps its name, and
+           the flag still keeps it out of evidence and in your flag history. */
         var toId = sub2 && f.severity !== "sharp" && TD().SUBSTITUTION_IDS[sub2.name];
+        var asSetup = sub2 && f.severity !== "sharp" && TD().SUBSTITUTION_SETUPS[sub2.name];
         if (toId && toId !== ex.id && window.Training.owns(App.getState().equipment, toId)) {
           ex.unswapped = snapshotMovement(ex);
           ex.flag.fromId = ex.id;
           applyMovement(ex, rxStart(toId, { why: "pain swap from " + ex.name }));
+        } else if (asSetup && asSetup.grip && ex.rx && gripCapable(ex.id)) {
+          ex.unswapped = snapshotMovement(ex);
+          ex.rx = withGrip(ex.rx, asSetup.grip);
+          restoreName();
         } else if (sub2 && f.severity !== "sharp") { ex.name = sub2.name; } else { restoreName(); }
         setWorkout(w); App.refresh();
-        App.toast(f.severity === "sharp" ? "Skipping this exercise today." : "Swapped to a joint-friendly variation.", "warn");
+        App.toast(f.severity === "sharp" ? "Skipping this exercise today." : sub2 ? "Swapped to a joint-friendly variation."
+          : "Flagged — today's sets won't count toward a step.", "warn");
       });
       var clr = document.getElementById("flag-clear-" + i);
       if (clr) clr.addEventListener("click", function () { restoreMovement(); ex.flag = null; restoreName(); setWorkout(w); App.refresh(); });
@@ -4483,6 +5248,7 @@
       if (v) out.push(v.label + (S.key === "surface" ? " height" : "") + (v.cm ? " (~" + v.cm + " cm)" : ""));
     }
     if (st.loadMode) out.push(st.loadKg != null ? st.loadKg + " kg " + (st.loadMode === "perHand" ? "per hand" : "total") : "load not set yet");
+    if (st.grip === "knuckles") out.push("knuckles");
     return out.join(" · ");
   }
   /* "3 × 12", "3 × 20 s": every set at the top of the range. */
@@ -4490,6 +5256,14 @@
   function stepText(step) {
     if (step.kind === "movement") return (DB.getExercise(step.rx.exerciseId) || {}).name || step.rx.exerciseId;
     return setupText(step.rx).toLowerCase();
+  }
+  /* Where a double step lands, named in full when it leaves `from`'s
+     movement: "Incline Push-up, table height (~75 cm)". */
+  function landText(from, step) {
+    var setup = setupText(step.rx).toLowerCase();
+    if (step.rx.exerciseId === from.exerciseId) return setup;
+    var name = (DB.getExercise(step.rx.exerciseId) || {}).name || step.rx.exerciseId;
+    return name + (setup ? ", " + setup : "");
   }
   var NUM_WORD = ["no", "one", "two", "three", "four", "five"];
   var EFFORTS = [["easy", "Easy"], ["moderate", "Just right"], ["hard", "Hard"], ["failed", "Failed"], ["unsure", "Not sure"]];
@@ -4506,36 +5280,58 @@
      prescription. A swap, a pain swap or an equipment fallback is a
      different prescription: it shows its history, never an offer. The slot's
      own set count is what's compared, so an Extended session still shows the
-     standard prescription's evidence. */
+     standard prescription's evidence. Knuckles today is the same
+     prescription on another grip (plan C1), so the grip isn't compared. */
   function cardRec(ex) {
     if (!ex.slot || !ex.rx || ex.swapped || engine.flagged(ex)) return null;
     var stored = App.getState().training.slots[ex.slot];
-    if (!stored || stored.off || stored.exerciseId !== ex.rx.exerciseId ||
-        JSON.stringify(stored.setup || {}) !== JSON.stringify(ex.rx.setup || {})) return null;
+    var noGrip = function (setup) { var o = JSON.parse(JSON.stringify(setup || {})); delete o.grip; return JSON.stringify(o); };
+    if (!stored || stored.off || stored.exerciseId !== ex.rx.exerciseId || noGrip(stored.setup) !== noGrip(ex.rx.setup)) return null;
     return engine.recommendFor(ex.slot);
   }
 
   /* The reason line, and the Step / Repeat buttons when there's a step to
      take and you haven't answered this evidence yet. */
   function reasonHtml(rec, rx, slot) {
-    var top = topText(rx), N = TD().EVIDENCE_SESSIONS, line = "", ask = null;
+    var top = topText(rx), N = TD().EVIDENCE_SESSIONS, line = "", asks = [];
     var days = rec.evidence.map(function (e) { return lib.fmtShort(e.day); });
     var stored = App.getState().training.slots[slot] || {};
+    var REPEAT = ["repeat", "Repeat"];
     switch (rec.why) {
       case "ready":
-        line = "Ready: " + top + " on " + days.join(" and ");
+        line = "Ready: " + top + " on " + days.join(" and ") + (rec.double && !rec.decision ? ", far past the top both times" : "");
         if (rec.decision) line += " — you chose to repeat. Your next session asks again.";
-        else if (rec.step) { line += " — step up to " + stepText(rec.step) + "?"; ask = "Step up"; }
+        else if (rec.double) {
+          line += " — step up two, to " + landText(rx, rec.steps[1]) + "?";
+          asks = [["step2", "Step up two"], ["step", "One step"], REPEAT];
+        }
+        else if (rec.step) { line += " — step up to " + stepText(rec.step) + "?"; asks = [["step", "Step up"], REPEAT]; }
         else {
-          line += " — the end of this path.";
-          if (rec.options.length) line += " Optional next: " + rec.options.map(function (id) { return (DB.getExercise(id) || {}).name || id; }).join(", ") + ", from Swap.";
+          line += rec.heaviest ? " — the heaviest weight you've listed, and the end of this path." : " — the end of this path.";
+          if (rec.options.length) line += " Optional next: " + rec.options.map(function (id) { return (DB.getExercise(id) || {}).name || id; }).join(", ") + ".";
           if (rec.unowned.length) line += " " + rec.unowned.map(function (id) { return (DB.getExercise(id) || {}).name + " needs " + missingGear(id, App.getState().equipment); }).join("; ") + ".";
         }
+        /* A branch entry is a step you can take (plan C2), one button each. */
+        if (!rec.decision && !rec.step) asks = rec.optionSteps.map(function (o) {
+          return ["option", "Step into " + ((DB.getExercise(o.rx.exerciseId) || {}).name || o.rx.exerciseId), o.rx.exerciseId];
+        }).concat(rec.optionSteps.length ? [REPEAT] : []);
+        break;
+      case "hold":
+        /* Hold (plan C4): the evidence stands, the offer waits. */
+        line = "Holding at " + top + " — you reached it on " + days.join(" and ") + ", and step-ups are paused on this slot. Turn Hold off in Program to be asked again.";
         break;
       case "declining":
         line = "Your totals fell " + rec.evidence.map(function (e) { return e.total; }).join(" → ") + " over your last " + rec.evidence.length + " sessions";
         if (rec.decision) line += " — you chose to repeat. Your next session asks again.";
-        else { line += " — step back to " + stepText(rec.step) + "?"; ask = "Step back"; }
+        else { line += " — step back to " + stepText(rec.step) + "?"; asks = [["step", "Step back"], REPEAT]; }
+        break;
+      case "off-load":
+        /* F1: the latest session was lifted at another weight, so nothing
+           at the slot's load is evidence. Keep it, or take what you lift. */
+        var was = rx.setup.loadKg + " kg", now = rec.loggedKg + " kg";
+        line = "Logged at " + now + ", not " + was + ", on " + days[0];
+        if (rec.decision) line += " — you chose to keep " + was + ". Your next session asks again.";
+        else { line += " — set this slot to " + now + "?"; asks = [["load", "Set slot to " + now], ["repeat", "Keep " + was]]; }
         break;
       case "below-top": line = "Repeat: set " + (rec.belowSet + 1) + " below " + rec.hi + (rx.unit === "sec" ? " s" : ""); break;
       case "one-session": line = "Repeat: " + rec.atTop + " of " + N + " at " + top; break;
@@ -4550,14 +5346,15 @@
     }
     /* Nothing rises inside a recovery block (D3): the evidence stands, the
        offer waits. */
-    if (ask === "Step up" && engine.recoveryOn(lib.today())) {
-      line = line.replace(/ — step up to.*$/, " — the step waits until your recovery block ends.");
-      ask = null;
+    if (rec.action === "ready" && asks.length && engine.recoveryOn(lib.today())) {
+      line = line.replace(/ — step up.*$/, " — the step waits until your recovery block ends.");
+      asks = [];
     }
     return '<p class="text-sm" data-rx-reason style="margin:0">' + esc(line) + '</p>' +
-      (ask ? '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap">' +
-        '<button class="btn btn--primary btn--sm" data-decide="' + slot + '" data-choice="step" type="button">' + ask + '</button>' +
-        '<button class="btn btn--ghost btn--sm" data-decide="' + slot + '" data-choice="repeat" type="button">Repeat</button></div>' : "");
+      (asks.length ? '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap">' + asks.map(function (a, i) {
+        return '<button class="btn ' + (i ? "btn--ghost" : "btn--primary") + ' btn--sm" data-decide="' + slot + '" data-choice="' + a[0] + '"' +
+          (a[2] ? ' data-to="' + esc(a[2]) + '"' : "") + ' type="button">' + esc(a[1]) + '</button>';
+      }).join("") + '</div>' : "");
   }
 
   /* The card's lines under the exercise name: last comparable sets with
@@ -4589,12 +5386,16 @@
     root.querySelectorAll("[data-decide]").forEach(function (b) {
       b.addEventListener("click", function () {
         var slot = b.dataset.decide, choice = b.dataset.choice;
-        var rec = engine.recommendFor(slot);
-        var next = engine.decide(slot, choice);
+        var rec = engine.recommendFor(slot), from = App.getState().training.slots[slot];
+        var next = engine.decide(slot, choice, b.dataset.to);
         if (!next) return;
-        var msg = choice === "repeat" ? "Repeating " + ((DB.getExercise(next.exerciseId) || {}).name || "") + " — new sessions will ask again."
+        var msg = choice === "repeat" && rec.why === "off-load" ? "Keeping " + from.setup.loadKg + " kg — new sessions will ask again."
+          : choice === "repeat" ? "Repeating " + ((DB.getExercise(next.exerciseId) || {}).name || "") + " — new sessions will ask again."
+          : choice === "load" ? "Slot set to " + rec.loggedKg + " kg."
+          : choice === "step2" ? "Stepped up two, to " + landText(from, rec.steps[1]) + "."
+          : choice === "option" ? "Stepped into " + ((DB.getExercise(next.exerciseId) || {}).name || next.exerciseId) + "."
           : (rec.action === "reduce" ? "Stepped back to " : "Stepped up to ") + stepText(rec.step) + ".";
-        if (w && choice === "step") {
+        if (w && choice !== "repeat") {
           var later = false;
           w.exercises.forEach(function (ex) {
             if (ex.slot !== slot || ex.swapped || engine.flagged(ex)) return;
@@ -4658,6 +5459,50 @@
     });
   }
 
+  /* Equipment check (plan C6): the v5 upgrade split "pull-up bar" into four
+     tokens and turned on the ones your own history shows you have. This is
+     the one card that says so, with every token's state, so a token the app
+     couldn't infer can be ticked here. Dismissed per device, like the v4
+     card; the record it reads (training.equipmentCheck) syncs. A tick saves
+     at once: it changes which movements your slots can use. */
+  var EQCHECK_SEEN_KEY = "v5.equipmentCheckSeen";
+  var EQCHECK_TOKENS = [["dipBars", "Dip bars"], ["lowBar", "A waist-height bar"], ["bands", "Resistance bands"], ["parallettes", "Parallettes"]];
+  function equipCheckHtml(s) {
+    var chk = s.training && s.training.equipmentCheck;
+    if (!chk || App.util.uiGet(EQCHECK_SEEN_KEY, false)) return "";
+    var inf = chk.inferred || {};
+    var rows = EQCHECK_TOKENS.map(function (t) {
+      var on = !!s.equipment[t[0]], from = inf[t[0]], ex = from && TD().EXERCISES[from.id];
+      var why = from && ex
+        ? "turned on for you: " + (from.from === "session" ? "you logged " : "your " + TD().SLOTS[ex.slot].label.toLowerCase() + " slot is ") + ((DB.getExercise(from.id) || {}).name || from.id)
+        : on ? "on" : "off — tick it if you have it";
+      return '<label class="row" style="gap:var(--sp-2);align-items:center"><input type="checkbox" data-eqcheck-tok="' + t[0] + '"' + (on ? " checked" : "") + '> ' +
+        '<span class="text-sm"><b>' + esc(t[1]) + '</b> <span class="faint">· ' + esc(why) + '</span></span></label>';
+    }).join("");
+    return '<div class="wh-advice wh-advice--info mt-4" data-eqcheck role="status"><div>' +
+      '<div class="wh-advice__title">Check your equipment</div>' +
+      '<p class="wh-advice__body" style="margin:var(--sp-2) 0">"Pull-up bar" used to stand for four different things. They\'re separate now: dip bars, a waist-height bar (for rows and straight-bar dips), resistance bands and parallettes. ' +
+        'The app turned on what your own sessions show you have. Untick anything you don\'t, and tick what it couldn\'t know. Ticking saves at once.</p>' +
+      '<div class="stack" style="gap:var(--sp-2);margin-bottom:var(--sp-3)">' + rows + '</div>' +
+      '<button class="btn btn--ghost btn--sm" data-eqcheck-ok type="button">Looks right</button></div></div>';
+  }
+  function wireEquipCheck(el) {
+    el.querySelectorAll("[data-eqcheck-tok]").forEach(function (b) {
+      b.addEventListener("change", function () {
+        var st = App.getState(), name = b.parentNode.querySelector("b").textContent;
+        st.equipment[b.dataset.eqcheckTok] = b.checked;
+        App.saveState();
+        App.toast(name + (b.checked ? " on." : " off.") + " Your slots follow the equipment you list.", "info");
+      });
+    });
+    var ok = el.querySelector("[data-eqcheck-ok]");
+    if (ok) ok.addEventListener("click", function () {
+      App.util.uiSet(EQCHECK_SEEN_KEY, true);
+      var card = el.querySelector("[data-eqcheck]");
+      if (card) card.remove();
+    });
+  }
+
   /* Recovery block (plan D3), always visible while one is on: it changes
      your sets without a prompt on each workout, so it gets a persistent
      banner, and ending it is one click, not a dialog. With no block, the
@@ -4704,9 +5549,9 @@
   /* An optional slot (the row, the dip) on or off. Off is a stamped record,
      never a deleted key: the sync union would bring a deleted key back. */
   function setSlotOn(slot, on, why) {
-    var s = App.getState(), at = lib.iso(), eq = s.equipment;
+    var s = App.getState(), at = lib.iso();
     if (!on) { s.training.slots[slot] = { off: true, acceptedAt: at, why: why || "left out" }; App.saveState(); return true; }
-    var id = TD().SLOTS[slot].first.filter(function (x) { return window.Training.owns(eq, x); })[0];
+    var id = firstAllowed(slot, trainingCtx(s));
     if (!id) return false;
     s.training.slots[slot] = rxStart(id, { at: at, why: why || "added" });
     App.saveState();
@@ -4718,7 +5563,7 @@
      pull). Ticked by default; nothing is written until you save. */
   function rowOfferHtml(s, day) {
     if (day !== "pull" || s.training.slots.row || !engine.prescriptionFor("pull")) return "";
-    var id = TD().SLOTS.row.first.filter(function (x) { return window.Training.owns(s.equipment, x); })[0];
+    var id = firstAllowed("row", trainingCtx(s));
     if (!id) return "";
     var rx = rxStart(id), name = (DB.getExercise(id) || {}).name || id;
     return '<div class="card mt-4 stack" data-row-offer>' +
@@ -4824,7 +5669,15 @@
   App.ui.topText = topText;
   App.ui.ruleText = ruleText;
   App.ui.setSlotOn = setSlotOn;
+  App.ui.equipCheckHtml = equipCheckHtml;
+  App.ui.wireEquipCheck = wireEquipCheck;
+  App.ui.jointWord = jointWord;
+  App.ui.gearMissing = gearMissing;
+  App.ui.gripCapable = gripCapable;
+  App.ui.gripOf = gripOf;
+  App.ui.carefulFor = carefulFor;
   App.ui.slotStatus = slotStatus;
+  App.ui.noneText = noneText;
   App.ui.recoveryHtml = recoveryHtml;
   App.ui.wireRecovery = wireRecovery;
   App.ui.restReason = restReason;
@@ -4832,17 +5685,35 @@
 
   /* One slot's evidence in a few words, for Program and the Progress
      ladders: "1 of 2 at 3 × 12", "ready to step up", "left out". */
+  /* The Program row's status line. A held slot (plan C4) says so whatever
+     else the line says, so the Hold button's state is never a guess. */
   function slotStatus(slot) {
+    var t = slotStatusCore(slot), rx = App.getState().training.slots[slot];
+    return rx && !rx.off && rx.hold && !/step-ups paused/.test(t) ? t + " · step-ups paused" : t;
+  }
+  /* What a slot with nothing to prescribe says, by its real reason (R3-3). */
+  function noneText(slot) {
+    var why = engine.unavailableReason(slot);
+    return why === "excluded" ? "excluded — no movement here you allow"
+      : why && why !== "equipment" ? "avoiding your " + jointWord(why) + " — no movement here you allow"
+      : "needs equipment you don't have";
+  }
+  function slotStatusCore(slot) {
     var s = App.getState(), rx = s.training.slots[slot];
     if (!rx) return slot === "row" ? "not on your plan — offered on a pull day" : "no prescription";
     if (rx.off) return "left out";
     var pr = engine.prescriptionFor(slot);
-    if (!pr) return "needs equipment you don't have";
-    if (pr.rx.exerciseId !== rx.exerciseId) return "an easier movement until you have the gear";
+    if (!pr) return noneText(slot);
+    if (pr.rx.exerciseId !== rx.exerciseId) return pr.blocked === "excluded" ? "excluded — an easier movement until you choose one"
+      : pr.blocked && pr.blocked !== "equipment" ? "avoiding your " + jointWord(pr.blocked) + " — an easier movement for now"
+      : "an easier movement until you have the gear";
     var rec = engine.recommendFor(slot);
     if (!rec || rx.range[1] == null) return "no number to step up from";
     if (rec.why === "no-load") return "log the weight you use — no load set yet";
-    if (rec.action === "ready") return rec.decision ? "at the top — you chose to repeat" : !rec.step ? "at the top — end of the path" : "ready to step up — see Workout";
+    if (rec.why === "off-load") return rec.decision ? "logged at " + rec.loggedKg + " kg — you chose to keep " + rx.setup.loadKg + " kg"
+      : "logged at " + rec.loggedKg + " kg, not " + rx.setup.loadKg + " kg — see Workout";
+    if (rec.why === "hold") return "holding at the top — step-ups paused";
+    if (rec.action === "ready") return rec.decision ? "at the top — you chose to repeat" : !rec.step ? "at the top — end of the path" : rec.double ? "ready to step up two — see Workout" : "ready to step up — see Workout";
     if (rec.action === "reduce") return rec.decision ? "totals falling — you chose to repeat" : "totals falling — see Workout";
     if (rec.why === "no-history" && /^your assessment/.test(rx.why || "")) return "unverified — chosen at setup";
     return rec.atTop + " of " + TD().EVIDENCE_SESSIONS + " at " + topText(rx);
@@ -5229,14 +6100,21 @@
     var mondayOffset = (d.getDay() + 6) % 7;
     return lib.dayKey(lib.addDays(d, -mondayOffset));
   }
-  function completedThisWeek(s) {
+  /* Attendance counts main sessions. `mini` counts mini-sessions instead,
+     for the line of their own beside it (plan D3): they're never added to
+     attendance, which is measured against the template's plan. */
+  function completedThisWeek(s, mini) {
     var wk = weekStartKey(lib.today());
-    return engine.completedSessions().filter(function (x) { return weekStartKey(lib.sessionDay(x)) === wk; }).length;
+    return engine.completedSessions().filter(function (x) {
+      return engine.isMini(x) === !!mini && weekStartKey(lib.sessionDay(x)) === wk;
+    }).length;
   }
 
-  function completedThisPhase(s) {
+  function completedThisPhase(s, mini) {
     var start = Hub.dayOf(s.currentPhase.startISO);
-    return engine.completedSessions().filter(function (x) { return lib.daysBetween(start, lib.sessionDay(x)) >= 0; }).length;
+    return engine.completedSessions().filter(function (x) {
+      return engine.isMini(x) === !!mini && lib.daysBetween(start, lib.sessionDay(x)) >= 0;
+    }).length;
   }
 
   /* ======================================================================
@@ -5406,6 +6284,7 @@
     var bw       = latestBodyweight(s);
     var bwDelta  = bodyweightDelta(s);
     var weekN    = completedThisWeek(s);
+    var weekMini = completedThisWeek(s, true);
     var phaseN   = completedThisPhase(s);
     var expected = engine.expectedSessions(phase, phaseN);
 
@@ -5432,12 +6311,13 @@
         util.statTile("Bodyweight", (bw == null ? "—" : bw) + '<small>kg</small>', bw == null ? "not logged yet" : (bwDelta == null ? "log to track trend" : (bwDelta > 0 ? "+" + bwDelta + " kg/wk" : (bwDelta < 0 ? bwDelta + " kg/wk" : "holding steady")))) +
         /* On pace at the whole sessions the template plans a week: the
            rotation's 3.5 is 3, the fewest a full week holds at every other day. */
-        util.statTile("This week", String(weekN), (weekN >= Math.floor(engine.template().perWeek) ? "on pace ✔ · " : "sessions · ") + engine.template().short) +
+        util.statTile("This week", String(weekN), (weekN >= Math.floor(engine.template().perWeek) ? "on pace ✔ · " : "sessions · ") + engine.template().short +
+          (weekMini ? " · +" + weekMini + " accessory" : "")) +
       '</div>' +
 
       /* ---- phase progress + era panel ---- */
       '<div class="grid grid-tier-dash mt-4" style="grid-template-columns:1.5fr 1fr">' +
-        phaseCard(s, phase, dayInfo, phaseN, expected) +
+        phaseCard(s, phase, dayInfo, phaseN, expected, completedThisPhase(s, true)) +
         eraPanel(s) +
       '</div>' +
 
@@ -5547,7 +6427,7 @@
   }
 
   /* ---- phase progress ---- */
-  function phaseCard(s, phase, dayInfo, phaseN, expected) {
+  function phaseCard(s, phase, dayInfo, phaseN, expected, minis) {
     var cadencePct = lib.pct(phaseN, expected);
     var onTrack = phaseN >= Math.round(expected * (dayInfo.pct / 100));
     return '<div class="card card--notch">' +
@@ -5556,6 +6436,7 @@
       '<div class="progress" style="height:12px"><div class="progress__bar" style="width:' + dayInfo.pct + '%"></div></div>' +
       '<div class="progress__meta mt-4"><span>Sessions completed</span><span><b>' + phaseN + "</b> / " + expected + " expected</span></div>" +
       '<div class="progress progress--cyan progress--thin metric-bar"><div class="progress__bar" style="width:' + cadencePct + '%"></div></div>' +
+      (minis ? '<div class="progress__meta mt-2"><span>Accessory sessions</span><span><b>' + minis + '</b> · not counted above</span></div>' : "") +
       '<p class="muted text-xs mt-2">' +
         (onTrack ? "On pace for this phase — keep the cadence steady." :
           "A little behind pace — " + engine.template().label + " plans " + engine.template().short + ".") +
@@ -6319,7 +7200,8 @@
   };
   var DAY_TYPE_LABEL = {
     push: "Push", pull: "Pull", legs: "Legs", fullbody: "Full",
-    fullA: "Full A", fullB: "Full B", upper: "Upper", lower: "Lower"
+    fullA: "Full A", fullB: "Full B", upper: "Upper", lower: "Lower",
+    mini: "Mini"   // a calendar cell's label: "Accessory" overflows the grid at 390 px
   };
   var MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   var DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -6476,7 +7358,7 @@
     } else {
       body = '<div class="sess-log">' + done.map(function (x) {
         var dayLabel = ({ push: "Push", pull: "Pull", legs: "Legs", fullbody: "Full Body",
-                          fullA: "Full Body A", fullB: "Full Body B", upper: "Upper", lower: "Lower" })[x.type] || cap(x.type || "session");
+                          fullA: "Full Body A", fullB: "Full Body B", upper: "Upper", lower: "Lower", mini: "Accessory session" })[x.type] || cap(x.type || "session");
         return '<div class="sess-log__row" data-sid="' + esc(x.id) + '">' +
           '<div class="grow"><div class="sess-log__t">' + dayLabel + '</div>' +
             '<div class="sess-log__s">' + lib.relTime(lib.sessionDay(x)) + ' · ' + (x.exercises || []).length + ' movements · vol ' + (x.volume || 0) +
@@ -7012,7 +7894,9 @@
   }
   /* The phase report has no grade (plan D5). Three sections, each with its
      own sample size, so you can judge how far to trust each one:
-       adherence    sessions attended out of the template's planned sessions
+       adherence    main sessions attended out of the template's planned
+                    sessions; mini-sessions are a line of their own (plan D3),
+                    never attendance
        performance  per slot: comparable sessions this period, steps taken
        recovery     pain flags, exercises rated Failed, recovery blocks
      Bodyweight is reported beside them and feeds nothing. Nothing here
@@ -7023,25 +7907,29 @@
     var dayInfo = util.phaseDayInfo(phase);
     var all = (s.sessions || []).filter(function (x) { return x.completed; });
     var sess = all.filter(function (x) { return inPhase(startKey, lib.sessionDay(x)); });
+    var main = sess.filter(function (x) { return !engine.isMini(x); });
 
-    /* 1 · adherence */
-    var expected = engine.expectedSessions(phase, sess.length);
+    /* 1 · adherence — main sessions only. Recovery below reads every
+       session: effort and pain in a mini-session are still effort and pain. */
+    var expected = engine.expectedSessions(phase, main.length);
     var tpl = engine.TEMPLATES[phase.template] || engine.TEMPLATES.rotation;
 
     /* 2 · performance — comparable sessions are the ones the step rule would
        count (same exercise, setup and sets, as prescribed), so this reads
        against today's prescription: sessions before a step, and sessions
        inside a recovery block, aren't in it, and neither is an exercise
-       with nothing logged on it. Steps count up and back. */
+       with nothing logged on it. Steps count up and back, and stepping
+       into an optional branch move (an "option" decision) is a step too. */
     var decisions = s.training.decisions || {};
     var slots = Object.keys(TDATA.SLOTS).map(function (slot) {
       var rx = s.training.slots[slot];
       if (!rx || rx.off) return null;
       var n = window.Training.comparable(all, rx).filter(function (e) { return e.day >= startKey && e.total > 0; }).length;
+      /* A double step is two steps taken. */
       var steps = Object.keys(decisions).filter(function (k) {
         var ex = TDATA.EXERCISES[k.split("|")[0]], d = decisions[k];
-        return d.choice === "step" && ex && ex.slot === slot && inPhase(startKey, d.at);
-      }).length;
+        return (d.choice === "step" || d.choice === "option") && ex && ex.slot === slot && inPhase(startKey, d.at);
+      }).reduce(function (n, k) { return n + (decisions[k].steps === 2 ? 2 : 1); }, 0);
       return { slot: slot, rx: rx, comparable: n, steps: steps };
     }).filter(Boolean);
 
@@ -7080,9 +7968,10 @@
     var lr = pts.length >= 2 ? linreg(pts) : null;
 
     return {
-      sampleSize: sess.length, expected: expected, dayInfo: dayInfo, points: pts, trendLine: lr,
+      sampleSize: main.length, expected: expected, dayInfo: dayInfo, points: pts, trendLine: lr,
       weightTrend: lr ? lr.slope * 7 : null,                      // kg / week
-      adherence: { attended: sess.length, planned: expected, rate: expected ? sess.length / expected : 0, template: tpl },
+      adherence: { attended: main.length, planned: expected, rate: expected ? main.length / expected : 0, template: tpl,
+                   accessory: sess.length - main.length },
       performance: { slots: slots, comparable: slots.reduce(function (a, r) { return a + r.comparable; }, 0),
                      steps: slots.reduce(function (a, r) { return a + r.steps; }, 0) },
       recovery: { flags: flagN, sharp: sharp, parts: parts, rated: rated, failed: failed,
@@ -7109,8 +7998,10 @@
     var adh = sectionHTML("adherence", "Adherence",
       plural(a.planned, "session") + " planned · day " + ev.dayInfo.day + " of " + phase.lengthDays + (a.planned < 3 ? " — too few to say much" : ""),
       [["Sessions attended", a.attended + " of " + a.planned],
+       ["Accessory sessions", String(a.accessory)],
        ["Plan", esc(a.template.label) + " · " + esc(a.template.short)]],
-      partial ? "Planned is counted up to today, so a period part-way through is read against fewer sessions." : "Planned comes from the template this period ran under.");
+      (partial ? "Planned is counted up to today, so a period part-way through is read against fewer sessions." : "Planned comes from the template this period ran under.") +
+        " Accessory sessions are extra work, so they never count as attended.");
 
     var perf = sectionHTML("performance", "Performance",
       plural(p.comparable, "comparable session") + " this period · " + plural(p.steps, "step") + " taken",
@@ -7398,24 +8289,69 @@
 
     /* Each slot's prescription and its evidence so far (plan C5). What the
        workout will actually build, so an equipment fallback shows here too. */
-    var targets = Object.keys(TDATA.SLOTS).map(function (slot) {
+    /* Coverage slots (Stage 3) are topped up by the finisher and mini-sessions.
+       They get their own card below, built from the same row. A coverage slot
+       has no record until its first pick, but still has a prescription: the
+       first movement you can do. */
+    var mainSlots = Object.keys(TDATA.SLOTS).filter(function (k) { return !TDATA.SLOTS[k].coverage; });
+    var covSlots = Object.keys(TDATA.SLOTS).filter(function (k) { return TDATA.SLOTS[k].coverage; });
+    var covStatus = window.Coverage.status(s.sessions, lib.today(), []), pins = s.training.pins || {};
+    var WEEK_DAYS = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [0, "Sun"]];
+    /* The week's count for the groups a slot tops up, and the weekday pins. */
+    var covExtra = function (slot) {
+      var on = (pins[slot] || {}).days || [];
+      return '<span class="faint text-xs" data-pg-cover style="display:block">' + TDATA.SLOTS[slot].trains.map(function (k) {
+          var g = covStatus[k]; return esc(g.label) + ': ' + g.direct + ' of ' + g.floor + ' direct sets this week';
+        }).join('; ') + '</span>' +
+        '<span class="pg-pins" role="group" aria-label="Pin ' + esc(TDATA.SLOTS[slot].label) + ' to weekdays">' +
+          '<span class="faint text-xs">Pin to</span> ' + WEEK_DAYS.map(function (d) {
+            var is = on.indexOf(d[0]) >= 0;
+            return '<button class="btn btn--ghost btn--sm' + (is ? ' is-on' : '') + '" data-pin-day="' + slot + ':' + d[0] + '" aria-pressed="' + is + '" type="button" style="padding:1px 8px">' + d[1] + '</button>';
+          }).join('') + '</span>';
+    };
+    var slotRow = function (slot) {
+      var cov = !!TDATA.SLOTS[slot].coverage;
       /* No record (a row never offered yet) or off: nothing is prescribed. */
-      var stored = s.training.slots[slot], pr = stored && !stored.off ? engine.prescriptionFor(slot) : null, rx = pr && pr.rx;
+      var stored = s.training.slots[slot], pr = (stored ? !stored.off : cov) ? engine.prescriptionFor(slot) : null, rx = pr && pr.rx;
       var optional = slot === "row" || TDATA.SLOTS[slot].optional;
-      var name = !stored ? "—" : stored.off ? "Left out" : rx ? (DB.getExercise(rx.exerciseId) || {}).name || rx.exerciseId
-        : TDATA.SLOTS[slot].none || "Needs equipment you don't have";
+      var none = !rx && engine.unavailableReason(slot) !== "equipment" ? ui.noneText(slot) : null;
+      var name = !stored && !cov ? "—" : stored && stored.off ? "Left out" : rx ? (DB.getExercise(rx.exerciseId) || {}).name || rx.exerciseId
+        : none ? ui.cap(none) : TDATA.SLOTS[slot].none || "Needs equipment you don't have";
+      /* The status line, unless it only repeats the name ("Needs equipment you
+         don't have" twice). */
+      var status = cov && !stored ? (rx ? "not started — the first finisher or accessory session that picks it starts it"
+        : "never picked while nothing here is allowed") : ui.slotStatus(slot);
       var setup = rx ? ui.setupText(rx) : "";
       var toggle = optional
         ? '<button class="btn btn--ghost btn--sm" data-slot-toggle="' + slot + '" data-on="' + (!stored || stored.off ? "1" : "0") + '" type="button">' +
             (!stored || stored.off ? "Add" : "Leave out") + '</button>' : "";
-      return '<div class="pg-trow" data-pg-slot="' + slot + '">' +
+      /* Your controls over the slot (plan C2, C4): change the movement, pause
+         step-ups, set your own sets and range. A left-out or never-offered
+         slot has nothing to control; Add brings it back. */
+      var live = stored && !stored.off;
+      /* A coverage slot with no record can still be chosen for; the choice
+         creates its record. Hold and Sets & range need one to edit. */
+      var acts = live || (cov && !stored)
+        ? '<button class="btn btn--ghost btn--sm" data-pg-change="' + slot + '" type="button">Change exercise</button>' +
+          (!live ? '' : '<button class="btn btn--ghost btn--sm" data-pg-hold="' + slot + '" data-on="' + (stored.hold ? "0" : "1") + '" type="button" aria-pressed="' + !!stored.hold + '">' + (stored.hold ? "Resume step-ups" : "Hold") + '</button>' +
+          (stored.range && stored.range[1] != null ? '<button class="btn btn--ghost btn--sm" data-pg-custom="' + slot + '" type="button">Sets &amp; range</button>' : ''))
+        : "";
+      var tags = (live && stored.hold ? ' <span class="badge" style="padding:1px 7px">holding</span>' : '') +
+        (live && stored.custom ? ' <span class="badge" style="padding:1px 7px" title="You set this; a goal change leaves it alone">your sets &amp; range</span>' : '');
+      return '<div class="pg-slot">' +
+        '<div class="pg-trow" data-pg-slot="' + slot + '">' +
         '<span class="pg-trow__p">' + esc(TDATA.SLOTS[slot].label) + '</span>' +
-        '<span class="pg-trow__n">' + esc(name) + (setup ? ' <span class="faint text-xs">· ' + esc(setup) + '</span>' : '') +
+        '<span class="pg-trow__n">' + esc(name) + (setup ? ' <span class="faint text-xs">· ' + esc(setup) + '</span>' : '') + tags +
           (pr && pr.note ? '<span class="faint text-xs" style="display:block">' + esc(pr.note) + '</span>' : '') +
-          '<span class="faint text-xs" data-pg-status style="display:block">' + esc(ui.slotStatus(slot)) + '</span>' +
-          (toggle ? '<span style="display:block;margin-top:4px">' + toggle + '</span>' : '') + '</span>' +
-        '<span class="kv__v">' + (rx && stored && !stored.off ? rx.sets + ' × ' + (rx.range[0] != null ? rx.range[0] + '–' : '') + (rx.range[1] != null ? rx.range[1] : '') + (rx.unit === "sec" ? ' s' : '') : '') + '</span></div>';
-    }).join("");
+          (status.toLowerCase() === name.toLowerCase() ? '' : '<span class="faint text-xs" data-pg-status style="display:block">' + esc(status) + '</span>') +
+          (cov ? covExtra(slot) : '') +
+          ((toggle || acts) ? '<span class="pg-acts">' + toggle + acts + '</span>' : '') + '</span>' +
+        '<span class="kv__v">' + (rx ? rx.sets + ' × ' + (rx.range[0] != null ? rx.range[0] + '–' : '') + (rx.range[1] != null ? rx.range[1] : '') + (rx.unit === "sec" ? ' s' : '') : '') + '</span></div>' +
+        (PK && PK.slot === slot ? '<div class="pg-panel" data-pg-panel="' + slot + '">' + (PK.mode === "custom" ? customHtml(slot) : pickerHtml(slot)) + '</div>' : '') +
+        '</div>';
+    };
+    var targets = mainSlots.map(slotRow).join("");
+    var covRows = covSlots.map(slotRow).join("");
 
     /* Era-I benchmarks */
     var benches = benchKeys.map(function (k) {
@@ -7452,6 +8388,8 @@
         ui.eraBadge(s) +
       '</div>' +
 
+      ui.equipCheckHtml(s) +
+
       '<div class="card card--notch stack">' +
         '<div class="card__head"><div class="card__title">Current phase</div>' +
           '<span class="badge badge--primary">P' + phase.number + ((Number(phase.volumeFactor) || 1) < 1 ? ' · legacy deload' : '') + '</span></div>' +
@@ -7473,10 +8411,18 @@
         '<div id="pg-tpl-preview"></div></div>' +
 
       '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Your prescriptions</div>' +
-        '<span class="badge badge--era1">' + Object.keys(TDATA.SLOTS).length + ' slots</span></div>' +
+        '<span class="badge badge--era1">' + mainSlots.length + ' slots</span></div>' +
         '<p class="muted text-sm">Each slot is one movement at a range of reps or seconds. It steps up after ' + TDATA.EVIDENCE_SESSIONS + ' sessions on different days with every set at the top, rated easy or just right, and only when you say yes. A rule of thumb from your own logs, not a test — it can\'t see your form.</p>' +
+        gripHtml(s) +
         '<div class="pg-targets">' + targets + '</div>' +
         '<button class="btn btn--ghost btn--sm btn--block mt-2" data-go="progress">See strength levels in Progress →</button></div>' +
+
+      '<div class="card mt-4 stack" id="pg-coverage"><div class="card__head"><div class="card__title">Coverage</div>' +
+        '<span class="badge badge--era1">' + covSlots.length + ' slots</span></div>' +
+        '<p class="muted text-sm">Work the main program only brushes: biceps, side and rear delts, rotator cuff, neck, calves and the rest. Your finisher and Accessory session pick from these slots by how far each group is below its weekly floor of direct sets, and each slot steps up on the same rule as the slots above. Pin a slot to weekdays to put it first on those days whatever its shortfall; a pin never goes past your equipment, exclusions or limits. "Direct" counts only exercises where the group is a primary mover, and the floors are product choices, not validated minimums.</p>' +
+        '<div class="pg-targets">' + covRows + '</div></div>' +
+
+      excludedHtml(s) +
 
       '<div class="card mt-4 stack"><div class="card__head"><div class="card__title">Era I benchmarks</div>' +
         '<span class="badge badge--era1" id="bench-count">' + benchDone + '/' + benchKeys.length + '</span></div>' +
@@ -7489,6 +8435,248 @@
       '<p class="faint text-xs mt-6 mono">PROGRAM ONLINE · ' + engine.completedSessions().length + ' sessions logged · ' + (s.phaseHistory || []).length + ' phases archived · ' + benchDone + '/' + benchKeys.length + ' benchmarks cleared.</p>';
 
     wireProgram(el, s);
+  }
+
+  /* ---- Your controls over the plan (plan C1-C4) ----------------------
+     Every control calls one engine function, which stamps and saves; a
+     refusal comes back as { error } and is shown inline, never in a modal.
+     `PK` is the one open panel (Change exercise or Sets & range), kept
+     across App.refresh() so a button that re-renders the page doesn't close
+     it: { slot, mode: "pick" | "custom", sel, grip, setup, load, error }. */
+  var PK = null;
+  var nameOf = function (id) { return (DB.getExercise(id) || {}).name || id; };
+  var cap1 = function (t) { return t.charAt(0).toUpperCase() + t.slice(1); };
+
+  /* Push-ups on Palms / Knuckles (plan C1): the standing grip. */
+  function gripHtml(s) {
+    var push = s.training.slots.push;
+    if (!push || push.off) return "";
+    var cur = (s.training.grip || {}).push || "palms";
+    return '<div class="field" id="pg-grip"><span class="field__label">Push-ups on</span>' +
+      '<div class="seg">' + TDATA.GRIPS.values.map(function (v) {
+        return '<button class="seg__btn' + (v.id === cur ? " is-active" : "") + '" data-grip-set="' + v.id + '" type="button" aria-pressed="' + (v.id === cur) + '">' + esc(v.label) + '</button>';
+      }).join("") + '</div>' +
+      '<p class="faint text-xs" style="margin:6px 0 0">Knuckles count as slightly harder than palms and keep the wrist straight. They apply to ' +
+        TDATA.GRIPS.exercises.map(nameOf).join(", ") + '; Diamond, Archer and Pseudo Planche stay on palms. A knuckles session counts as evidence for a palms prescription, but a palms session doesn\'t count for knuckles. Switching to knuckles starts that evidence again.</p></div>';
+  }
+
+  /* Excluded movements (plan C3): everything you excluded or allowed past a
+     joint limit, with the way back. Re-stamped, never deleted. */
+  function excludedHtml(s) {
+    var ex = s.training.exclusions || {};
+    var rows = Object.keys(ex).filter(function (id) { return ex[id].state === "excluded" || ex[id].state === "allowed"; })
+      .sort(function (a, b) { return nameOf(a).localeCompare(nameOf(b)); }).map(function (id) {
+        var allowed = ex[id].state === "allowed", slot = (TDATA.EXERCISES[id] || {}).slot;
+        return '<div class="row between wrap" data-excl-row="' + esc(id) + '" style="gap:var(--sp-2);align-items:center">' +
+          '<span class="text-sm"><b>' + esc(nameOf(id)) + '</b> <span class="faint text-xs">· ' + esc(slot ? TDATA.SLOTS[slot].label : "") + ' · ' +
+            (allowed ? "allowed past your joint limit" : "excluded") + '</span></span>' +
+          '<button class="btn btn--ghost btn--sm" data-excl-undo="' + esc(id) + '" type="button">' + (allowed ? "Stop allowing" : "Include again") + '</button></div>';
+      });
+    return '<div class="card mt-4 stack" id="pg-excluded"><div class="card__head"><div class="card__title">Excluded movements</div>' +
+      '<span class="badge">' + rows.length + '</span></div>' +
+      '<p class="muted text-sm">An excluded movement is never prescribed, stepped to or offered in a swap list unless you ask to see it. Your slots fall back to the nearest easier movement you allow. Exclude one from Change exercise.</p>' +
+      (rows.length ? '<div class="stack" style="gap:var(--sp-2)">' + rows.join("") + '</div>' : '<p class="faint text-sm">None.</p>') + '</div>';
+  }
+
+  /* Change exercise (plan C2): every movement in the slot except skill
+     attempts, as On your path, Branches and Weighted, each with the reasons
+     it might not be usable right now. Choosing one keeps it until a step or
+     another choice moves it. */
+  function pickerHtml(slot) {
+    var s = App.getState(), EXS = TDATA.EXERCISES, stored = s.training.slots[slot], ctx = engine.ctx();
+    var pr = engine.prescriptionFor(slot), cur = stored && stored.exerciseId;
+    var opts = engine.slotOptions(slot).filter(function (a) { return EXS[a.id].kind !== "skill"; });
+    var group = function (a) { var e = EXS[a.id]; return e.loadMode ? 2 : e.branch === "main" ? 0 : 1; };
+    var titles = ["On your path", "Branches", "Weighted"];
+    var note = ["", "Optional moves that branch off a path — a harder variation, not the next rung.", "These need a weight. Leave the load blank and your first session's weight sets it."];
+    var body = [0, 1, 2].map(function (g) {
+      var inG = opts.filter(function (a) { return group(a) === g; });
+      if (!inG.length) return "";
+      return '<div class="field__label" style="margin-top:var(--sp-2)">' + titles[g] + '</div>' +
+        (note[g] ? '<p class="faint text-xs" style="margin:0">' + note[g] + '</p>' : '') +
+        inG.map(function (a) {
+          var st = engine.swapStatus(slot, a.id), x = (ctx.exclusions[a.id] || {}).state;
+          var b = function (cls, t) { return '<span class="badge ' + cls + '" style="padding:1px 7px">' + esc(t) + '</span>'; };
+          var tags = (a.id === cur ? b("badge--primary", "current") : "") +
+            (x === "excluded" ? b("badge--warn", "excluded") : "") +
+            (x === "allowed" ? b("badge--secondary", "allowed anyway") : "") +
+            (st.missing ? b("badge--warn", "needs " + st.missing) : "") +
+            (st.blocked && st.blocked !== "excluded" && st.blocked !== "equipment" ? b("badge--warn", "avoiding your " + ui.jointWord(st.blocked)) : "") +
+            (st.careful.length && !st.blocked ? b("badge--secondary", "careful: " + st.careful.map(ui.jointWord).join(", ")) : "");
+          var acts = (x === "excluded" ? '<button class="btn btn--ghost btn--sm" data-pk-include="' + a.id + '" type="button">Include again</button>'
+            : '<button class="btn btn--ghost btn--sm" data-pk-exclude="' + a.id + '" type="button">Exclude</button>') +
+            (st.blocked && st.blocked !== "excluded" && st.blocked !== "equipment" && x !== "allowed"
+              ? '<button class="btn btn--ghost btn--sm" data-pk-allow="' + a.id + '" type="button">Allow anyway</button>' : "");
+          return '<div class="pk-row"><button class="swap-opt' + (PK.sel === a.id ? " is-current" : "") + (st.blocked ? " is-locked" : "") + '" data-pick="' + a.id + '" type="button" aria-pressed="' + (PK.sel === a.id) + '">' +
+            '<span class="swap-opt__lvl">' + (a.level ? "L" + a.level : EXS[a.id].loadMode ? "KG" : "—") + '</span>' +
+            '<span class="swap-opt__main"><span class="swap-opt__name">' + esc(a.name) + '</span></span>' +
+            '<span class="pk-tags">' + tags + '</span></button><span class="pk-acts">' + acts + '</span></div>';
+        }).join("");
+    }).join("");
+
+    /* Setup for the picked movement: grip, surface/angle/band, a load. */
+    var sel = PK.sel, e = sel && EXS[sel], S = sel && TDATA.SETUPS[sel], sameAsStored = stored && !stored.off && stored.exerciseId === sel;
+    var fields = "";
+    if (sel && ui.gripCapable(sel)) {
+      var g = PK.grip || "palms";
+      fields += '<label class="field"><span class="field__label">Grip</span><select class="select" data-pk-grip>' +
+        TDATA.GRIPS.values.map(function (v) { return '<option value="' + v.id + '"' + (v.id === g ? " selected" : "") + '>' + esc(v.label) + '</option>'; }).join("") + '</select></label>';
+    }
+    if (S) {
+      var key = S.key, label = { surface: "Surface", bodyAngle: "Body angle", band: "Band" }[key] || cap1(key);
+      var at = PK.setup || (sameAsStored && stored.setup && stored.setup[key]) || S.values[0].id;
+      fields += '<label class="field"><span class="field__label">' + label + '</span><select class="select" data-pk-setup>' +
+        S.values.map(function (v) { return '<option value="' + v.id + '"' + (v.id === at ? " selected" : "") + '>' + esc(v.label + (v.cm ? " (~" + v.cm + " cm)" : "")) + '</option>'; }).join("") + '</select></label>';
+    }
+    if (e && e.loadMode) {
+      var kg = PK.load != null ? PK.load : (sameAsStored && stored.setup && stored.setup.loadKg) || "";
+      fields += '<label class="field"><span class="field__label">Starting load, kg ' + (e.loadMode === "perHand" ? "per hand" : "total") + ' (optional)</span>' +
+        '<input class="input" data-pk-load type="number" min="0.5" max="200" step="0.5" inputmode="decimal" value="' + esc(String(kg)) + '"></label>';
+    }
+    var fell = pr && stored && !stored.off && pr.rx.exerciseId !== stored.exerciseId;
+    return '<div class="stack" style="gap:var(--sp-2)">' +
+      '<p class="faint text-xs" style="margin:0">' + (fell ? esc(nameOf(stored.exerciseId)) + ' is blocked for you, so ' + esc(nameOf(pr.rx.exerciseId)) + ' is preselected: the nearest easier movement you allow. ' : '') +
+        'The start is the bottom of the movement\'s range. Steps and evidence work as before from there.</p>' +
+      body +
+      (fields ? '<div class="set-grid">' + fields + '</div>' : '') +
+      (PK.error ? '<p class="text-sm" data-pg-err role="alert" style="color:var(--danger);margin:0">' + esc(PK.error) + '</p>' : '') +
+      '<div class="row" style="gap:var(--sp-2)"><button class="btn btn--primary btn--sm" data-pk-use type="button"' + (sel ? "" : " disabled") + '>Use ' + (sel ? esc(nameOf(sel)) : "this movement") + '</button>' +
+      '<button class="btn btn--ghost btn--sm" data-pk-cancel type="button">Cancel</button></div></div>';
+  }
+
+  /* Sets & range (plan C4): your own count and range for one slot. */
+  function customHtml(slot) {
+    var rx = App.getState().training.slots[slot], sec = rx.unit === "sec";
+    var c = PK.form || (PK.form = { sets: rx.sets, lo: rx.range[0], hi: rx.range[1] });
+    return '<div class="stack" style="gap:var(--sp-2)">' +
+      '<p class="faint text-xs" style="margin:0">Your own sets and ' + (sec ? "seconds" : "rep") + ' range for ' + esc(nameOf(rx.exerciseId)) + '. It survives a goal change. Changing the sets starts that slot\'s evidence again, because a different number of sets is a different prescription. Sets 1–6; the top at least 2 above the bottom, up to ' + (sec ? "300 s" : "50 reps") + '.</p>' +
+      '<div class="set-grid" style="grid-template-columns:repeat(3,1fr)">' +
+        '<label class="field"><span class="field__label">Sets</span><input class="input" data-cu="sets" type="number" min="1" max="6" inputmode="numeric" value="' + esc(String(c.sets)) + '"></label>' +
+        '<label class="field"><span class="field__label">From</span><input class="input" data-cu="lo" type="number" min="1" inputmode="numeric" value="' + esc(String(c.lo)) + '"></label>' +
+        '<label class="field"><span class="field__label">To</span><input class="input" data-cu="hi" type="number" min="3" inputmode="numeric" value="' + esc(String(c.hi)) + '"></label></div>' +
+      (PK.error ? '<p class="text-sm" data-pg-err role="alert" style="color:var(--danger);margin:0">' + esc(PK.error) + '</p>' : '') +
+      '<div class="row" style="gap:var(--sp-2);flex-wrap:wrap"><button class="btn btn--primary btn--sm" data-cu-save type="button">Save</button>' +
+      '<button class="btn btn--ghost btn--sm" data-cu-reset type="button">Back to my goal\'s</button>' +
+      '<button class="btn btn--ghost btn--sm" data-pk-cancel type="button">Cancel</button></div></div>';
+  }
+
+  /* Wires the slot rows' controls and the open panel. `again` re-renders. */
+  function wireControls(el, s) {
+    var again = function () { App.refresh(); };
+    var open = function (slot, mode) {
+      var stored = s.training.slots[slot], pr = engine.prescriptionFor(slot);
+      var rx = pr ? pr.rx : stored;
+      PK = { slot: slot, mode: mode, error: "" };
+      if (mode === "pick") {
+        /* Excluded or avoided: the nearest easier movement you allow is
+           preselected, which is what the workout would use now. */
+        PK.sel = rx && rx.exerciseId;
+        PK.grip = (rx && rx.setup && rx.setup.grip) || ((s.training.grip || {})[slot]) || "palms";
+      }
+      again();
+    };
+    el.querySelectorAll("[data-pg-change]").forEach(function (b) { b.addEventListener("click", function () { open(b.dataset.pgChange, "pick"); }); });
+    el.querySelectorAll("[data-pg-custom]").forEach(function (b) { b.addEventListener("click", function () { open(b.dataset.pgCustom, "custom"); }); });
+    el.querySelectorAll("[data-pg-hold]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var on = b.dataset.on === "1", r = engine.setHold(b.dataset.pgHold, on);
+        if (r && r.error) { App.toast(r.error, "warn"); return; }
+        App.toast(on ? "Holding — this slot won't be offered a step up. Step-back offers still show." : "Step-ups are back on for this slot.", "info");
+        again();
+      });
+    });
+    el.querySelectorAll("[data-grip-set]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var r = engine.setGrip("push", b.dataset.gripSet);
+        if (r && r.error) { App.toast(r.error, "warn"); return; }
+        App.toast("Push-ups on " + b.dataset.gripSet + "." + (b.dataset.gripSet === "knuckles" ? " Evidence for knuckles starts from your next session." : ""), "info");
+        again();
+      });
+    });
+    el.querySelectorAll("[data-pin-day]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var m = b.dataset.pinDay.split(":"), d = Number(m[1]);
+        var cur = ((App.getState().training.pins || {})[m[0]] || {}).days || [];
+        var r = engine.setPins(m[0], cur.indexOf(d) >= 0 ? cur.filter(function (x) { return x !== d; }) : cur.concat(d));
+        if (r && r.error) { App.toast(r.error, "warn"); return; }
+        again();
+      });
+    });
+    el.querySelectorAll("[data-excl-undo]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var r = engine.setExcluded(b.dataset.exclUndo, "none");
+        if (r && r.error) { App.toast(r.error, "warn"); return; }
+        App.toast(nameOf(b.dataset.exclUndo) + " is back in your options.", "info");
+        again();
+      });
+    });
+    ui.wireEquipCheck(el);
+
+    var panel = el.querySelector("[data-pg-panel]");
+    if (!panel || !PK) return;
+    var cancel = panel.querySelector("[data-pk-cancel]");
+    if (cancel) cancel.addEventListener("click", function () { PK = null; again(); });
+    if (PK.mode === "custom") {
+      var read = function () {
+        PK.form = { sets: panel.querySelector('[data-cu="sets"]').value, lo: panel.querySelector('[data-cu="lo"]').value, hi: panel.querySelector('[data-cu="hi"]').value };
+        return PK.form;
+      };
+      panel.querySelector("[data-cu-save]").addEventListener("click", function () {
+        var f = read(), r = engine.setCustom(PK.slot, { sets: f.sets, range: [f.lo, f.hi] });
+        if (r && r.error) { PK.error = r.error; again(); return; }
+        App.toast("Sets and range saved for " + TDATA.SLOTS[PK.slot].label.toLowerCase() + ".", "success");
+        PK = null; again();
+      });
+      panel.querySelector("[data-cu-reset]").addEventListener("click", function () {
+        var r = engine.setCustom(PK.slot, null);
+        if (r && r.error) { PK.error = r.error; again(); return; }
+        App.toast("Back to your goal's sets and range.", "info");
+        PK = null; again();
+      });
+      return;
+    }
+    var keep = function () {
+      var g = panel.querySelector("[data-pk-grip]"), st = panel.querySelector("[data-pk-setup]"), ld = panel.querySelector("[data-pk-load]");
+      if (g) PK.grip = g.value;
+      if (st) PK.setup = st.value;
+      if (ld) PK.load = ld.value;
+    };
+    panel.querySelectorAll("[data-pick]").forEach(function (b) {
+      b.addEventListener("click", function () { keep(); PK.sel = b.dataset.pick; PK.setup = null; PK.load = null; PK.error = ""; again(); });
+    });
+    var change = function (attr, state) {
+      panel.querySelectorAll("[" + attr + "]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          keep();
+          var id = b.getAttribute(attr), r = engine.setExcluded(id, state);
+          if (r && r.error) { PK.error = r.error; again(); return; }
+          /* Excluding what the slot trains: preselect what it falls back to. */
+          if (state === "excluded") {
+            var pr = engine.prescriptionFor(PK.slot);
+            if (PK.sel === id && pr) { PK.sel = pr.rx.exerciseId; PK.setup = null; PK.load = null; }
+          }
+          PK.error = "";
+          App.toast(nameOf(id) + (state === "excluded" ? " excluded." : state === "allowed" ? " allowed past your joint limit." : " included again."), "info");
+          again();
+        });
+      });
+    };
+    change("data-pk-exclude", "excluded");
+    change("data-pk-include", "none");
+    change("data-pk-allow", "allowed");
+    var use = panel.querySelector("[data-pk-use]");
+    if (use) use.addEventListener("click", function () {
+      keep();
+      var o = {}, S = TDATA.SETUPS[PK.sel];
+      if (S && PK.setup) { o.setup = {}; o.setup[S.key] = PK.setup; }
+      if (ui.gripCapable(PK.sel)) { o.setup = o.setup || {}; if (PK.grip === "knuckles") o.setup.grip = "knuckles"; }
+      if (PK.load !== "" && PK.load != null) o.loadKg = PK.load;
+      var r = engine.chooseExercise(PK.slot, PK.sel, o);
+      if (r && r.error) { PK.error = r.error; again(); return; }
+      App.toast(nameOf(PK.sel) + " is your " + TDATA.SLOTS[PK.slot].label.toLowerCase() + " now. It stays until a step or another choice moves it.", "success");
+      PK = null; again();
+    });
+    panel.scrollIntoView({ block: "nearest" });
   }
 
   function planned28(tpl) { return Math.ceil(28 * tpl.perWeek / 7); }
@@ -7545,6 +8733,8 @@
         });
       });
     });
+
+    wireControls(el, s);
 
     /* nav buttons */
     el.querySelectorAll("[data-go]").forEach(function (b) {
@@ -7691,13 +8881,13 @@
       readiness:"A recovery and grip-prep staple — work toward a relaxed 60-second hang.",
       injury:"Eases into bar work gently; back off if the shoulders feel unstable rather than loose." },
 
-    pull_alt_australian: { id:"pull_alt_australian", pattern:"pull", name:"Australian Row (Inverted Row)", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+    pull_alt_australian: { id:"pull_alt_australian", pattern:"pull", name:"Australian Row (Inverted Row)", level:null, era:1, mode:"reps", unit:"reps", equipment:["lowBar","rings"],
       cues:["Set a bar at hip height and lie underneath it, gripping shoulder-width.","Keep the body in a straight plank line, heels on the floor.","Pull the chest up to the bar by driving the elbows down and back.","Lower with control to fully extended arms; raise the bar or bend the knees to scale difficulty."],
       mistakes:["Letting the hips sag so the body bends.","Shrugging instead of leading with the shoulder blades."],
       readiness:"A horizontal pull that builds the back for vertical pulling — aim for 12 strict reps.",
       injury:"Great low-skill entry to pulling; keep the neck neutral." },
 
-    pull_alt_bandassist: { id:"pull_alt_bandassist", pattern:"pull", name:"Band-Assisted Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+    pull_alt_bandassist: { id:"pull_alt_bandassist", pattern:"pull", name:"Band-Assisted Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar","bands"],
       cues:["Loop a resistance band over the bar and place a foot or knee in the loop.","Start from a full dead hang with the band providing a boost at the bottom.","Pull with the back and arms, leading the chest to the bar.","Lower under control to a straight-arm hang each rep."],
       mistakes:["Relying on a band so thick it does most of the work — pick the lightest you can manage.","Bouncing out of the bottom using band recoil alone."],
       readiness:"The on-ramp to unassisted pull-ups — drop to a lighter band as you get stronger.",
@@ -7766,25 +8956,25 @@
       injury:"Only attempt with fully conditioned wrists, elbows, and shoulders." },
 
     /* ---- SKILL CATEGORY: FRONT LEVER ---- */
-    skill_frontlever_1: { id:"skill_frontlever_1", pattern:"skill", name:"Tuck Front Lever", level:1, era:1, mode:"hold", unit:"sec", equipment:["pullupBar"],
+    skill_frontlever_1: { id:"skill_frontlever_1", pattern:"skill", name:"Tuck Front Lever", level:1, era:1, mode:"hold", unit:"sec", equipment:["pullupBar","rings"],
       cues:["Hang from a bar with an overhand grip, arms straight.","Pull the shoulder blades down and back to engage the lats.","Tuck the knees to the chest and lift the hips until the back is horizontal.","Keep the arms locked straight and the body facing the ceiling."],
       mistakes:["Bending the elbows to pull into position.","Letting the shoulders shrug up toward the ears."],
       readiness:"Hold a tuck for 20 seconds with straight arms before opening the body.",
       injury:"Demands strong straight-arm lats; build the passive hang and scapular pulls first." },
 
-    skill_frontlever_2: { id:"skill_frontlever_2", pattern:"skill", name:"Advanced Tuck Front Lever", level:2, era:1, mode:"hold", unit:"sec", equipment:["pullupBar"],
+    skill_frontlever_2: { id:"skill_frontlever_2", pattern:"skill", name:"Advanced Tuck Front Lever", level:2, era:1, mode:"hold", unit:"sec", equipment:["pullupBar","rings"],
       cues:["From a tuck front lever, open the hips so the torso and thighs form a flat line.","Keep the knees bent but move them away from the chest.","Maintain straight arms and depressed, retracted shoulders.","Keep the body horizontal and facing up."],
       mistakes:["Piking the hips up to reduce the load.","Losing lat tension so the chest drops."],
       readiness:"Hold 15 seconds flat-backed before extending a leg.",
       injury:"Progress gradually to protect the shoulders and elbows." },
 
-    skill_frontlever_3: { id:"skill_frontlever_3", pattern:"skill", name:"Straddle Front Lever", level:3, era:1, mode:"hold", unit:"sec", equipment:["pullupBar"],
+    skill_frontlever_3: { id:"skill_frontlever_3", pattern:"skill", name:"Straddle Front Lever", level:3, era:1, mode:"hold", unit:"sec", equipment:["pullupBar","rings"],
       cues:["Extend both legs into a wide straddle from the advanced tuck.","The wide legs shorten the lever compared to a full front lever.","Keep arms straight, lats engaged, body horizontal.","Point the toes and keep the hips level with the shoulders."],
       mistakes:["Letting the hips sag below the shoulders.","Bending the arms to hold the line."],
       readiness:"A 10-second straddle hold leads into the full front lever.",
       injury:"Keep the elbows soft-locked, not hyperextended, to protect the joint." },
 
-    skill_frontlever_4: { id:"skill_frontlever_4", pattern:"skill", name:"Full Front Lever", level:4, era:1, mode:"hold", unit:"sec", equipment:["pullupBar"],
+    skill_frontlever_4: { id:"skill_frontlever_4", pattern:"skill", name:"Full Front Lever", level:4, era:1, mode:"hold", unit:"sec", equipment:["pullupBar","rings"],
       cues:["Bring the legs together and hold the whole body horizontal under the bar.","Arms stay straight; the lats and core do the work.","Keep the body in one rigid line, facing the ceiling.","Squeeze everything — glutes, core, legs — to hold the line."],
       mistakes:["Any sag at the hips breaks the lever.","Pulling with bent arms instead of straight-arm scapular strength."],
       readiness:"A hallmark straight-arm pulling skill — a long-term goal built over months.",
@@ -7816,25 +9006,25 @@
       injury:"Always know your bail-out; practice on a soft surface while learning." },
 
     /* ---- SKILL CATEGORY: L-SIT & CORE SKILLS ---- */
-    skill_lsit_1: { id:"skill_lsit_1", pattern:"skill", name:"Foot-Supported L-Sit", level:1, era:1, mode:"hold", unit:"sec", equipment:["bench"],
+    skill_lsit_1: { id:"skill_lsit_1", pattern:"skill", name:"Foot-Supported L-Sit", level:1, era:1, mode:"hold", unit:"sec", equipment:["bench","parallettes"],
       cues:["Sit on the floor or between two raised supports, hands pressing down.","Depress the shoulders and lock the elbows straight.","Keep the heels lightly on the floor and lift the hips off the ground.","Hold with the chest tall and shoulders pushed down."],
       mistakes:["Shrugging the shoulders up to the ears.","Bending the elbows to hold the lift."],
       readiness:"Hold 20-30 seconds before lifting the feet into a tuck.",
       injury:"Use parallettes if pressing on flat ground bothers the wrists." },
 
-    skill_lsit_2: { id:"skill_lsit_2", pattern:"skill", name:"Tuck L-Sit", level:2, era:1, mode:"hold", unit:"sec", equipment:["bench"],
+    skill_lsit_2: { id:"skill_lsit_2", pattern:"skill", name:"Tuck L-Sit", level:2, era:1, mode:"hold", unit:"sec", equipment:["bench","parallettes"],
       cues:["Press up on supports, depress the shoulders, lock the elbows.","Lift the hips and tuck both knees toward the chest, feet off the floor.","Hold the body weight entirely on the hands.","Keep the chest tall and the shoulders driven down."],
       mistakes:["Letting the shoulders rise toward the ears.","Leaning back to make the balance easier."],
       readiness:"A 30-second tuck hold sets up extending the legs.",
       injury:"Stretch the hip flexors before and after; cramping is common." },
 
-    skill_lsit_3: { id:"skill_lsit_3", pattern:"skill", name:"Full L-Sit", level:3, era:1, mode:"hold", unit:"sec", equipment:["bench"],
+    skill_lsit_3: { id:"skill_lsit_3", pattern:"skill", name:"Full L-Sit", level:3, era:1, mode:"hold", unit:"sec", equipment:["bench","parallettes"],
       cues:["From a tuck L-sit, extend both legs straight out parallel to the floor.","Push the supports down hard and keep the shoulders depressed.","Point the toes and squeeze the legs together.","Hold without leaning back to fake the angle."],
       mistakes:["Bending the knees as the core fatigues.","Dropping the hips below the hands."],
       readiness:"Hold 20 seconds with locked legs before chasing the V-sit.",
       injury:"Strong hip-flexor and core demand — build gradually." },
 
-    skill_vsit: { id:"skill_vsit", pattern:"skill", name:"V-Sit", level:4, era:1, mode:"hold", unit:"sec", equipment:["bench"],
+    skill_vsit: { id:"skill_vsit", pattern:"skill", name:"V-Sit", level:4, era:1, mode:"hold", unit:"sec", equipment:["bench","parallettes"],
       cues:["From a strong L-sit, lean back slightly and raise the legs above hip height.","Aim to form a V shape with the torso and legs.","Keep the arms straight and the shoulders pushed down.","Squeeze the legs together and point the toes."],
       mistakes:["Bending the knees to lift the legs higher.","Rounding the back instead of compressing from the hips."],
       readiness:"An advanced compression skill built on a solid full L-sit.",
@@ -7879,7 +9069,401 @@
       cues:["Stand in a long stride, front foot flat and back heel lifted, feet hip-width apart so you don't balance on a tightrope.","Keep the torso tall and drop the back knee straight down toward the floor.","Stop when the back knee hovers just above the ground and the front shin is near vertical.","Drive through the whole front foot to stand, without pushing off the back leg."],
       mistakes:["Stepping too short so the front knee is shoved far past the toes.","Leaning the torso forward and letting the front heel come off the floor."],
       readiness:"Add reps per side before moving to the rear-foot-elevated Bulgarian split squat.",
-      injury:"If the front knee complains, lengthen the stride and shorten the depth. A hand on a wall is fine." }
+      injury:"If the front knee complains, lengthen the stride and shorten the depth. A hand on a wall is fine." },
+
+    /* ---- STAGE 3 · coverage, upper body, neck and grip (plan D2, step 3.1).
+       pattern "accessory": not one of the seven movement patterns, so it has no
+       SUBSTITUTIONS and no legacy level ladder; the progression catalogue
+       (training.data.js) gives each its slot and its steps, and muscles.data.js
+       its muscles. Nothing builds a workout from these yet (step 3.3 on). ---- */
+    acc_curl_doorframe: { id:"acc_curl_doorframe", pattern:"accessory", name:"Door-Frame Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand facing a solid, fixed door frame and take hold of its edge with both hands at chest height, palms turned toward you.", "Walk your feet forward and lean back with straight arms and a rigid body, so your weight hangs on your hands. The further back, the harder the curl.", "Bend your elbows and curl your chest toward the frame, keeping the elbows close to your ribs.", "Straighten the arms slowly until you are leaning back again before the next rep."],
+      mistakes:["Letting the hips sag or bend so the body stops being one line.", "Swinging the hips forward to cheat the pull instead of bending the elbows."],
+      readiness:"Lean further back once the current angle is easy on two different days; it is the same movement made harder.",
+      injury:"Lean back gently first to check the frame doesn't flex. If the front of the elbow aches, stand more upright and ease the pull." },
+
+    acc_curl_invrow: { id:"acc_curl_invrow", pattern:"accessory", name:"Underhand Inverted Row", level:null, era:1, mode:"reps", unit:"reps", equipment:["lowBar", "rings"],
+      cues:["Set a bar at waist height, or hang rings low, and lie underneath it with an underhand grip, hands shoulder-width apart.", "Hold the body in one straight line with your heels on the floor; bend the knees to make it easier.", "Pull your chest to the bar by bending the elbows, keeping them close to your sides.", "Lower until the arms are straight, under control."],
+      mistakes:["Letting the hips sag so the body bends in the middle.", "Shrugging toward the ears instead of bending the elbows."],
+      readiness:"Straighten the body, then lower the bar, once the current angle is easy on two different days.",
+      injury:"The underhand grip puts more work through the front of the elbow than a normal row. Stop if it aches, and use a palms-down grip instead." },
+
+    acc_curl_band: { id:"acc_curl_band", pattern:"accessory", name:"Band Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Stand on the middle of a band with your feet hip-width apart and hold an end in each hand, palms forward.", "Keep your elbows beside your ribs and your shoulders down.", "Curl your hands to your shoulders against the band's pull.", "Lower slowly; the band pulls hardest at the top, so don't let it snap back."],
+      mistakes:["Swinging the torso back to get the hands up.", "Letting the elbows drift forward so the shoulders do the lifting."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Check the band for nicks before each session, and stand on it with the whole foot so it can't slip out." },
+
+    acc_curl_db: { id:"acc_curl_db", pattern:"accessory", name:"Dumbbell Curl", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Stand tall with a dumbbell in each hand, palms forward.", "Pin your elbows beside your ribs.", "Curl the weights to your shoulders without swinging.", "Lower for about two seconds until the arms are straight."],
+      mistakes:["Rocking the torso to heave the weight up.", "Cutting the lowering short, so only the top half of the range is worked."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Pick a weight you can lower under control. If the front of the elbow aches, drop the weight." },
+
+    acc_curl_hammer: { id:"acc_curl_hammer", pattern:"accessory", name:"Hammer Curl", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Hold a dumbbell in each hand with your palms facing your thighs.", "Keep the palms facing in the whole way up, as if holding a hammer.", "Curl without letting the elbows move forward.", "Lower slowly until the arms are straight."],
+      mistakes:["Letting the wrists bend back under the weight.", "Swinging the shoulders to get the weights moving."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"A neutral grip is gentler on some elbows than a palms-up curl. The rule for adding weight is the same." },
+
+    acc_lateral_iso: { id:"acc_lateral_iso", pattern:"accessory", name:"Isometric Lateral Raise", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Stand inside a doorway with one arm hanging by your side and the back of your wrist against the frame.", "Press the back of the hand into the frame as if raising the arm out to the side, without letting it move.", "Keep your shoulder down, away from your ear, and your body upright.", "Hold the push steady and keep breathing, then repeat on the other arm."],
+      mistakes:["Hiking the shoulder toward the ear.", "Leaning the whole body into the frame."],
+      readiness:"Move to the band raise when the hold is steady for the full time on two different days.",
+      injury:"Push firmly, not with everything you have. Ease off if the top of the shoulder pinches." },
+
+    acc_lateral_band: { id:"acc_lateral_band", pattern:"accessory", name:"Band Lateral Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Stand on the middle of a band with an end in each hand and your arms by your sides.", "Raise both arms out to the sides to about shoulder height, with a slight bend at the elbows.", "Lead with the elbows rather than the hands, and keep the shoulders down.", "Lower slowly against the pull."],
+      mistakes:["Shrugging the shoulders to get the arms up.", "Raising above shoulder height, where the neck and traps take over."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Stop at shoulder height. If the top of the shoulder pinches on the way up, shorten the range." },
+
+    acc_lateral_db: { id:"acc_lateral_db", pattern:"accessory", name:"Dumbbell Lateral Raise", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Stand tall with a light dumbbell in each hand at your sides.", "With a soft bend at the elbows, raise both arms out to the sides to shoulder height.", "Let the elbows lead and the hands follow.", "Lower for about two seconds."],
+      mistakes:["Swinging the body to get the weights up.", "Using a weight the shoulders can't lift without the traps taking over."],
+      readiness:"Light weights are the point. Add weight only when every set reaches the top of the range on two different days.",
+      injury:"The arms are at their longest lever here, so use a weight you can lift without shrugging and stop at shoulder height." },
+
+    acc_lateral_leanaway: { id:"acc_lateral_leanaway", pattern:"accessory", name:"Lean-Away Lateral Raise", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Hold a door frame or an upright post with one hand and lean your body away from it, with that arm straight.", "Hold a light dumbbell in the other hand, hanging by your side.", "Raise it out to the side to shoulder height, elbow leading.", "Lower slowly and keep the leaning body still, then swap sides."],
+      mistakes:["Letting the hips swing out to get the weight up.", "Pulling on the frame instead of just holding it."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Check the frame or post is solid before you lean on it, and keep the weight light enough that the neck stays out of it." },
+
+    acc_reardelt_tdraise: { id:"acc_reardelt_tdraise", pattern:"accessory", name:"Prone T-Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie face down on the floor with your arms straight out to the sides in a T, thumbs pointing up and forehead near the floor.", "Lift both arms off the floor by squeezing the shoulder blades together and back.", "Keep your head in line with your spine and look at the floor.", "Lower with control."],
+      mistakes:["Cranking the neck up to look forward.", "Lifting from the lower back instead of the shoulder blades."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Keep the lift small and smooth. If the lower back pinches, put a folded towel under your hips." },
+
+    acc_reardelt_snowangel: { id:"acc_reardelt_snowangel", pattern:"accessory", name:"Reverse Snow Angel", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie face down with your arms by your hips, palms down and forehead near the floor.", "Lift the arms and chest slightly, then sweep the arms out and up overhead in a wide arc, keeping them off the floor.", "Sweep back to your hips with the shoulder blades pulling down and in.", "Keep the neck long throughout."],
+      mistakes:["Letting the arms drop to the floor halfway through the arc.", "Lifting the chest high by arching the lower back."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Keep the sweep inside a range that stays smooth, and stop if the shoulder pinches overhead." },
+
+    acc_reardelt_bandpull: { id:"acc_reardelt_bandpull", pattern:"accessory", name:"Band Pull-Apart", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Hold a band in front of you at shoulder height with straight arms and your hands about shoulder-width apart.", "Pull the band apart by moving your hands out to the sides, squeezing the shoulder blades together.", "Keep your ribs down and your arms level with your shoulders.", "Return slowly until the band is taut but not slack."],
+      mistakes:["Shrugging up toward the ears.", "Leaning back to finish the pull."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Check the band for nicks before each session; an end that slips snaps back." },
+
+    acc_reardelt_facepull: { id:"acc_reardelt_facepull", pattern:"accessory", name:"Band Face Pull", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Anchor a band at about face height on a door anchor or a post, and hold an end in each hand with straight arms.", "Step back until the band is taut.", "Pull your hands toward your face with the elbows high and wide, so the hands finish beside your ears.", "Squeeze the shoulder blades together, then return slowly."],
+      mistakes:["Pulling to the chest with low elbows, which turns it into a row.", "Letting the anchor slide or the band unwind."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Make sure the anchor is closed and sound, and test it with a gentle tug before you step back." },
+
+    acc_reardelt_dbfly: { id:"acc_reardelt_dbfly", pattern:"accessory", name:"Bent-Over Reverse Fly", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Hold a light dumbbell in each hand and hinge at the hips until your back is nearly flat, knees soft.", "Let the arms hang beneath your shoulders with the palms facing each other.", "Raise the arms out to the sides with a slight bend at the elbows, squeezing the shoulder blades.", "Lower slowly without letting the torso drop."],
+      mistakes:["Rounding the back or letting the torso rise as the weights go up.", "Using a weight so heavy that the arms swing it."],
+      readiness:"Light weights, strictly. Add weight only when every set reaches the top of the range on two different days.",
+      injury:"The held hinge is the demanding part for the lower back. Keep the weights light, and rest your forehead on a chair if the back tires first." },
+
+    acc_cuff_walllift: { id:"acc_cuff_walllift", pattern:"accessory", name:"Wall Slide with Lift-Off", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand with your back, head and hips against a wall and your feet a short step out. Bend the elbows to 90° with the forearms and the backs of the hands on the wall.", "Slide the arms up the wall into a Y, keeping them in contact.", "At the top, lift the hands a few centimetres off the wall and hold for a beat.", "Lower with the arms still against the wall."],
+      mistakes:["Letting the lower back arch away from the wall as the arms rise.", "Shrugging the shoulders toward the ears."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Stay inside the range where the forearms still touch the wall. The work is in the small, controlled lift, not the reach." },
+
+    acc_cuff_pronew: { id:"acc_cuff_pronew", pattern:"accessory", name:"Prone W Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie face down with your elbows bent and your hands beside your head, so the arms make a W and the forehead is near the floor.", "Lift the elbows and hands off the floor by drawing the shoulder blades down and back.", "Hold a beat at the top with the thumbs pointing up and slightly back.", "Lower slowly."],
+      mistakes:["Cranking the neck up to look forward.", "Letting the elbows flare so wide that it becomes a T-raise."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Keep the lift small. A short, smooth range is better than a big, shaky one." },
+
+    acc_cuff_bander: { id:"acc_cuff_bander", pattern:"accessory", name:"Band External Rotation", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Anchor a band at elbow height and stand sideways to it, holding the end with the hand farthest from the anchor.", "Tuck that elbow against your side, bent to 90°, with a folded towel between the elbow and your ribs if you like.", "Rotate the forearm outward, away from your belly, keeping the elbow where it is.", "Return slowly, then change sides."],
+      mistakes:["Letting the elbow drift away from the ribs.", "Turning the whole torso instead of the arm."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Keep the band light. This is a small muscle, and a pull that makes the shoulder pinch is too much." },
+
+    acc_cuff_sidelying: { id:"acc_cuff_sidelying", pattern:"accessory", name:"Side-Lying External Rotation", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Lie on one side with your head on your lower arm and a light dumbbell in the top hand, the elbow bent to 90° against your ribs.", "Rest the forearm across your belly.", "Rotate the forearm up toward the ceiling, keeping the elbow on your side.", "Lower slowly. Finish all the reps, then roll over."],
+      mistakes:["Lifting the elbow away from the ribs.", "Using a weight so heavy that the body twists to lift it."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days. If 2.5 kg is a big jump for this movement, list the weights you own in Settings.",
+      injury:"Start lighter than feels necessary, and stop if the shoulder pinches rather than tires." },
+
+    acc_traps_pike: { id:"acc_traps_pike", pattern:"accessory", name:"Pike Shrug", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Start in a pike: hands on the floor, hips high, legs straight or knees slightly bent, so your body makes an inverted V.", "Keep the arms straight and push the floor away so the shoulders rise toward your ears.", "Let the shoulders sink between the arms, then shrug up again.", "Keep your head between your arms and your neck relaxed."],
+      mistakes:["Bending the elbows, which turns it into a pike push-up.", "Moving at the hips instead of the shoulders."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"It loads the wrists like a pike push-up. Warm them up first, or rest on your fists if they complain." },
+
+    acc_traps_band: { id:"acc_traps_band", pattern:"accessory", name:"Band Shrug", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Stand on the middle of a band with your feet hip-width apart, an end in each hand and your arms straight by your sides.", "Lift the shoulders straight up toward your ears, as high as they go.", "Hold a beat, then lower under control.", "Keep the head still and the elbows straight."],
+      mistakes:["Rolling the shoulders, which adds nothing.", "Bending the elbows to help."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Check the band for nicks before each session, and stand on it with the whole foot." },
+
+    acc_traps_shrug: { id:"acc_traps_shrug", pattern:"accessory", name:"Shrug", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells", "kettlebells"],
+      cues:["Hold a weight in each hand at your sides, feet hip-width apart, standing tall.", "Lift the shoulders straight up toward your ears without bending the elbows.", "Hold a beat at the top.", "Lower slowly. Don't let the weights drag the shoulders down."],
+      mistakes:["Rolling the shoulders instead of lifting them straight up.", "Letting the head jut forward as the weight gets heavier."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Heavy shrugs load the neck as well as the traps. Stop adding weight when the head starts to jut forward." },
+
+    acc_neck_chintuck: { id:"acc_neck_chintuck", pattern:"accessory", name:"Chin Tuck Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Sit or stand tall with your eyes level.", "Draw the chin straight back, as if making a double chin, without tilting the head up or down.", "Hold the position with the back of the neck long, and keep breathing.", "Release slowly."],
+      mistakes:["Tilting the head down instead of sliding it back.", "Clenching the jaw and holding your breath."],
+      readiness:"Ready to move on when the hold is steady for the full time on two different days.",
+      injury:"Move slowly and never jerk; stop at dizziness, pain or tingling in the neck, arms or hands." },
+
+    acc_neck_fourway: { id:"acc_neck_fourway", pattern:"accessory", name:"Four-Way Neck Isometric", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Sit tall and put a palm against your forehead.", "Push your head into the hand while the hand pushes back, so nothing moves. Build the push over about two seconds.", "Hold, then release over two seconds. Repeat with the hand on each side of the head, then on the back of it.", "Each direction counts for the seconds you hold it. The effort is moderate, never maximal."],
+      mistakes:["Pushing hard and fast, which is how a neck gets strained.", "Letting the head drift while you push."],
+      readiness:"Ready to move on when every direction holds for the full time on two different days.",
+      injury:"Move slowly and never jerk; stop at dizziness, pain or tingling in the neck, arms or hands." },
+
+    acc_neck_lyingraise: { id:"acc_neck_lyingraise", pattern:"accessory", name:"Lying Neck Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie face up on a mat or bed with your knees bent.", "Tuck your chin, then lift your head a few centimetres, keeping the chin tucked.", "Hold a beat at the top, then lower slowly.", "Keep your shoulders on the floor and your jaw relaxed."],
+      mistakes:["Jutting the chin forward as the head lifts.", "Lifting the shoulders and shrugging."],
+      readiness:"The neck tires before it feels hard, so add reps slowly and keep every one smooth.",
+      injury:"Move slowly and never jerk; stop at dizziness, pain or tingling in the neck, arms or hands." },
+
+    acc_grip_wring: { id:"acc_grip_wring", pattern:"accessory", name:"Towel Wring Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Take a dry hand towel and grip it with both hands, a fist's width apart.", "Twist your hands in opposite directions as if wringing out water.", "Hold the squeeze hard and steady, with your arms straight in front of you.", "Release, and swap the twist direction between sets."],
+      mistakes:["Wringing in short bursts instead of holding the squeeze.", "Locking the wrists bent so the wrist tires before the forearm does."],
+      readiness:"Ready to move on when the hold is steady for the full time on two different days.",
+      injury:"Use a strong, dry towel and keep the wrists straight. Stop if they ache sharply." },
+
+    acc_grip_towelhang: { id:"acc_grip_towelhang", pattern:"accessory", name:"Towel Hang", level:null, era:1, mode:"hold", unit:"sec", equipment:["pullupBar"],
+      cues:["Drape a strong towel over a pull-up bar and hold one end in each hand.", "Lift your feet and hang with your arms straight and the shoulders pulled slightly down.", "Hold for the set's time. The towel makes the grip much harder than a bare bar.", "Step down while you still can, not after the grip has gone."],
+      mistakes:["Letting the shoulders shrug up to the ears.", "Using a thin or worn towel."],
+      readiness:"Ready to move on when the hold is steady for the full time on two different days.",
+      injury:"Check the towel and the bar first, keep a stool or step under your feet, and end the set while you can still step down." },
+
+    acc_grip_farmer: { id:"acc_grip_farmer", pattern:"accessory", name:"Farmer Hold", level:null, era:2, mode:"hold", unit:"sec", equipment:["dumbbells", "kettlebells"],
+      cues:["Pick up a weight in each hand and stand tall with your shoulders down and back.", "Squeeze the handles hard and stay put, arms straight by your sides.", "Keep your ribs down and don't lean to one side.", "Put the weights down while you still control them."],
+      mistakes:["Shrugging the shoulders up and forward.", "Leaning back to take the weight off the hands."],
+      readiness:"Add weight only when every set reaches the full time on two different days.",
+      injury:"Lift and lower with a flat back and bent knees, and set the weights down while you still control them." },
+
+    acc_grip_wristcurl: { id:"acc_grip_wristcurl", pattern:"accessory", name:"Wrist Curl", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Sit with a dumbbell in one hand, the forearm resting along your thigh and the hand hanging past the knee, palm up.", "Let the weight roll down to your fingertips, then curl the fingers closed and lift the wrist.", "Raise only the hand; the forearm stays on your leg.", "Lower slowly, then swap arms."],
+      mistakes:["Lifting the forearm off the thigh.", "Bouncing the weight at the bottom."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Light weights are enough. Stop if the wrist or the inside of the elbow aches." },
+
+    acc_grip_revwristcurl: { id:"acc_grip_revwristcurl", pattern:"accessory", name:"Reverse Wrist Curl", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Sit with a dumbbell in one hand, the forearm resting along your thigh and the hand hanging past the knee, palm down.", "Lift the back of the hand toward the ceiling by bending the wrist up.", "Raise only the hand; the forearm stays on your leg.", "Lower slowly, then swap arms."],
+      mistakes:["Lifting the forearm off the thigh.", "Letting the weight drop instead of lowering it."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Use a lighter weight than for the palm-up curl. Stop if the wrist or the outside of the elbow aches." },
+
+    /* ---- STAGE 3 · coverage, lower body and trunk (plan D2, step 3.2). Same shape
+       as the block above: pattern "accessory", no SUBSTITUTIONS, steps in
+       training.data.js, muscles in muscles.data.js. Side planks, Copenhagen
+       planks and the suitcase hold are timed per side, and the per-side reps
+       are per leg. ---- */
+    acc_quad_wallsit: { id:"acc_quad_wallsit", pattern:"accessory", name:"Wall Sit", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Stand with your back flat against a wall and walk your feet forward about 60 cm, hip-width apart.", "Slide down until your thighs are as close to parallel with the floor as you can manage, knees over your ankles.", "Press your lower back and shoulders into the wall, with your arms hanging by your sides rather than resting on your thighs.", "Hold for the set's time, breathing normally, then slide up slowly."],
+      mistakes:["Resting your hands on your thighs, which takes the load off them.", "Letting the knees drift inward or sit far past the toes."],
+      readiness:"Ready to move on when the hold is steady for the full time on two different days.",
+      injury:"Sit higher if the front of the knee aches; a shallower angle is still the same exercise. Stand up before your legs shake hard." },
+
+    acc_quad_revlunge: { id:"acc_quad_revlunge", pattern:"accessory", name:"Reverse Lunge", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand tall with your feet hip-width apart. Hold a wall or a chair back if you need balance.", "Step one foot back a long stride and lower until the back knee hovers just above the floor.", "Keep the front foot flat, most of your weight through the front heel, and your torso upright.", "Press through the front foot to bring the back foot to meet it. Finish one leg, then switch."],
+      mistakes:["Stepping back too short, which pushes the front knee far past the toes.", "Pushing off the back foot instead of driving through the front one."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Stepping back is usually kinder to the front knee than stepping forward. Shorten the depth if the knee complains, and keep a hand on a wall until it feels steady." },
+
+    acc_quad_stepup: { id:"acc_quad_stepup", pattern:"accessory", name:"Step-Up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand facing a stair or a sturdy step. A low step is easy; one around knee height is hard.", "Put your whole front foot on the step so the heel doesn't hang off.", "Press through that foot to stand tall on the step, using the back leg only for balance.", "Lower slowly until the back foot just touches the floor, then repeat. Finish one leg, then switch."],
+      mistakes:["Pushing off the back foot so the front leg does little.", "Letting the front knee cave inward as you stand up."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Check that the step can't slide or tip before the first rep. Use a lower step if the front knee aches." },
+
+    acc_quad_sissy: { id:"acc_quad_sissy", pattern:"accessory", name:"Assisted Sissy Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand beside a door frame or a solid post and hold it with one hand, feet about hip-width apart.", "Rise onto the balls of both feet.", "Bend the knees forward and lower your hips a short way while your torso leans back, so the knees travel far in front of the toes.", "Go only as low as stays smooth, then push the knees back and stand tall."],
+      mistakes:["Dropping the hips back as in a normal squat, which skips the point of it.", "Pulling on the frame instead of just steadying yourself."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"The knees travel far past the toes on purpose, which loads the front of the knee and the ankles hard. Start with a short range and stop if either aches." },
+
+    acc_quad_dbsplit: { id:"acc_quad_dbsplit", pattern:"accessory", name:"Dumbbell Split Squat", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Hold a dumbbell in each hand at your sides and stand in a long stride, front foot flat and back heel lifted.", "Keep the torso tall and drop the back knee straight down toward the floor.", "Stop just above the ground with the front shin near vertical.", "Drive through the whole front foot to stand. Finish one leg, then switch."],
+      mistakes:["Stepping too short so the front knee is shoved far past the toes.", "Leaning forward and letting the front heel come off the floor."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Rest a light hand on a wall until the weights feel steady. If the front knee complains, lengthen the stride and shorten the depth." },
+
+    acc_quad_spanish: { id:"acc_quad_spanish", pattern:"accessory", name:"Spanish Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Anchor a band at knee height on a sturdy post, loop it around the backs of your knees and step away until it is taut.", "Stand with your feet about hip-width apart and let the band pull your knees forward as you sit back, so your shins stay upright.", "Sink until your thighs are about parallel with the floor, torso tall.", "Press through your whole foot to stand, keeping the band taut throughout."],
+      mistakes:["Letting the shins tilt forward, which shifts the work to the hips.", "Rising so far that the band goes slack at the top."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Check the anchor and the band for nicks before you step back. The band pulls your knees forward, so stop if the front of the knee aches." },
+
+    acc_hamstring_slidecurl: { id:"acc_hamstring_slidecurl", pattern:"accessory", name:"Sliding Leg Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie on your back with your heels on a towel on a smooth floor (tile or wood), or in socks on a polished one, knees bent, and lift your hips into a bridge.", "Keep the hips up and slide both heels away until your legs are nearly straight.", "Pull the heels back toward your glutes without letting the hips drop.", "Move slowly: about three seconds out and two back."],
+      mistakes:["Letting the hips sag as the legs straighten.", "Pulling back by bending at the hips instead of at the knees."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"The lengthening part is the demanding one for the back of the thigh, so go slowly and stop short of straight if it pulls sharply." },
+
+    acc_hamstring_slidecurl1: { id:"acc_hamstring_slidecurl1", pattern:"accessory", name:"Single-Leg Sliding Leg Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Set up as for the two-leg version, bridged on a smooth floor, but with only one heel on the towel and the other leg held in the air.", "Keep the hips level and high.", "Slide the working heel out until the leg is nearly straight, then pull it back under control.", "Finish one leg, then switch."],
+      mistakes:["Letting the hips tilt or drop toward the working side.", "Using the free leg to push."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"This is a hard load on one hamstring. Slide out only as far as you can pull back smoothly." },
+
+    acc_hamstring_slrdl: { id:"acc_hamstring_slrdl", pattern:"accessory", name:"Single-Leg RDL (Bodyweight)", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand on one foot with the knee slightly bent and your hands in front of you or on your hips.", "Hinge forward from the hip, sending the other leg straight back as your torso tips toward parallel with the floor.", "Keep your back flat and your hips square to the floor.", "Stand by pushing the floor away through the standing foot. Finish one leg, then switch."],
+      mistakes:["Rounding the back to reach lower.", "Opening the hips so the free leg swings out to the side."],
+      readiness:"Add reps until every set reaches the top of the range on two different days.",
+      injury:"Hold a wall or a chair back with one hand until your balance is steady, and stop the hinge before the back starts to round." },
+
+    acc_hamstring_slrdldb: { id:"acc_hamstring_slrdldb", pattern:"accessory", name:"Single-Leg RDL with Dumbbell", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Hold one dumbbell in one hand and stand on the opposite leg, knee slightly bent.", "Hinge from the hip with the free leg sweeping straight back and the dumbbell hanging under your shoulder.", "Keep your back flat and your hips square to the floor.", "Stand by driving through the standing foot. Finish one leg, then switch."],
+      mistakes:["Rounding the back as the dumbbell drops.", "Twisting the hips toward the side holding the weight."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Start lighter than feels necessary: the balance is the limit. Touch a wall with the free hand if you need to, and stop the hinge before the back rounds." },
+
+    acc_hamstring_bandcurl: { id:"acc_hamstring_bandcurl", pattern:"accessory", name:"Band Leg Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Anchor a band low on a sturdy post or heavy furniture, loop the other end around both heels and lie face down facing the anchor.", "Start with your legs straight and the band taut.", "Bend your knees to bring the heels toward your glutes against the pull.", "Lower slowly until the legs are straight."],
+      mistakes:["Lifting the hips off the floor to help.", "Letting the band yank the legs straight."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Check the anchor and the band for nicks, and loop it so it can't slip off your heels. If the back of the knee pinches, shorten the range." },
+
+    acc_calf_raise: { id:"acc_calf_raise", pattern:"accessory", name:"Calf Raise on a Step", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand on the edge of a step with the balls of your feet on it and your heels hanging off. Hold a wall or a rail for balance.", "Lower your heels below the step until you feel a stretch in the calves.", "Rise as high as you can onto your toes and pause for a beat.", "Lower for about two seconds. Keep your knees straight, not locked."],
+      mistakes:["Bouncing out of the bottom instead of pausing.", "Rolling the ankles outward as you rise."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Use a firm step and keep a hand on a rail. Take the bottom stretch gently; if the tendon above the heel aches, shorten the range." },
+
+    acc_calf_single: { id:"acc_calf_single", pattern:"accessory", name:"Single-Leg Calf Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand on one foot on the edge of a step, the other foot hooked behind the ankle or held off the floor, with a hand on a wall or a rail.", "Lower the heel below the step until you feel the stretch.", "Rise as high as you can on that foot and pause.", "Lower slowly. Finish one leg, then switch."],
+      mistakes:["Leaning on the rail so the leg does less of the work.", "Dropping fast into the stretch."],
+      readiness:"Add reps until every set reaches the top of the range on two different days.",
+      injury:"All of your bodyweight is on one ankle, so build up the reps gradually. Stop if the tendon above the heel or the heel itself aches." },
+
+    acc_calf_bentknee: { id:"acc_calf_bentknee", pattern:"accessory", name:"Bent-Knee Calf Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand on the edge of a step with the balls of your feet on it, a hand on a wall, and your knees bent to about 30 degrees.", "Keep that knee bend the whole time; don't straighten as you rise.", "Rise onto your toes and pause, then lower your heels below the step.", "Lower for about two seconds."],
+      mistakes:["Straightening the knees as you rise, which turns it into the straight-knee version.", "Cutting the range short at the bottom."],
+      readiness:"Add reps until every set reaches the top of the range on two different days.",
+      injury:"The bent knee moves more of the work into the lower calf. Go gently until it's familiar, and shorten the range if the tendon above the heel aches." },
+
+    acc_calf_weighted: { id:"acc_calf_weighted", pattern:"accessory", name:"Weighted Single-Leg Calf Raise", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells", "kettlebells"],
+      cues:["Hold a dumbbell or kettlebell in one hand and a wall or a rail with the other.", "Stand on one foot on the edge of a step with the heel hanging off.", "Lower the heel below the step, then rise as high as you can and pause.", "Lower slowly. Finish one leg, then switch."],
+      mistakes:["Leaning away from the weight so the standing leg does less.", "Bouncing out of the bottom."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days. If 2.5 kg is a big jump for this movement, list the weights you own in Settings.",
+      injury:"Add weight in small steps; the tendon above the heel is slow to adapt. Stop if it or the heel aches." },
+
+    acc_shin_wall: { id:"acc_shin_wall", pattern:"accessory", name:"Wall Tibialis Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand with your back against a wall and your feet shoulder-width apart, a short way from it. The farther out the feet, the harder it gets.", "Keep your legs straight and your hips and shoulders against the wall.", "Lift the front of both feet toward your shins as high as you can, heels staying on the floor.", "Pause at the top, then lower slowly."],
+      mistakes:["Bending the knees, which takes the work out of the shins.", "Rushing, so the feet flop down."],
+      readiness:"Move your feet farther from the wall once every set reaches the top of the range on two different days.",
+      injury:"Move slowly. A burn along the front of the shin is the target; stop for a sharp pain on the bone itself." },
+
+    acc_shin_single: { id:"acc_shin_single", pattern:"accessory", name:"Single-Leg Tibialis Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Stand with your back against a wall, one foot on the floor a short way from it and the other foot held just off the floor.", "Keep your standing leg straight and your hips against the wall.", "Lift the front of the standing foot toward your shin as high as it goes, heel staying down, and pause.", "Lower slowly. Finish one leg, then switch."],
+      mistakes:["Leaning away from the wall so the foot has less to lift.", "Letting the foot flop down after each rep."],
+      readiness:"Add reps until every set reaches the top of the range on two different days; it is the last step in this slot.",
+      injury:"Move slowly. A burn along the front of the shin is the target; stop for a sharp pain on the bone itself." },
+
+    acc_adductor_sidelying: { id:"acc_adductor_sidelying", pattern:"accessory", name:"Side-Lying Adduction", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie on your side with the bottom leg straight and the top leg bent, its foot on the floor in front of the bottom knee. Rest your head on your arm.", "Lift the bottom leg off the floor toward the top one, as high as you can without rolling your hips.", "Pause at the top, then lower slowly.", "Finish one side, then roll over."],
+      mistakes:["Rolling the hips back to swing the leg up.", "Dropping the leg quickly instead of lowering it."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Keep the lift small if the groin pulls. It is a smooth, short movement, not a swing." },
+
+    acc_adductor_copknee: { id:"acc_adductor_copknee", pattern:"accessory", name:"Copenhagen Plank, Knee on a Chair", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Set a sturdy chair on a non-slip floor. Lie on your side with the forearm of your lower arm on the floor, elbow under the shoulder, and your top knee on the seat.", "Lift your hips until your body makes a straight line from the top knee to your shoulder, the lower leg hanging free beneath you.", "Press the top knee down into the seat and keep the hips from sagging or turning forward.", "Hold for the set's time, then lower. Repeat on the other side."],
+      mistakes:["Letting the hips sag toward the floor.", "Rotating the chest toward the floor or the ceiling."],
+      readiness:"Ready to move on when the hold is steady for the full time on both sides on two different days.",
+      injury:"This loads the inner thigh hard. Start with short holds and stop if the groin pulls sharply. Make sure the chair can't slide." },
+
+    acc_adductor_copfoot: { id:"acc_adductor_copfoot", pattern:"accessory", name:"Copenhagen Plank, Foot on a Chair", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Set a sturdy chair on a non-slip floor. Lie on your side with your forearm under your shoulder and the inside of your top foot on the seat, leg straight.", "Lift your hips until your body is one straight line from the top foot to your shoulder, the lower leg hanging free beneath the seat.", "Press the top foot into the seat and hold the line without letting the hips sag or turn forward.", "Hold for the set's time, then lower. Repeat on the other side."],
+      mistakes:["Letting the hips sag toward the floor.", "Rotating the chest toward the floor or the ceiling."],
+      readiness:"Ready to move on when the hold is steady for the full time on both sides on two different days.",
+      injury:"This is the hardest bodyweight adductor work in the slot. Build the holds slowly, and stop if the groin pulls sharply." },
+
+    acc_adductor_band: { id:"acc_adductor_band", pattern:"accessory", name:"Band Adduction", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Anchor a band low on a sturdy post, loop the other end around one ankle and stand sideways to the anchor, with the looped leg farther from it.", "Hold a wall or a chair for balance and stand tall on the other leg.", "Sweep the looped leg across in front of the standing leg against the band's pull.", "Return slowly. Finish one leg, then switch."],
+      mistakes:["Leaning the torso away to get the leg across.", "Letting the band snap the leg back out."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Check the anchor and the band for nicks, and loop it so it can't slip off the ankle. Keep the sweep smooth and stop if the groin pulls." },
+
+    acc_abductor_sidelying: { id:"acc_abductor_sidelying", pattern:"accessory", name:"Side-Lying Abduction", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie on your side with your hips stacked, the bottom knee bent for balance and the top leg straight in line with your torso.", "Lift the top leg toward the ceiling, leading with the heel and keeping the toes level or slightly down.", "Stop when your hips start to roll back.", "Lower slowly. Finish one side, then roll over."],
+      mistakes:["Rolling the hips backward to swing the leg higher.", "Pointing the toes up so the front of the hip takes over."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Keep it smooth and small. If the outside of the hip pinches, shorten the range." },
+
+    acc_abductor_sideplank: { id:"acc_abductor_sideplank", pattern:"accessory", name:"Side Plank Abduction", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Set up in a side plank on your forearm, with your body in one line and your feet stacked.", "Lift the top leg toward the ceiling without letting the hips drop or turn.", "Pause at the top, then lower the leg until the feet are stacked again.", "Finish one side, then switch."],
+      mistakes:["Letting the hips sag as the leg lifts.", "Lifting the leg by tilting the torso."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"The shoulder under you holds your weight, so stay on the forearm, not the hand, and stop if it pinches. Rest the bottom knee on the floor if a full side plank is too much." },
+
+    acc_abductor_bandwalk: { id:"acc_abductor_bandwalk", pattern:"accessory", name:"Banded Lateral Walk", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Loop a band around both legs just above the knees. Ankles are harder.", "Stand with your feet hip-width apart and your knees slightly bent, in a quarter squat.", "Step sideways with the leading foot, then follow with the other, keeping the band tight the whole time.", "Count each step as a rep, and walk out and back along a line."],
+      mistakes:["Letting the knees fall in as you step.", "Standing up tall so the band goes slack."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Check the band for nicks and give yourself room to move. A band on the ankles loads the hips and knees more, so start above the knees." },
+
+    acc_abductor_clamshell: { id:"acc_abductor_clamshell", pattern:"accessory", name:"Banded Clamshell", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Lie on your side with a band looped around both legs just above the knees, hips stacked and knees bent with the feet together.", "Keep your feet touching and lift the top knee as far as it goes without rolling the hips backward.", "Pause for a beat, then close slowly against the band.", "Finish one side, then roll over."],
+      mistakes:["Rolling the pelvis back so the lower back does the lifting.", "Letting the knee drop quickly."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"A small range with no rolling is the target. Use a lighter band if the hip pinches." },
+
+    acc_antirot_knees: { id:"acc_antirot_knees", pattern:"accessory", name:"Side Plank from Knees", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Lie on your side with your knees bent behind you and your forearm on the floor, elbow directly under your shoulder.", "Lift your hips until your body makes a straight line from your knees to your head.", "Keep your top hip stacked over the bottom one, and breathe.", "Hold for the set's time, then lower. Repeat on the other side."],
+      mistakes:["Letting the hips sag toward the floor.", "Rolling the chest toward the floor."],
+      readiness:"Ready to move on when the hold is steady for the full time on both sides on two different days.",
+      injury:"Keep the elbow right under the shoulder. If the shoulder pinches, put a folded towel under the forearm or end the set early." },
+
+    acc_antirot_sideplank: { id:"acc_antirot_sideplank", pattern:"accessory", name:"Side Plank", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Lie on your side with your legs straight and stacked and your forearm on the floor, elbow under your shoulder.", "Lift your hips until your body is one straight line from your ears to your ankles.", "Keep the top hip stacked over the bottom one and your neck long.", "Hold for the set's time, then lower. Repeat on the other side."],
+      mistakes:["Letting the hips sag toward the floor.", "Rolling the chest toward the floor."],
+      readiness:"Ready to move on when the hold is steady for the full time on both sides on two different days.",
+      injury:"Stay on the forearm, not the hand. If the shoulder pinches, go back to the knees version." },
+
+    acc_antirot_leg: { id:"acc_antirot_leg", pattern:"accessory", name:"Side Plank, Top Leg Raised", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:["Get into a side plank on your forearm with your legs straight and stacked.", "Lift your hips into a straight line, then raise the top leg a little above the bottom one and keep it there.", "Keep the hips stacked and don't let the top leg drift forward or back.", "Hold for the set's time, then lower. Repeat on the other side."],
+      mistakes:["Letting the hips sag as the leg lifts.", "Swinging the top leg forward so the hips twist."],
+      readiness:"Ready to move on when the hold is steady for the full time on both sides on two different days.",
+      injury:"If the shoulder pinches or the bottom hip aches, go back to a plain side plank. End the set early rather than twist." },
+
+    acc_antirot_deadbug: { id:"acc_antirot_deadbug", pattern:"accessory", name:"Dead Bug", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie on your back with your arms pointing at the ceiling and your hips and knees bent to 90 degrees, shins parallel to the floor.", "Press your lower back gently into the floor and keep it there.", "Lower the opposite arm and leg slowly toward the floor without letting the lower back lift.", "Return to the start and switch sides. One rep is one arm and leg on each side."],
+      mistakes:["Letting the lower back arch away from the floor as the limbs lower.", "Moving fast, which hides the arch."],
+      readiness:"Add reps until every set reaches the top of the range on two different days.",
+      injury:"Lower only as far as the back stays flat. If your neck tires, rest your head on a folded towel." },
+
+    acc_antirot_pallof: { id:"acc_antirot_pallof", pattern:"accessory", name:"Pallof Press", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:["Anchor a band at chest height on a sturdy post and stand sideways to it, a step away, holding the band in both hands at your chest.", "Stand tall with your feet hip-width apart, knees soft and ribs down.", "Press your hands straight out in front of you without letting the band turn your body toward the anchor.", "Pause, bring the hands back in and finish one side before you switch."],
+      mistakes:["Letting the shoulders rotate toward the anchor as the arms extend.", "Leaning away to counter the pull."],
+      readiness:"Move to a heavier band once the current one is easy on two different days.",
+      injury:"Check the anchor and the band for nicks. Step farther from the anchor for a harder pull, but not so far that you have to lean." },
+
+    acc_antirot_suitcase: { id:"acc_antirot_suitcase", pattern:"accessory", name:"Suitcase Hold", level:null, era:2, mode:"hold", unit:"sec", equipment:["dumbbells", "kettlebells"],
+      cues:["Stand tall with one dumbbell or kettlebell in one hand, held at your side like a suitcase.", "Keep your shoulders level and your ribs over your hips; don't lean toward or away from the weight.", "Hold for the set's time, breathing normally, with a firm grip.", "Put the weight down while you still control it, then repeat with the other hand."],
+      mistakes:["Leaning away from the weight to make it lighter.", "Shrugging the loaded shoulder toward the ear."],
+      readiness:"Add weight only when every set reaches the full time on both hands on two different days. If 2.5 kg is a big jump for this movement, list the weights you own in Settings.",
+      injury:"Lift and lower the weight with a flat back and bent knees. A one-sided load tires the side of the trunk before the grip, so end the set when you start to lean." },
+
+    acc_backext_birddog: { id:"acc_backext_birddog", pattern:"accessory", name:"Bird Dog", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Start on hands and knees with your hands under your shoulders and your knees under your hips, back flat.", "Reach one arm forward and the opposite leg straight back until both are level with your torso.", "Keep your hips and shoulders square to the floor, as if a glass of water sat on your lower back.", "Pause, return, and finish one side before you switch."],
+      mistakes:["Lifting the leg higher than the torso, which arches the lower back.", "Letting the hips twist open as the leg rises."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Keep the back flat and the reach level. Put a folded towel under your knees, or rest on your fists, if they complain." },
+
+    acc_backext_prone: { id:"acc_backext_prone", pattern:"accessory", name:"Prone Back Extension", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:["Lie face down with your legs straight and your toes on the floor, hands beside your head or crossed on your chest.", "Lift your chest a few centimetres off the floor by squeezing the muscles along your spine.", "Keep your gaze on the floor and your neck long.", "Pause at the top, then lower slowly."],
+      mistakes:["Lifting the head high, which loads the neck instead of the back.", "Swinging up with momentum and arching hard at the top."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Lift only as high as stays smooth; a few centimetres is enough. Put a folded towel under your hips if the lower back pinches." },
+
+    acc_backext_revhyper: { id:"acc_backext_revhyper", pattern:"accessory", name:"Reverse Hyperextension", level:null, era:1, mode:"reps", unit:"reps", equipment:["bench"],
+      cues:["Lie face down across a bench with your hips at the edge and your legs hanging straight down. Hold the sides of the bench.", "Squeeze your glutes and lift your legs until they are level with your torso.", "Pause at the top without arching the lower back.", "Lower slowly until the legs hang again."],
+      mistakes:["Swinging the legs up with momentum.", "Lifting well above the torso, which arches the lower back."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Make sure the bench can't slide or tip. Lift only to the level of your torso, and use a shorter range if the lower back pinches." },
+
+    acc_backext_goodmorning: { id:"acc_backext_goodmorning", pattern:"accessory", name:"Dumbbell Good Morning", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:["Hold one dumbbell upright against your chest with both hands, feet shoulder-width apart and knees slightly bent.", "Push your hips back and let your torso tip forward with a flat back, until you feel the backs of your thighs stretch.", "Keep the dumbbell against your chest and your gaze a little ahead of your feet.", "Drive the hips forward to stand tall, squeezing your glutes at the top."],
+      mistakes:["Rounding the back to reach lower.", "Bending the knees so much that it becomes a squat."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Keep the dumbbell light until the movement is smooth, and stop the lowering before the back rounds." }
   };
 
   /* Append to the global DB (created in Part 2). */

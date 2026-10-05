@@ -24,6 +24,39 @@ WELLNESS HUB · WORKOUT REGRESSION HARNESS
              across a period close, the rest day after a template switch, the
              step while backfilling inside a block, the Settings copy
 
+  · H1b, H6  the fitness plan's Stage 1 fixes (plans/PLAN-fitness-control-and-
+             coverage.md): the weight you log is the weight that counts, and a
+             swap badge that agrees with what you own. Their Node halves are
+             in tools/check-training.js
+  · K9       Stage 2's schema v5: the v4 fixture upgrades with its slots
+             unchanged and the new equipment inferred (tools/fixtures/
+             v4-midworkout.json). The sync half, K10, is in check-syncmerge.js
+  · K11-K18  Stage 2's engine wiring (step 2.4): choose and keep, knuckles
+             and the wrist pain swap, the dip-bar gap, exclusions in the
+             workout and Swap, joint limits, custom sets/range and Hold, an
+             option step, the weights you own. Step 2.5 gave K11, K12 and K17
+             their controls, so they click; K14-K16 and K18 still call the
+             engine to set up, and K19-K22 cover those controls by clicks
+  · K19-K22  Stage 2's screens (step 2.5): Program (Hold, Sets & range,
+             Exclude and the Excluded card), Today (Knuckles today, the
+             holding copy), Settings (new equipment, weights, joint limits)
+             and setup's equipment step
+  · V3-V5, V8  Stage 3's sessions and schema v6 (step 3.4): a mini-session
+             on a rest day moves no schedule or attendance, the finisher's
+             picks and their evidence, the v5 fixture upgrading, and the
+             report's own line for mini-sessions. The sync half, V6, is in
+             check-syncmerge.js. Step 3.5 gave them their controls, so V3, V4
+             and V8 now tick the finisher and press the Accessory session
+             card's button; everything is clicks
+  · V7, V9-V12  Stage 3's screens (step 3.5): the Muscles screen counts direct
+             sets against a floor (V7), Program's Coverage card and its pins
+             (V9), the finisher's tick, Remove, Swap and Add back (V10), the
+             Accessory session card on all three Today screens (V11), and the
+             badges over 22 groups (V12, a guard). V9-V12 are this step's
+             own: Part F lists only V7
+  · R3a-R3c  R3's findings: a pain flag on coverage work, no coverage record
+             for an untouched pick, the Coverage row naming a joint limit
+
 Retired in step 2.4 (W8), because Stage 2 removed what they measured; each
 reason is in plans/PROGRESS-workout-progression.md:
   · S10, S11  points: progression no longer pays points (T18 covers "off")
@@ -102,6 +135,7 @@ class Session:
         self.ctx.route("https://**/*", lambda r: r.abort())
         self.pg = self.ctx.new_page()
         self.errors: list[str] = []
+        self.absent: list[str] = []
         self.pg.on("pageerror", lambda e: self.errors.append("PAGEERROR: " + str(e)))
         if now is not None:
             self.pg.clock.install(time=now)
@@ -129,6 +163,41 @@ class Session:
 
     def set_time(self, when):
         self.pg.clock.set_system_time(when)
+
+    # A control a tree doesn't have (or one that isn't on screen) is recorded, not waited for: a "before" run
+    # of a screen case then FAILs with numbers instead of timing out into an
+    # ERROR, which would read as a harness defect. Controls that exist are
+    # driven exactly as pg.click / fill / check / select_option would.
+    def _first(self, sel):
+        loc = self.pg.locator(sel).first
+        if loc.count() == 0 or not loc.is_visible():
+            self.absent.append(sel)
+            return None
+        return loc
+
+    def tap(self, sel):
+        loc = self._first(sel)
+        if loc:
+            loc.click()
+        return bool(loc)
+
+    def put(self, sel, value):
+        loc = self._first(sel)
+        if loc:
+            loc.fill(value)
+        return bool(loc)
+
+    def tick(self, sel):
+        loc = self._first(sel)
+        if loc:
+            loc.check()
+        return bool(loc)
+
+    def choose(self, sel, value):
+        loc = self._first(sel)
+        if loc:
+            loc.select_option(value)
+        return bool(loc)
 
 
 def set_stepper(s: Session, stepper_id: str, value):
@@ -574,6 +643,7 @@ def t11(pw):
         set_rollover(s, 4)
         seed_and_reload(s, {STORAGE_KEY: v3})
         st = s.state()
+        schema = s.ev("() => App.SCHEMA_VERSION")
         twice = s.ev("""raw => { const a = App.migrate(JSON.parse(raw));
             const b = App.migrate(JSON.parse(JSON.stringify(a)));
             return { same: JSON.stringify(a) === JSON.stringify(b), slots: (a.training || {}).slots || {} }; }""",
@@ -584,7 +654,8 @@ def t11(pw):
         want_days = {"s_legacy_0500": "2026-09-26", "s_legacy_0030": "2026-09-23"}
         want_days.update({x["id"]: x["dayKey"] for x in v3["sessions"] if x.get("dayKey")})
         checks = {
-            "version 4": st["version"] == 4,
+            # The build's version, not a literal: a v3 save runs every migration since (K9 is v5's).
+            "version %s" % schema: st["version"] == schema and schema >= 4,
             # The fixture owns no bar, so its pull day trains the row and the row
             # gets a record (R2-1); with a bar it would be offered instead (T21).
             "one slot per tier, plus the row it trains without a bar": sorted(slots) == sorted(list(v3["tiers"]) + ["row"])
@@ -632,7 +703,8 @@ def t12(pw):
             "saved as logged": reps == want_reps,
             "no rx": not any("rx" in ex for ex in sess["exercises"]),
             "draft's day": sess.get("dayKey") == draft["dayKey"],
-            "saved at v4": json.loads(s.raw())["version"] == 4 and len(st["sessions"]) == 2,
+            "saved at the build's version": json.loads(s.raw())["version"] == s.ev("() => App.SCHEMA_VERSION")
+                and len(st["sessions"]) == 2,
         }
         bad = [k for k, ok in checks.items() if not ok]
         return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
@@ -1061,7 +1133,10 @@ def t22(pw):
 
 @case("T23", "Weighted Dip with no load set: the logged weight sets it; a blank weight never counts")
 def t23(pw):
-    dip6 = lambda v: v["tiers"]["dip"].update(level=6)
+    # Weighted Dip needs dip bars as well as a weight (F5, plan C5): the v3
+    # fixture has none, so this user gets them, or the slot falls back to an
+    # owned unloaded dip and there's no weight to log.
+    dip6 = lambda v: (v["tiers"]["dip"].update(level=6), v["equipment"].update(dipBars=True))
     r_kg, s_kg, slot_kg, e1, _ = card_after_two(pw, dip6, "push", "dip", kg=10)
     r_bl, s_bl, slot_bl, e2, _ = card_after_two(pw, dip6, "push", "dip")
     dip_kg = [r for r in r_kg if "kg" in r or "Ready" in r]
@@ -1905,6 +1980,1230 @@ def t31(pw):
         s.close()
     ok = "phase grade" not in note and "phase report doesn't use it" in note
     return ok, "note '%s'" % note[-80:], errors
+
+
+# --- H1b, H6 · Stage 1 fixes (plans/PLAN-fitness-control-and-coverage.md, Part F) --
+# Written before the fixes: each FAILs on the tree it was written against, with
+# the numbers in Part F's "Before" column. The Node halves (H1a, H2a-c, H5, H9)
+# are in tools/check-training.js.
+@case("H1b", "Seeded 10 kg slot, 5 kg logged by clicks: the saved rx load (F1)")
+def h1b(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        s.ev("""() => { const st = App.getState();
+            st.equipment.dumbbells = true;
+            st.training.slots.shoulder = Training.startOf('shoulder_e2_ohp',
+                { loadKg: 10, goal: st.profile.goal, at: new Date().toISOString(), why: 'fixture' });
+            App.saveState(); }""")
+        open_today(s)
+        pick_day(s, "push")
+        s.pg.click("#begin-session")
+        s.pg.wait_for_timeout(300)
+        i = next((n for n, ex in enumerate(draft(s)["exercises"]) if ex.get("slot") == "shoulder"), None)
+        if i is None:
+            raise RuntimeError("the push day has no shoulder exercise")
+        for j in range(len(draft(s)["exercises"][i]["sets"])):
+            log_set(s, i, j, 12)
+            wt = s.pg.locator('[data-wt="%d-%d"] input' % (i, j)).first
+            wt.fill("5")
+            wt.press("Tab")
+        s.pg.click('[data-diff="%d"][data-d="moderate"]' % i)
+        complete(s)
+        ex = next((e for e in last_session(s)["exercises"]
+                   if (e.get("rx") or {}).get("exerciseId") == "shoulder_e2_ohp"), None)
+        if ex is None:
+            raise RuntimeError("the saved session has no Dumbbell Overhead Press with an rx")
+        weights = [st.get("weight") for st in ex["sets"]]
+        if weights != [5] * len(weights):
+            raise RuntimeError("the clicks did not log 5 kg on every set: %s" % weights)
+        load = ex["rx"]["setup"].get("loadKg")
+        return load == 5, "logged %s kg on every set; saved rx load %s kg (prescribed 10)" % (weights[0], load), s.errors
+    finally:
+        s.close()
+
+
+@case("H6", "Dumbbells only: Goblet Squat's swap badge (F6)")
+def h6(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        s.ev("""() => { const st = App.getState();
+            Object.keys(st.equipment).forEach(k => { st.equipment[k] = false; });
+            st.equipment.dumbbells = true; App.saveState(); }""")
+        open_today(s)
+        pick_day(s, "legs")
+        s.pg.click('[data-pvswap="squat"]')
+        s.pg.wait_for_timeout(300)
+        row = s.pg.locator('[data-pvswapto="squat_e2_goblet"]')
+        if not row.count():
+            raise RuntimeError("Goblet Squat is not in the squat swap list")
+        badge = row.locator(".badge").first.inner_text().strip()
+        return badge.lower() == "ready", "Goblet Squat's badge reads '%s' (dumbbells owned, no kettlebells)" % badge, s.errors
+    finally:
+        s.close()
+
+
+# --- K9 · schema v5 (plans/PLAN-fitness-control-and-coverage.md, C6) ----------
+FIXTURE_V4 = ROOT / "tools" / "fixtures" / "v4-midworkout.json"
+V5_TOKENS = ("bands", "parallettes", "dipBars", "lowBar")
+
+
+def v4_fixture() -> dict:
+    """localStorage as the Stage 1 build (v4) left it, mid-workout: the two keys."""
+    fx = json.loads(FIXTURE_V4.read_text())
+    return {k: v for k, v in fx.items() if not k.startswith("_")}
+
+
+def drop_dips(v4: dict):
+    for x in v4["sessions"]:
+        x["exercises"] = [e for e in x["exercises"] if e.get("key") != "dip_3"]
+
+
+@case("K9", "v4 save -> v5: slots unchanged, new equipment inferred, the check queued")
+def k9(pw):
+    # Step 2.3 checks the migration and the record the Equipment check card
+    # reads; step 2.5 adds the card itself (Program, once per device).
+    # Each leg is the fixture with one change; `want` is what toV5 infers.
+    # A slot alone infers a token only when its v4 stand-in was owned: without
+    # a pull-up bar the dip slot was never trainable, and turning dip bars on
+    # would change the workout.
+    legs = [
+        ("as saved", lambda v: None, {"dipBars": {"id": "dip_3", "from": "session"}}, True),
+        ("no logged dip, bar owned", drop_dips, {"dipBars": {"id": "dip_3", "from": "slot"}}, True),
+        ("no logged dip, no bar", lambda v: (drop_dips(v), v["equipment"].update(pullupBar=False)), {}, False),
+    ]
+    checks, shown, errors = {}, [], []
+    for label, mutate, want, dip_owned in legs:
+        fx = v4_fixture()
+        v4 = fx[STORAGE_KEY]
+        mutate(v4)
+        s = Session(pw, now=ist(2026, 10, 1, 8, 0))
+        try:
+            seed_and_reload(s, fx)
+            st = s.state()
+            schema = s.ev("() => App.SCHEMA_VERSION")
+            owned = s.ev("() => Training.owns(App.getState().equipment, 'dip_3')")
+            eq, tr = st["equipment"], st.get("training", {})
+            inferred = (tr.get("equipmentCheck") or {}).get("inferred")
+            new_on = {k: eq.get(k) for k in V5_TOKENS}
+            want_on = {k: k in want for k in V5_TOKENS}
+            checks[label + ": version %s" % schema] = st["version"] == schema and schema >= 5
+            checks[label + ": tokens"] = new_on == want_on and all(eq.get(k) == v4["equipment"][k] for k in v4["equipment"])
+            checks[label + ": the check records why"] = inferred == want
+            checks[label + ": dip slot owned %s" % dip_owned] = owned is dip_owned
+            if label == "as saved":
+                twice = s.ev("""raw => { const a = App.migrate(JSON.parse(raw));
+                    return JSON.stringify(a) === JSON.stringify(App.migrate(JSON.parse(JSON.stringify(a)))); }""",
+                             json.dumps(v4))
+                checks["slots unchanged"] = tr.get("slots") == v4["training"]["slots"]
+                checks["history unchanged"] = all(st[k] == v4[k] for k in (
+                    "sessions", "prs", "tiers", "phaseHistory", "currentPhase", "benchmarks", "flagsHistory"))
+                checks["decisions, assessment unchanged"] = all(
+                    tr.get(k) == v4["training"][k] for k in ("decisions", "assessment"))
+                checks["v5 defaults"] = tr.get("exclusions") == {} and tr.get("limitations", 0) is None \
+                    and tr.get("grip", 0) is None and st.get("equipmentLoads") == {}
+                checks["migrated twice is identical"] = twice
+                to_fitness(s)
+                open_section(s, "program")
+                shown_n = s.pg.locator("[data-eqcheck]").count()
+                ticks = s.ev("() => Object.fromEntries([...document.querySelectorAll('[data-eqcheck-tok]')].map(b => [b.dataset.eqcheckTok, b.checked]))")
+                s.tap("[data-eqcheck-ok]")
+                s.pg.reload()
+                s.pg.wait_for_timeout(700)
+                to_fitness(s)
+                open_section(s, "program")
+                again_n = s.pg.locator("[data-eqcheck]").count()
+                checks["the card shows once, all four tokens listed"] = shown_n == 1 and ticks == {
+                    "dipBars": True, "lowBar": False, "bands": False, "parallettes": False} and again_n == 0
+                shown.append("card: %d, ticks %s, after Looks right %d" % (shown_n, json.dumps(ticks), again_n))
+            shown.append("%s: %s, dip owned %s" % (label, json.dumps(inferred), owned))
+            errors += s.errors
+        finally:
+            s.close()
+    bad = [k for k, ok in checks.items() if not ok]
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "; ".join(shown), errors
+
+
+# --- K11-K18 · Stage 2's engine wiring (step 2.4) -----------------------------
+# The engine calls (chooseExercise, setExcluded, setLimitations, setGrip,
+# setHold, setCustom, decide "option") are named by the plan, so they are
+# called directly; their Program and Settings controls are step 2.5's, which
+# swaps these calls for clicks. Everything after the call is driven by
+# clicks: the Today preview, Swap, the workout, the pain flag. A tree without
+# a call returns its absence, so a "before" run FAILs with numbers.
+def eng(s: Session, call: str, *args):
+    """App.engine.<call>(...args), or the string 'absent' on a tree without it."""
+    return s.ev("""a => { const f = App.engine[a.call];
+        if (!f) return 'absent';
+        const r = f.apply(App.engine, a.args);
+        return r === undefined ? null : JSON.parse(JSON.stringify(r)); }""", {"call": call, "args": list(args)})
+
+
+def preview_rows(s: Session) -> dict:
+    """The Today preview's rows, slot -> {id, rx, text}, read from its DOM."""
+    return s.ev("""() => { const out = {};
+        document.querySelectorAll('#today-preview [data-pv-ex]').forEach(r => {
+            const b = r.querySelector('[data-pvswap]'); if (!b) return;
+            out[b.dataset.pvswap] = { id: r.dataset.pvEx, rx: JSON.parse(r.dataset.pvRx), text: r.innerText };
+        }); return out; }""")
+
+
+def preview_note(s: Session, slot: str) -> str:
+    return s.ev("""slot => { const b = document.querySelector('#today-preview [data-pvswap="' + slot + '"]');
+        const row = b && b.closest('[data-pv-ex]'), n = row && row.nextElementSibling;
+        return n && n.hasAttribute('data-pv-note') ? n.innerText : ''; }""", slot)
+
+
+def push_today(s: Session) -> dict:
+    open_today(s)
+    pick_day(s, "push")
+    return preview_rows(s).get("push") or {}
+
+
+def onboard_push(pw, at: str, now=None) -> Session:
+    s = Session(pw, now=now or ist(2026, 10, 1, 12, 0))
+    onboard(s, {"push": at})
+    return s
+
+
+@case("K11", "Choose and keep: Archer Push-up in the push slot persists and the workout trains it")
+def k11(pw):
+    s = onboard_push(pw, "push_2")
+    try:
+        open_section(s, "program")
+        s.tap('[data-pg-change="push"]')
+        s.pg.wait_for_timeout(200)
+        panel = '[data-pg-panel="push"]'
+        skills = s.pg.locator(panel + ' [data-pick^="skill_"]').count()
+        groups = s.ev("() => [...document.querySelectorAll('[data-pg-panel=\"push\"] .field__label')].map(e => e.textContent.trim())")
+        s.tap(panel + ' [data-pick="push_5"]')
+        s.tap(panel + " [data-pk-use]")
+        s.pg.wait_for_timeout(300)
+        s.pg.reload()
+        s.pg.wait_for_timeout(700)
+        to_fitness(s)
+        row = push_today(s)
+        s.tap("#begin-session")
+        s.pg.wait_for_timeout(300)
+        trained = [e["id"] for e in draft(s)["exercises"] if e.get("slot") == "push"]
+        st = s.state()
+        rec = st["training"]["slots"]["push"]
+        refused = eng(s, "chooseExercise", "push", "skill_planche_1")
+        checks = {
+            "slot is Archer after a reload": rec.get("exerciseId") == "push_5" and rec.get("why") == "chosen by you",
+            "preview and workout train it": row.get("id") == "push_5" and trained == ["push_5"],
+            "the Progress level follows": st["tiers"]["push"]["level"] == 5,
+            "the picker lists no skill attempt": skills == 0,
+            "grouped as path, branches, weighted": [g for g in groups if g in ("On your path", "Branches", "Weighted")] == ["On your path", "Branches", "Weighted"],
+            "a skill is refused inline": isinstance(refused, dict) and bool(refused.get("error")),
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "slot %s (%s); preview %s; workout %s; level %s; %d skills listed; groups %s; skill call %r" % (
+                rec.get("exerciseId"), rec.get("why"), row.get("id"), trained,
+                st["tiers"]["push"]["level"], skills, groups[:5], refused), s.errors
+    finally:
+        s.close()
+
+
+def push_sets_and_complete(s: Session, reps=8, flag=None):
+    """Begin the push day, log every push set, rate it, optionally pain-flag
+    it by clicks, complete. Returns the saved push exercise."""
+    open_today(s)
+    pick_day(s, "push")
+    s.pg.click("#begin-session")
+    s.pg.wait_for_timeout(300)
+    i = next(n for n, ex in enumerate(draft(s)["exercises"]) if ex.get("slot") == "push")
+    if flag:
+        s.pg.click('[data-flag="%d"]' % i)
+        s.pg.select_option("#flag-bp-%d" % i, flag[0])
+        s.pg.select_option("#flag-sev-%d" % i, flag[1])
+        s.pg.click("#flag-apply-%d" % i)
+        s.pg.wait_for_timeout(300)
+    for j in range(len(draft(s)["exercises"][i]["sets"])):
+        log_set(s, i, j, reps)
+    s.pg.click('[data-diff="%d"][data-d="moderate"]' % i)
+    complete(s)
+    return next(e for e in last_session(s)["exercises"] if e.get("slot") == "push")
+
+
+@case("K12", "Push-ups on knuckles: the saved rx says knuckles, no pain flag; a wrist pain swap is knuckles, flagged")
+def k12(pw):
+    s = onboard_push(pw, "push_2")
+    try:
+        open_section(s, "program")
+        s.tap('[data-grip-set="knuckles"]')
+        s.pg.wait_for_timeout(300)
+        a = push_sets_and_complete(s)
+        flags_a = len(s.state()["flagsHistory"])
+        slot_grip = s.state()["training"]["slots"]["push"].get("setup", {}).get("grip")
+        errors = list(s.errors)
+    finally:
+        s.close()
+    s = onboard_push(pw, "push_2")
+    try:
+        b = push_sets_and_complete(s, flag=("wrist", "mild"))
+        flags_b = len(s.state()["flagsHistory"])
+        errors += s.errors
+    finally:
+        s.close()
+    grip = lambda e: ((e.get("rx") or {}).get("setup") or {}).get("grip")
+    checks = {
+        "standing knuckles: rx grip knuckles": grip(a) == "knuckles" and slot_grip == "knuckles",
+        "standing knuckles: no pain flag": flags_a == 0 and not (a.get("flag") or {}).get("bodyPart"),
+        "wrist pain swap: same exercise on knuckles": b.get("key") == "push_2" and grip(b) == "knuckles",
+        "wrist pain swap: still flagged": flags_b == 1 and (b.get("flag") or {}).get("bodyPart") == "wrist",
+    }
+    bad = [k for k, ok in checks.items() if not ok]
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+        "knuckles: %s grip %s, slot grip %s, %d flags; pain swap: %s (%s) grip %s, %d flags" % (
+            a.get("key"), grip(a), slot_grip, flags_a,
+            b.get("key"), b.get("name"), grip(b), flags_b), errors
+
+
+@case("K13", "Doorway bar only, Two-Chair Dip ready: no Parallel Bar Dip, says it needs dip bars")
+def k13(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s, {"dip": "dip_alt_twochair"})
+        s.ev("""() => { const st = App.getState();
+            Object.keys(st.equipment).forEach(k => { st.equipment[k] = false; });
+            st.equipment.pullupBar = true; App.saveState(); }""")
+        for d in (1, 3):
+            s.set_time(ist(2026, 10, d, 12, 0))
+            workout_at_top(s, "push", "dip", 12)
+        s.set_time(ist(2026, 10, 5, 12, 0))
+        open_today(s)
+        pick_day(s, "push")
+        reasons = s.ev("() => [...document.querySelectorAll('[data-pv-reason]')].map(e => e.innerText.split('\\n')[0])")
+        dip = [r for r in reasons if r.startswith("Ready")]
+        steps = s.pg.locator('[data-decide="dip"][data-choice="step"]').count()
+        rec = s.ev("() => App.engine.recommendFor('dip')")
+        ok = steps == 0 and rec["step"] is None and any("Parallel Bar Dip needs dip bars" in r for r in dip)
+        return ok, "dip reason %s; %d Step up buttons; step %s" % (dip[:1], steps, rec["step"]), s.errors
+    finally:
+        s.close()
+
+
+@case("K14", "Exclude the current exercise: the workout falls back; Swap hides it behind Show excluded")
+def k14(pw):
+    s = onboard_push(pw, "push_2")
+    try:
+        got = eng(s, "setExcluded", "push_2", "excluded")
+        row = push_today(s)
+        note = preview_note(s, "push")
+        s.pg.click('[data-pvswap="push"]')
+        s.pg.wait_for_timeout(300)
+        listed = s.pg.locator('[data-pvswapto="push_2"]').count()
+        shown = click_if(s, "[data-pvswap-excluded]")
+        after = s.pg.locator('[data-pvswapto="push_2"]')
+        badge = after.locator(".badge").first.inner_text().strip().lower() if after.count() else ""
+        if after.count():
+            after.click()
+            s.pg.wait_for_timeout(300)
+        swapped = preview_rows(s).get("push") or {}
+        eng(s, "setExcluded", "push_2", "none")
+        back = push_today(s)
+        rec = s.state()["training"]["exclusions"].get("push_2") or {}
+        checks = {
+            "falls back to Incline Push-up": row.get("id") == "push_incline" and "exclu" in note.lower(),
+            "Swap hides it": listed == 0 and shown,
+            "Show excluded lists it, marked": badge == "excluded",
+            "a one-off swap to it still works": swapped.get("id") == "push_2" and "swapped" in swapped.get("text", "").lower(),
+            "included again: back to Push-up, record re-stamped": back.get("id") == "push_2" and rec.get("state") == "none",
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "call %s; excluded: preview %s, note %r; listed %d, shown %s, badge %r; swap %s; included: %s, record %s" % (
+                "absent" if got == "absent" else "ok", row.get("id"), note[:60], listed, shown, badge,
+                swapped.get("id"), back.get("id"), rec.get("state")), s.errors
+    finally:
+        s.close()
+
+
+@case("K15", "Wrists: avoid falls back, knuckles bring Push-up back, Allow anyway too; careful only warns")
+def k15(pw):
+    s = onboard_push(pw, "push_2")
+    try:
+        got = eng(s, "setLimitations", {"wrist": "avoid"})
+        avoid = push_today(s)
+        eng(s, "setGrip", "push", "knuckles")
+        knuck = push_today(s)
+        eng(s, "setGrip", "push", "palms")
+        palms = push_today(s)
+        eng(s, "setExcluded", "push_2", "allowed")
+        anyway = push_today(s)
+        eng(s, "setExcluded", "push_2", "none")
+        eng(s, "setLimitations", {"wrist": "careful"})
+        careful = push_today(s)
+        s.pg.click('[data-pvswap="push"]')
+        s.pg.wait_for_timeout(300)
+        cur = s.pg.locator('[data-pvswapto="push_2"] .badge').all_inner_texts()
+        bad_joint = eng(s, "setLimitations", {"toes": "avoid"})
+        lim = s.state()["training"]["limitations"] or {}
+        checks = {
+            "avoid: falls back": avoid.get("id") == "push_incline",
+            "knuckles: Push-up on knuckles": knuck.get("id") == "push_2" and knuck["rx"]["setup"].get("grip") == "knuckles",
+            "palms again: falls back": palms.get("id") == "push_incline",
+            "Allow anyway: Push-up": anyway.get("id") == "push_2",
+            "careful: Push-up, marked in Swap": careful.get("id") == "push_2" and any("careful" in t.lower() for t in cur),
+            "an unknown joint is refused, nothing written": isinstance(bad_joint, dict) and bool(bad_joint.get("error"))
+                and lim.get("wrist") == "careful" and "toes" not in lim,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "call %s; avoid %s; knuckles %s %s; palms %s; allowed %s; careful %s, badges %s; toes %r" % (
+                "absent" if got == "absent" else "ok", avoid.get("id"), knuck.get("id"),
+                (knuck.get("rx") or {}).get("setup", {}).get("grip"), palms.get("id"), anyway.get("id"),
+                careful.get("id"), cur, bad_joint), s.errors
+    finally:
+        s.close()
+
+
+@case("K16", "Custom 4 x 8-10 and Hold: the preview, +1 set, a goal change, an inline error, no Step up")
+def k16(pw):
+    s = onboard_push(pw, "push_2")
+    try:
+        got = eng(s, "setCustom", "push", {"sets": 4, "range": [8, 10]})
+        std = push_today(s)
+        s.pg.click('[data-volmode="extended"]')
+        s.pg.wait_for_timeout(200)
+        plus = preview_rows(s).get("push") or {}
+        s.pg.click('[data-volmode="standard"]')
+        err = eng(s, "setCustom", "push", {"range": [8, 9]})
+        s.ev("() => { App.engine.setGoal('strength'); App.saveState(); }")
+        rng = s.state()["training"]["slots"]["push"].get("range")
+        eng(s, "setHold", "push", True)
+        rx_sessions(s, "push", ["2026-09-26", "2026-09-28"], [10, 10, 10, 10], "moderate")
+        push_today(s)
+        steps = s.pg.locator('[data-decide="push"][data-choice="step"]').count()
+        why = s.ev("() => (App.engine.recommendFor('push') || {}).why")
+        eng(s, "setHold", "push", False)
+        push_today(s)
+        steps_off = s.pg.locator('[data-decide="push"][data-choice="step"]').count()
+        checks = {
+            "preview 4 x 8-10": "4 × 8–10" in std.get("text", ""),
+            "+1 set adds to it": "5 × 8–10" in plus.get("text", ""),
+            "a bad range is refused inline": isinstance(err, dict) and "at least 2 above" in (err.get("error") or ""),
+            "the custom range survives a goal change": rng == [8, 10],
+            "held: no Step up": steps == 0 and why == "hold",
+            "unheld: Step up": steps_off == 1,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "call %s; preview %r; +1 %r; error %r; range after Strength %s; held %d steps (%s); unheld %d" % (
+                "absent" if got == "absent" else "ok", re.findall(r"\d+ × [\d–]+", std.get("text", ""))[:1],
+                re.findall(r"\d+ × [\d–]+", plus.get("text", ""))[:1], err, rng, steps, why, steps_off), s.errors
+    finally:
+        s.close()
+
+
+@case("K17", "Decline at the top: step into Archer Push-up as an option, stored as an option decision")
+def k17(pw):
+    s = onboard_push(pw, "push_4")
+    try:
+        rx_sessions(s, "push", ["2026-09-26", "2026-09-28"], [12, 12, 12], "moderate")
+        wrong = eng(s, "decide", "push", "option", "skill_planche_1")
+        push_today(s)
+        btns = s.ev("() => [...document.querySelectorAll('[data-decide=\"push\"][data-choice=\"option\"]')].map(b => b.dataset.to + ': ' + b.innerText.trim())")
+        s.tap('[data-decide="push"][data-choice="option"][data-to="push_5"]')
+        s.pg.wait_for_timeout(300)
+        st = s.state()
+        rec = st["training"]["slots"]["push"]
+        dec = [d for d in st["training"]["decisions"].values() if d.get("choice") == "option"]
+        steps = s.ev("() => App.evaluation.evaluate(App.getState()).performance.steps")
+        row = push_today(s)
+        checks = {
+            "a skill is not an option": wrong is None,
+            "one button, Step into Archer Push-up": btns == ["push_5: Step into Archer Push-up"],
+            "slot is Archer, stamped": rec.get("exerciseId") == "push_5" and bool(rec.get("acceptedAt")),
+            "stored as an option decision": len(dec) == 1 and dec[0].get("to") == "push_5",
+            "the level and the workout follow": st["tiers"]["push"]["level"] == 5 and row.get("id") == "push_5",
+            "the period report counts it as a step": steps == 1,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "skill %r; buttons %s; slot %s (%s); decisions %s; level %s; preview %s; report steps %s" % (
+                wrong, btns, rec.get("exerciseId"), rec.get("why"), dec, st["tiers"]["push"]["level"], row.get("id"), steps), s.errors
+    finally:
+        s.close()
+
+
+@case("K18", "Weighted Dip at 10 kg, dumbbells listed as 10 and 15 kg: the step is 15 kg")
+def k18(pw):
+    def dip6(v):
+        v["tiers"]["dip"].update(level=6)
+        v["equipment"].update(dipBars=True)
+        v["equipmentLoads"] = {"dumbbells": {"mode": "fixed", "kg": [10, 15]}}
+    reasons, steps, slot, errors, _ = card_after_two(pw, dip6, "push", "dip", kg=10)
+    ready = [r for r in reasons if r.startswith("Ready")]
+    ok = steps == 1 and any("15 kg" in r for r in ready)
+    return ok, "slot load %s; reason %s; %d Step up buttons" % (
+        (slot or {}).get("setup", {}).get("loadKg"), ready[:1], steps), errors
+
+
+# --- K19-K22 · Stage 2's screens (step 2.5), all by clicks ---------------------
+def pg_text(s: Session, sel: str) -> str:
+    return s.ev("sel => { const e = document.querySelector(sel); return e ? e.innerText : ''; }", sel)
+
+
+@case("K19", "Program: Hold, Sets & range, and Exclude from the picker, each by its own control")
+def k19(pw):
+    s = onboard_push(pw, "push_2")
+    try:
+        open_section(s, "program")
+        # Hold
+        s.tap('[data-pg-hold="push"]')
+        s.pg.wait_for_timeout(300)
+        held = s.state()["training"]["slots"]["push"].get("hold")
+        status = pg_text(s, '[data-pg-slot="push"] [data-pg-status]')
+        btn = pg_text(s, '[data-pg-hold="push"]')
+        s.tap('[data-pg-hold="push"]')
+        s.pg.wait_for_timeout(300)
+        unheld = s.state()["training"]["slots"]["push"].get("hold")
+        # Sets & range: a bad range is an inline sentence, a good one is saved
+        s.tap('[data-pg-custom="push"]')
+        s.put('[data-cu="sets"]', "4")
+        s.put('[data-cu="lo"]', "8")
+        s.put('[data-cu="hi"]', "9")
+        s.tap("[data-cu-save]")
+        s.pg.wait_for_timeout(300)
+        err = pg_text(s, "[data-pg-err]")
+        wrote_bad = s.state()["training"]["slots"]["push"].get("custom")
+        s.put('[data-cu="hi"]', "10")
+        s.tap("[data-cu-save]")
+        s.pg.wait_for_timeout(300)
+        slot = s.state()["training"]["slots"]["push"]
+        row = pg_text(s, '[data-pg-slot="push"]')
+        # Exclude the exercise the slot trains, from the picker
+        s.tap('[data-pg-change="push"]')
+        s.tap('[data-pk-exclude="push_2"]')
+        s.pg.wait_for_timeout(300)
+        preselected = s.ev("() => { const b = document.querySelector('[data-pg-panel=\"push\"] .swap-opt.is-current'); return b ? b.dataset.pick : null; }")
+        s.tap('[data-pick="push_2"]')
+        s.tap("[data-pk-use]")
+        s.pg.wait_for_timeout(300)
+        refuse = pg_text(s, "[data-pg-err]")
+        excl = s.state()["training"]["exclusions"].get("push_2") or {}
+        listed = pg_text(s, "#pg-excluded")
+        s.tap('[data-pk-cancel]')
+        s.pg.wait_for_timeout(300)
+        s.tap('[data-excl-undo="push_2"]')
+        s.pg.wait_for_timeout(300)
+        back = s.state()["training"]["exclusions"].get("push_2") or {}
+        after = pg_text(s, "#pg-excluded")
+        checks = {
+            "Hold stamps the slot and the row says so": held is True and "step-ups paused" in status.lower() and btn.strip() == "Resume step-ups",
+            "Resume clears it": not unheld,
+            "a range under 2 apart is an inline sentence, nothing written": "at least 2 above" in err and not wrote_bad,
+            "4 x 8-10 is saved, the row shows it": slot.get("sets") == 4 and slot.get("range") == [8, 10] and "4 × 8–10" in row,
+            "excluding the current movement preselects the one it falls back to": preselected == "push_incline",
+            "choosing an excluded movement says why": "excluded list" in refuse,
+            "the Excluded card lists it": "Push-up" in listed and excl.get("state") == "excluded",
+            "Include again re-stamps, never deletes": back.get("state") == "none" and "None." in after,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "hold %s, status %r, button %r, cleared %s; error %r; slot %s x %s; preselected %s; refusal %r; card %r -> %r" % (
+                held, status, btn.strip(), unheld, err, slot.get("sets"), slot.get("range"), preselected,
+                refuse[:50], listed.replace("\n", " ")[:60], after.replace("\n", " ")[-12:]), s.errors
+    finally:
+        s.close()
+
+
+@case("K20", "Today: Knuckles today builds the workout on knuckles; a careful wrist says why; a held slot says so")
+def k20(pw):
+    s = onboard_push(pw, "push_2")
+    try:
+        row = push_today(s)
+        before = row.get("rx", {}).get("setup", {}).get("grip")
+        s.tick('[data-knuckles-today="push"]')
+        s.pg.wait_for_timeout(300)
+        on = preview_rows(s).get("push") or {}
+        text_on = on.get("text", "")
+        # a careful wrist says why knuckles help
+        eng(s, "setLimitations", {"wrist": "careful"})
+        careful_row = push_today(s)
+        hint = pg_text(s, "[data-pv-grip]")
+        # a held slot at the top: the card says holding and offers nothing
+        eng(s, "setLimitations", {})
+        eng(s, "setHold", "push", True)
+        rx_sessions(s, "push", ["2026-09-26", "2026-09-28"], [12, 12, 12], "moderate")
+        push_today(s)
+        reason = s.ev("() => [...document.querySelectorAll('[data-pv-reason]')].map(e => e.innerText.split('\\n')[0])[0] || ''")
+        steps = s.pg.locator('[data-decide="push"]').count()
+        # the workout itself, for one session only
+        s.tick('[data-knuckles-today="push"]')
+        s.tap("#begin-session")
+        s.pg.wait_for_timeout(300)
+        d = draft(s)
+        trained = next(e for e in d["exercises"] if e.get("slot") == "push")
+        block = pg_text(s, '[data-block="%d"] .exq__meta' % d["exercises"].index(trained))
+        standing = s.state()["training"].get("grip")
+        checks = {
+            "palms until ticked": before in (None, "palms"),
+            "ticking builds the same movement on knuckles": on.get("id") == "push_2" and (on.get("rx", {}).get("setup", {}) or {}).get("grip") == "knuckles" and "knuckles" in text_on.lower(),
+            "a careful wrist says why knuckles help": "wrist" in hint.lower() and careful_row.get("id") == "push_2",
+            "held: the card says holding, no buttons": reason.startswith("Holding") and steps == 0,
+            "the workout's exercise line says knuckles": "knuckles" in block.lower() and (trained.get("rx", {}).get("setup", {}) or {}).get("grip") == "knuckles",
+            "today only: no standing grip written": not standing,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "grip before %s, ticked %s; hint %r; held reason %r with %d buttons; line %r; standing %s" % (
+                before, (on.get("rx", {}).get("setup", {}) or {}).get("grip"), hint.strip()[:70], reason[:70], steps,
+                block.strip()[:50], standing), s.errors
+    finally:
+        s.close()
+
+
+@case("K21", "Settings: the four new items, weights you have, joint limits; a bad weight list stays inline")
+def k21(pw):
+    s = onboard_push(pw, "push_2")
+    try:
+        s.tap("#btn-settings")
+        s.pg.wait_for_timeout(300)
+        items = s.ev("() => [...document.querySelectorAll('#set-equip [data-equip]')].map(b => b.dataset.equip)")
+        # a fixed dumbbell list that is not a list of numbers: refused inline, nothing saved
+        s.tap('[data-w-mode="dumbbells"] [data-wm="fixed"]')
+        s.put("#set-w-dumbbells-list", "five, ten")
+        s.tap("#btn-settings-save")
+        s.pg.wait_for_timeout(300)
+        err = pg_text(s, "#set-err")
+        open_still = s.pg.locator("#modal-settings.is-open, #modal-settings[aria-hidden=false]").count() or \
+            s.ev("() => getComputedStyle(document.getElementById('modal-settings')).display !== 'none' && document.getElementById('set-err').hidden === false")
+        wrote = s.state().get("equipmentLoads")
+        # a real list, a wrist limit, dip bars on
+        s.put("#set-w-dumbbells-list", "12.5, 5, 7.5, 5")
+        s.choose('[data-limit="wrist"]', "avoid")
+        s.choose('[data-limit="knee"]', "careful")
+        s.tap('#set-equip [data-equip="dipBars"]')
+        s.tap("#btn-settings-save")
+        s.pg.wait_for_timeout(400)
+        st = s.state()
+        loads, lim, eq = st.get("equipmentLoads"), st["training"].get("limitations") or {}, st["equipment"]
+        # reopened, the form shows what was saved
+        s.tap("#btn-settings")
+        s.pg.wait_for_timeout(300)
+        shown = s.ev("""() => { const v = q => { const e = document.querySelector(q); return e ? e.value : null; };
+            return { list: v('#set-w-dumbbells-list'), wrist: v('[data-limit=wrist]'), knee: v('[data-limit=knee]') }; }""")
+        s.pg.keyboard.press("Escape")
+        # an untouched kettlebell form wrote no record; the avoid took Push-up off the plan
+        row = push_today(s)
+        checks = {
+            "equipment lists the four new items": all(k in items for k in V5_TOKENS),
+            "a bad weight list is an inline sentence": "kilograms" in err,
+            "and nothing was saved": not wrote,
+            "the real list is sorted and de-duplicated": (loads or {}).get("dumbbells") == {"mode": "fixed", "kg": [5, 7.5, 12.5]},
+            "an untouched implement writes no record": "kettlebells" not in (loads or {}),
+            "limits are saved, stamped": lim.get("wrist") == "avoid" and lim.get("knee") == "careful" and bool(lim.get("at")),
+            "dip bars are on": eq.get("dipBars") is True,
+            "reopened, the form shows them": shown == {"list": "5, 7.5, 12.5", "wrist": "avoid", "knee": "careful"},
+            "avoid wrist takes Push-up off the plan": row.get("id") == "push_incline",
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "items %s; error %r; loads %s; limits %s; form %s; push now %s" % (
+                [i for i in items if i in V5_TOKENS], err[:50], json.dumps(loads), json.dumps(lim), shown, row.get("id")), s.errors
+    finally:
+        s.close()
+
+
+@case("K22", "Setup lists the four new items; picking one reaches the saved equipment")
+def k22(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        to_fitness(s)
+        for _ in range(3):
+            s.tap('#onb-body [data-onb="next"]')
+        items = s.ev("() => [...document.querySelectorAll('#onb-body [data-equip]')].map(b => b.dataset.equip)")
+        s.tap('#onb-body [data-equip="dipBars"]')
+        s.tap('#onb-body [data-equip="bands"]')
+        s.tap('#onb-body [data-onb="next"]')
+        s.tap('#onb-body [data-onb="next"]')
+        s.tap('[data-onb="finish"]')
+        s.pg.wait_for_timeout(400)
+        eq = s.state()["equipment"]
+        ok = all(k in items for k in V5_TOKENS) and eq.get("dipBars") is True and eq.get("bands") is True \
+            and eq.get("parallettes") is False and eq.get("lowBar") is False
+        return ok, "items %s; saved dipBars %s bands %s parallettes %s lowBar %s" % (
+            [i for i in items if i in V5_TOKENS], eq.get("dipBars"), eq.get("bands"), eq.get("parallettes"), eq.get("lowBar")), s.errors
+    finally:
+        s.close()
+
+
+# --- V3-V5, V8 · Stage 3's sessions and schema v6 (step 3.4) ------------------
+# The finisher toggle and the mini-session's entry points are step 3.5's, so
+# these cases set prefs.finisher and start a mini-session the way those
+# controls will: engine.buildWorkout("mini") into the draft key. Every set,
+# rating and Complete after that is a click. A tree without the builder
+# builds whatever it builds, and the case FAILs on what it measures.
+FIXTURE_V5 = ROOT / "tools" / "fixtures" / "v5-midworkout.json"
+COVERAGE_SLOTS = "() => Object.keys(TRAINING_DATA.SLOTS).filter(k => TRAINING_DATA.SLOTS[k].coverage)"
+
+
+def v5_fixture() -> dict:
+    """localStorage as the Stage 2 build (v5) left it, mid-workout: the two keys."""
+    fx = json.loads(FIXTURE_V5.read_text())
+    return {k: v for k, v in fx.items() if not k.startswith("_")}
+
+
+def mini_workout(s: Session, reps=10, n=4) -> dict:
+    """Start a mini-session with the Accessory session card (n from its
+    select, 4 by default), log every set at `reps`, rate each Just right and
+    complete, by clicks. Returns the draft; with no card, an empty one."""
+    open_today(s)
+    if n != 4:
+        s.choose("[data-mini-n]", str(n))
+    s.tap("[data-mini-start]")
+    s.pg.wait_for_timeout(300)
+    w = draft(s)
+    if not w:
+        return {"exercises": [], "warmup": [], "cooldown": []}
+    for i, ex in enumerate(w["exercises"]):
+        for j in range(len(ex["sets"])):
+            log_set(s, i, j, reps)
+        s.pg.click('[data-diff="%d"][data-d="moderate"]' % i)
+    complete(s)
+    return w
+
+
+def preview_order(s: Session) -> list:
+    """The Today preview's rows in screen order, as [slot, exercise id]."""
+    return s.ev("""() => [...document.querySelectorAll('#today-preview [data-pv-ex]')].map(r => {
+        const b = r.querySelector('[data-pvswap]'); return [b ? b.dataset.pvswap : null, r.dataset.pvEx]; })""")
+
+
+def stat_tile(s: Session, label: str) -> str:
+    return s.ev("""l => { const t = [...document.querySelectorAll('.stat')].find(e =>
+        e.querySelector('.stat__label').innerText.trim().toLowerCase() === l);
+        return t ? t.querySelector('.stat__value').innerText.trim() : null; }""", label.lower())
+
+
+@case("V3", "Mini-session on a rest day: still a rest day, next main day and attendance unchanged; streak and Hub habit count it")
+def v3(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        one_set_workout(s)                          # Thu 1 Oct: Push, so Fri rests
+        s.set_time(ist(2026, 10, 2, 12, 0))
+        read = """() => { const e = App.engine, st = App.getState(), ev = App.evaluation.evaluate(st);
+            Hub.gamify.invalidate();
+            return { rest: e.restDayInfo(st).isRest, next: e.recommendedDayType(), nextKey: e.nextSession(st).key,
+                     attended: ev.sampleSize, planned: ev.expected, streak: e.liveStreak(st),
+                     habit: !!Hub.gamify.CATEGORIES.fitness.done('2026-10-02') }; }"""
+        a = s.ev(read)
+        w = mini_workout(s)
+        b = s.ev(read)
+        week = stat_tile(s, "This week")             # complete() lands on the dashboard
+        open_today(s)
+        rest_card = n_visible(s, "#rest-train-anyway")
+        sess = last_session(s)
+        cov = s.ev(COVERAGE_SLOTS)
+        checks = {
+            "still a rest day, on the screen too": a["rest"] and b["rest"] and rest_card == 1,
+            "next main day unchanged": b["next"] == a["next"] == "pull" and b["nextKey"] == a["nextKey"] == "2026-10-03",
+            "attendance unchanged": (b["attended"], b["planned"]) == (a["attended"], a["planned"]) and b["attended"] == 1 and week == "1",
+            "saved as a mini-session of coverage work": sess.get("type") == "mini" and sess.get("kind") == "mini"
+                and sess.get("dayKey") == "2026-10-02" and len(sess["exercises"]) == 4
+                and all(e.get("slot") in cov for e in sess["exercises"]),
+            "a short warm-up and cool-down": 0 < len(w.get("warmup", [])) < 5 and 0 < len(w.get("cooldown", [])) < 5,
+            "the streak counts it": b["streak"] == a["streak"] + 1,
+            "the Hub's fitness habit counts it": not a["habit"] and b["habit"],
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "before %s; after %s; This week %r; rest card %d; saved type %s kind %s, %d exercises %s; warm-up %d, cool-down %d" % (
+                json.dumps(a), json.dumps(b), week, rest_card, sess.get("type"), sess.get("kind"), len(sess["exercises"]),
+                [e.get("slot") for e in sess["exercises"]], len(w.get("warmup", [])), len(w.get("cooldown", []))), s.errors
+    finally:
+        s.close()
+
+
+def finisher_session(s: Session, day: str) -> dict:
+    """Begin `day` with the finisher on; main sets at 5, every finisher set at
+    the top of its range, each rated Just right; complete. Returns the draft."""
+    open_today(s)
+    pick_day(s, day)
+    s.pg.click("#begin-session")
+    s.pg.wait_for_timeout(300)
+    w = draft(s)
+    for i, ex in enumerate(w["exercises"]):
+        top = ex["rx"]["range"][1] if ex.get("finisher") else 5
+        for j in range(len(ex["sets"])):
+            log_set(s, i, j, top)
+        s.pg.click('[data-diff="%d"][data-d="moderate"]' % i)
+    complete(s)
+    return w
+
+
+@case("V4", "Finisher on: four coverage picks after the main slots; two sessions at the top -> ready")
+def v4(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        cov = s.ev(COVERAGE_SLOTS)
+        open_today(s)
+        pick_day(s, "push")
+        off = preview_order(s)
+        s.tick("[data-finisher]")
+        s.pg.wait_for_timeout(200)
+        on = preview_order(s)
+        w1 = finisher_session(s, "push")
+        st = s.state()
+        made = {k: v.get("why") for k, v in st["training"]["slots"].items() if k in cov}
+        saved = [e.get("finisher") for e in st["sessions"][-1]["exercises"]]
+        pinned = eng(s, "setPins", "curl", [6])     # Saturday, so curl is picked again
+        s.set_time(ist(2026, 10, 3, 12, 0))
+        w2 = finisher_session(s, "pull")
+        rec = s.ev("() => JSON.parse(JSON.stringify(App.engine.recommendFor('curl')))") or {}
+        fin1 = [e for e in w1["exercises"] if e.get("finisher")]
+        fin2 = [e for e in w2["exercises"] if e.get("finisher")]
+        checks = {
+            "main slots unchanged by the finisher": on[:len(off)] == off and all(x[0] not in cov for x in off),
+            "four coverage picks after them": len(on) == len(off) + 4 and all(x[0] in cov for x in on[len(off):]),
+            "the workout is the preview": [[e["slot"], e["id"]] for e in w1["exercises"]] == on,
+            "picks at the base set count": len(fin1) == 4 and all(len(e["sets"]) == 3 for e in fin1),
+            "saved as finisher work": saved[-4:] == [True] * 4 and not any(saved[:-4]),
+            "each picked slot gets its record": sorted(made) == sorted(e["slot"] for e in fin1)
+                and set(made.values()) == {"added for coverage"},
+            "a pin puts curl first": isinstance(pinned, dict) and not pinned.get("error")
+                and [e["slot"] for e in fin2][:1] == ["curl"] and len(fin2) == 4,
+            "two sessions at the top: ready": rec.get("action") == "ready" and len(rec.get("history") or []) == 2,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "off %s; on +%s; finisher sets %s; records %s; pin %s; 3 Oct picks %s; curl %s/%s, %d comparable" % (
+                [x[0] for x in off], [x[0] for x in on[len(off):]], [len(e["sets"]) for e in fin1], made, pinned,
+                [e["slot"] for e in fin2], rec.get("action"), rec.get("why"), len(rec.get("history") or [])), s.errors
+    finally:
+        s.close()
+
+
+@case("V5", "v5 fixture -> v6: the main program unchanged, no coverage slot until one is picked")
+def v5(pw):
+    fx = v5_fixture()
+    v5s = fx[STORAGE_KEY]
+    s = Session(pw, now=ist(2026, 10, 1, 8, 0))
+    try:
+        seed_and_reload(s, fx)
+        st = s.state()
+        schema = s.ev("() => App.SCHEMA_VERSION")
+        cov = s.ev(COVERAGE_SLOTS)
+        tr = st["training"]
+        twice = s.ev("""raw => { const a = App.migrate(JSON.parse(raw));
+            return JSON.stringify(a) === JSON.stringify(App.migrate(JSON.parse(JSON.stringify(a)))); }""", json.dumps(v5s))
+        to_fitness(s)
+        open_section(s, "program")
+        open_today(s)
+        w = draft(s)
+        complete(s)                                 # the Legs draft, finisher off
+        after = s.state()
+        checks = {
+            "version %s" % schema: st["version"] == schema and schema >= 6,
+            "v6 defaults: finisher off, no pins": st["prefs"].get("finisher") == "off" and tr.get("pins") == {},
+            "other prefs unchanged": {k: v for k, v in st["prefs"].items() if k != "finisher"} == v5s["prefs"],
+            "slots unchanged": tr["slots"] == v5s["training"]["slots"],
+            "decisions, exclusions, limits, grip unchanged": all(tr.get(k) == v5s["training"][k] for k in (
+                "decisions", "assessment", "exclusions", "limitations", "grip", "equipmentCheck")),
+            "history and equipment unchanged": all(st[k] == v5s[k] for k in (
+                "sessions", "prs", "tiers", "phaseHistory", "currentPhase", "benchmarks", "flagsHistory",
+                "equipment", "equipmentLoads", "recoveryBlocks")),
+            "migrated twice is identical": twice,
+            "the draft resumes": w and w["dayType"] == "legs" and [e["id"] for e in w["exercises"]] == ["squat_2", "hinge_2", "core_2"],
+            "no coverage slot after Program, Today and a main workout":
+                not [k for k in after["training"]["slots"] if k in cov] and len(after["sessions"]) == 3,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "version %s; finisher %r; pins %r; slots %s; coverage records after a workout %s" % (
+                st["version"], st["prefs"].get("finisher"), tr.get("pins"), sorted(tr["slots"]),
+                [k for k in after["training"]["slots"] if k in cov]), s.errors
+    finally:
+        s.close()
+
+
+@case("V8", "Phase report with two mini-sessions: adherence unchanged, 'Accessory sessions 2'")
+def v8(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        one_set_workout(s)                          # Thu 1 Oct, the one main session
+        for d in (2, 3):
+            s.set_time(ist(2026, 10, d, 18, 0))
+            mini_workout(s)
+        ev = s.ev("""() => { const st = App.getState(), ev = App.evaluation.evaluate(st);
+            return { attended: ev.sampleSize, planned: ev.expected, ref: App.engine.expectedSessions(st.currentPhase, 1) }; }""")
+        open_section(s, "evaluation")
+        s.pg.click("#ev-open")
+        s.pg.wait_for_timeout(500)
+        rows = s.ev("""() => [...document.querySelectorAll('#modal-report [data-ev-section="adherence"] .rc-diff__row')]
+            .map(r => [...r.querySelectorAll('span')].map(x => x.innerText.trim()))""")
+        checks = {
+            "attendance counts the main session only": ev["attended"] == 1 and ev["planned"] == ev["ref"],
+            "Sessions attended reads 1 of %s" % ev["ref"]: ["Sessions attended", "1 of %s" % ev["ref"]] in rows,
+            "its own line: Accessory sessions 2": ["Accessory sessions", "2"] in rows,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "attended %s of %s (one main session would plan %s); rows %s" % (
+                ev["attended"], ev["planned"], ev["ref"], rows), s.errors
+    finally:
+        s.close()
+
+
+def seed_rows(s: Session, n=3):
+    """Fixture: n finished sessions of rows alone, so no group's primary is
+    biceps and nothing trains a curl."""
+    add_sessions(s, [dict(fake_session(i, "pull", [fake_exercise("pull_alt_row", "row", "reps", [10, 10, 10])]),
+                          dayKey="2026-10-0%d" % (i + 1)) for i in range(n)])
+
+
+@case("V7", "Muscles: rows only, no curls for 7 days -> Biceps neglected, 0 of 6 direct; the template column renamed")
+def v7(pw):
+    s = Session(pw, now=ist(2026, 10, 3, 12, 0))
+    try:
+        onboard(s)
+        seed_rows(s)
+        open_section(s, "muscles")
+        cov = s.ev("() => Coverage.status(App.getState().sessions, App.lib.today(), [])")
+        below = sorted(k for k, g in cov.items() if g["direct"] < g["floor"])
+        neg = s.ev("""() => [...document.querySelectorAll('.ms-neg__item')].map(e => [e.dataset.msDetail, e.innerText.replace(/\\s+/g, ' ')])""")
+        bi = s.ev("""k => { const e = document.querySelector('.ms-row[data-ms-detail="' + k + '"] .ms-row__direct');
+            return e ? e.innerText.replace(/\\s+/g, ' ').trim() : null; }""", "biceps")
+        la = s.ev("""k => { const e = document.querySelector('.ms-row[data-ms-detail="' + k + '"] .ms-row__direct');
+            return e ? e.innerText.replace(/\\s+/g, ' ').trim() : null; }""", "lats")
+        head = text_of(s, ".ms-row--head")
+        tile = stat_tile(s, "Neglected")
+        note = text_of(s, ".ms-table + p")
+        s.tap('.ms-row[data-ms-detail="biceps"]')
+        s.pg.wait_for_timeout(300)
+        modal = s.ev("() => { const m = document.getElementById('wh-modal'); return m && !m.hidden ? m.innerText.replace(/\\s+/g, ' ') : ''; }")
+        biceps_neg = [x for x in neg if x[0] == "biceps"]
+        checks = {
+            "biceps is in Neglected with '0 of 6 direct'": len(biceps_neg) == 1 and "0 of 6 direct" in biceps_neg[0][1],
+            "Neglected lists exactly the groups below their floor": sorted(x[0] for x in neg) == below and len(below) > 0,
+            "the tile counts them": tile == str(len(below)),
+            "biceps's row reads 0 of 6, lats' 9 of 3": bi is not None and bi.startswith("0 of 6") and la is not None and la.startswith("9 of 3"),
+            "lats (9 of 3) is not neglected": "lats" not in [x[0] for x in neg],
+            "headers: Direct sets (7 d) and Vs. your template": "DIRECT SETS (7 D)" in head.upper() and "VS. YOUR TEMPLATE" in head.upper(),
+            "the footnote says the floors aren't validated minimums": "validated minimum" in note,
+            "the detail shows Direct sets (7 d)": "DIRECT SETS (7 D)" in modal.upper() and "0 of 6" in modal,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "below floor %d groups (tile %r); neglected %s; biceps %r, lats %r; header %r" % (
+                len(below), tile, [x[0] for x in neg][:6], bi, la, head.replace("\n", " ")), s.errors
+    finally:
+        s.close()
+
+
+def coverage_rows(s: Session) -> list:
+    return s.ev("""() => [...document.querySelectorAll('#pg-coverage [data-pg-slot]')].map(r => [r.dataset.pgSlot, r.innerText.replace(/\\s+/g, ' ')])""")
+
+
+def pin_state(s: Session, slot: str):
+    return s.ev("slot => { const p = App.getState().training.pins || {}; return p[slot] ? JSON.parse(JSON.stringify(p[slot])) : null; }", slot)
+
+
+@case("V9", "Program's Coverage card: 15 slots, a pin by click persists, clears as a stamped record and puts the slot first")
+def v9(pw):
+    s = Session(pw, now=ist(2026, 10, 3, 12, 0))      # a Saturday: weekday 6
+    try:
+        onboard(s)
+        cov = s.ev(COVERAGE_SLOTS)
+        open_section(s, "program")
+        rows = coverage_rows(s)
+        before = n_visible(s, "#pg-coverage")
+        s.tap('[data-pin-day="backext:6"]')
+        s.pg.wait_for_timeout(200)
+        pinned = pin_state(s, "backext")
+        s.pg.reload()
+        s.pg.wait_for_timeout(700)
+        open_section(s, "program")
+        pressed = s.ev("""() => { const b = document.querySelector('[data-pin-day="backext:6"]'); return b ? b.getAttribute('aria-pressed') : null; }""")
+        s.tap('[data-pg-change="curl"]')
+        s.pg.wait_for_timeout(200)
+        panel = n_visible(s, '[data-pg-panel="curl"]')
+        s.tap('[data-pk-cancel]')
+        open_today(s)
+        pick_day(s, "push")
+        s.tick("[data-finisher]")
+        s.pg.wait_for_timeout(200)
+        first = [x[0] for x in preview_order(s) if x[0] in cov][:1]
+        open_section(s, "program")
+        s.tap('[data-pin-day="backext:6"]')
+        s.pg.wait_for_timeout(200)
+        cleared = pin_state(s, "backext")
+        open_today(s)
+        pick_day(s, "push")
+        after = [x[0] for x in preview_order(s) if x[0] in cov]
+        names = {k: txt for k, txt in rows}
+        checks = {
+            "the card lists all 15 slots": sorted(k for k, _ in rows) == sorted(cov) and before == 1,
+            "each shows a movement, not a dash": all(len(txt.split(" ")) > 3 and not txt.strip().endswith("—") for _, txt in rows),
+            "an unpicked slot says it hasn't started": all("not started" in txt for _, txt in rows),
+            "the pin is stored for Saturday": bool(pinned) and pinned.get("days") == [6] and bool(pinned.get("at")),
+            "and survives a reload, shown pressed": pressed == "true",
+            "Change exercise opens its picker on a coverage slot": panel == 1,
+            "with the finisher on, the pinned slot goes first": first == ["backext"],
+            "clicking it again leaves a stamped record, days []": bool(cleared) and cleared.get("days") == [] and bool(cleared.get("at")),
+            "and it is no longer first": after[:1] != ["backext"] and "backext" not in after[:1],
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "%d rows (card visible %d); curl row %r; pin %s -> %s; pressed %r; picker %d; first with pin %s, after %s" % (
+                len(rows), before, names.get("curl", ""), pinned, cleared, pressed, panel, first, after[:4]), s.errors
+    finally:
+        s.close()
+
+
+def finisher_rows(s: Session) -> list:
+    """The preview's finisher rows as [slot, id, reason text]."""
+    return s.ev("""() => [...document.querySelectorAll('#today-preview [data-pv-fin]')].map(r => {
+        const n = r.nextElementSibling;
+        return [r.dataset.pvFin, r.dataset.pvEx, n && n.hasAttribute('data-pv-cover') ? n.innerText.trim() : '']; })""")
+
+
+@case("V10", "Finisher controls: tick adds four reasoned picks; Remove, Swap and Add back change what Begin starts; untick removes them")
+def v10(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        cov = s.ev(COVERAGE_SLOTS)
+        open_today(s)
+        pick_day(s, "push")
+        main = [x for x in preview_order(s)]
+        s.tick("[data-finisher]")
+        s.pg.wait_for_timeout(200)
+        on = finisher_rows(s)
+        pref_on = s.state()["prefs"].get("finisher")
+        main_on = [x for x in preview_order(s) if x[0] not in cov]
+        s.tap("[data-finisher]")                    # a ticked box: this unticks it
+        s.pg.wait_for_timeout(200)
+        off = finisher_rows(s)
+        pref_off = s.state()["prefs"].get("finisher")
+        s.tick("[data-finisher]")
+        s.pg.wait_for_timeout(200)
+        gone = on[0][0] if on else None
+        s.tap('[data-pv-remove="%s"]' % gone)
+        s.pg.wait_for_timeout(200)
+        removed = finisher_rows(s)
+        back_btn = n_visible(s, '[data-pv-addback="%s"]' % gone)
+        s.tap('[data-pv-addback="%s"]' % gone)
+        s.pg.wait_for_timeout(200)
+        restored = finisher_rows(s)
+        swap_slot = on[1][0] if len(on) > 1 else None
+        s.tap('[data-pvswap="%s"]' % swap_slot)
+        s.pg.wait_for_timeout(200)
+        s.tap('#pvswap-body [data-pvswapto]:not(.is-current)')
+        s.pg.wait_for_timeout(200)
+        swapped = {r[0]: r[1] for r in finisher_rows(s)}
+        s.tap('[data-pv-remove="%s"]' % gone)
+        s.pg.wait_for_timeout(200)
+        planned = [r[0] for r in finisher_rows(s)]
+        s.pg.click("#begin-session")
+        s.pg.wait_for_timeout(300)
+        w = draft(s)
+        fin = [e for e in w["exercises"] if e.get("finisher")] if w else []
+        heads = n_visible(s, "[data-finisher-head]")
+        reasons = n_visible(s, "[data-ex-reason]")
+        checks = {
+            "ticking adds four coverage picks after the main slots": len(on) == 4 and all(r[0] in cov for r in on)
+                and main_on == main and pref_on == "on",
+            "each carries its reason": all("direct sets this week" in r[2] for r in on),
+            "unticking removes them and saves 'off'": off == [] and pref_off == "off",
+            "Remove drops one, with an Add back": len(removed) == 3 and gone not in [r[0] for r in removed] and back_btn == 1,
+            "Add back restores it": [r[0] for r in restored] == [r[0] for r in on],
+            "Swap changes that pick's movement": swap_slot in swapped and swapped[swap_slot] != on[1][1],
+            "Begin starts exactly the three kept, swap included":
+                [e["slot"] for e in fin] == planned and len(fin) == 3 and any(e["id"] == swapped.get(swap_slot) for e in fin),
+            "the workout screen has a Finisher heading and a reason per pick": heads == 1 and reasons == 3,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "ticked %s (pref %r); reasons %s; unticked %s (pref %r); removed %s (add back %d); restored %s; swap %s -> %s; begun %s; headings %d, reasons %d" % (
+                [r[0] for r in on], pref_on, [r[2][:40] for r in on][:1], [r[0] for r in off], pref_off, [r[0] for r in removed],
+                back_btn, [r[0] for r in restored], swap_slot, swapped.get(swap_slot), [e["slot"] for e in fin], heads, reasons), s.errors
+    finally:
+        s.close()
+
+
+def mini_rows(s: Session) -> list:
+    return s.ev("""() => [...document.querySelectorAll('#mini-card [data-mini-pick]')].map(r => r.dataset.miniPick)""")
+
+
+@case("V11", "Accessory session card: on the ready, done-today and rest screens; its count select sizes it; empty when every group is covered")
+def v11(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        open_today(s)
+        ready = n_visible(s, "[data-mini-start]")
+        four = mini_rows(s)
+        reasons = s.ev("() => [...document.querySelectorAll('#mini-card [data-mini-pick]')].every(r => /direct sets this week/.test(r.innerText))")
+        s.choose("[data-mini-n]", "2")
+        two = mini_rows(s)
+        s.choose("[data-mini-n]", "6")
+        six = mini_rows(s)
+        s.choose("[data-mini-n]", "4")
+        one_set_workout(s)                          # Thu 1 Oct, Push: done today
+        open_today(s)
+        done = n_visible(s, "[data-mini-start]")
+        s.set_time(ist(2026, 10, 2, 12, 0))
+        open_today(s)
+        rest = n_visible(s, "[data-mini-start]") + 10 * n_visible(s, "#rest-train-anyway")
+        s.tap("[data-mini-start]")
+        s.pg.wait_for_timeout(300)
+        w = draft(s) or {}
+        title = text_of(s, ".page-head h1, .page-head .display")
+        main_head = text_of(s, ".page-head h2")
+        # The empty state: one finished session that gave every group its floor.
+        s.ev("() => App.util.uiSet('today.workout', null)")
+        s.set_time(ist(2026, 10, 3, 12, 0))
+        ids = s.ev("() => Object.keys(TRAINING_DATA.EXERCISES)")
+        add_sessions(s, [dict(fake_session(900, "push", [fake_exercise(i, "accessory", "reps", [10] * 6) for i in ids]),
+                              dayKey="2026-10-03")])
+        open_today(s)
+        empty = n_visible(s, "[data-mini-empty]"), n_visible(s, "[data-mini-start]")
+        checks = {
+            "on the ready screen": ready == 1,
+            "on the done-today screen": done == 1,
+            "on the rest-day screen (beside Train anyway)": rest == 11,
+            "four picks by default, each with its reason": len(four) == 4 and reasons is True,
+            "the select sizes it: 2 and 6": len(two) == 2 and len(six) == 6,
+            "start builds a mini-session of the picks": w.get("kind") == "mini" and len(w.get("exercises", [])) == 4
+                and not any(e.get("finisher") for e in w.get("exercises", [])),
+            "the workout screen is titled for it": "ACCESSORY" in (title + main_head).upper(),
+            "when every group has its floor: a message and no Start": empty == (1, 0),
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "start buttons: ready %d, done %d, rest %d (rest card 10 each); picks %d / %d / %d; draft kind %r, %d exercises; title %r; empty state %s" % (
+                ready, done, rest % 10, len(four), len(two), len(six), w.get("kind"), len(w.get("exercises", [])),
+                (title + " | " + main_head).replace("\n", " "), empty), s.errors
+    finally:
+        s.close()
+
+
+@case("V12", "Badges: Balanced Build and Full Sweep span 22 groups, and an earned badge keeps its date (a guard, not a fix)")
+def v12(pw):
+    s = Session(pw, now=ist(2026, 10, 3, 12, 0))
+    try:
+        onboard(s)
+        s.ev("() => { Hub.state.badges['muscle-balanced'] = '2026-09-01T00:00:00.000Z'; Hub.gamify.recompute({ silent: true }); }")
+        got = s.ev("""() => { const m = {}; Hub.gamify.badgeState().forEach(b => { m[b.badge.id] = { at: b.at, progress: b.progress }; });
+            return { groups: App.muscles.GROUPS.length, balanced: m['muscle-balanced'], sweep: m['muscle-full-week'] }; }""")
+        checks = {
+            "22 groups": got["groups"] == 22,
+            "Full Sweep reads x/22": got["sweep"]["progress"].endswith("/22 this week"),
+            "an earned Balanced Build keeps its stored date": got["balanced"]["at"] == "2026-09-01T00:00:00.000Z",
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "groups %d; sweep %r; balanced %r" % (
+            got["groups"], got["sweep"]["progress"], got["balanced"]["at"]), s.errors
+    finally:
+        s.close()
+
+
+# --- R3a-R3c · R3's findings (plans/PROGRESS-fitness-control-and-coverage.md)
+def finisher_begun(pw) -> tuple:
+    """Onboarded on Thu 1 Oct, the finisher ticked, the push workout begun.
+    Returns the session and the finisher exercises' indexes in the draft."""
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    onboard(s)
+    open_today(s)
+    pick_day(s, "push")
+    s.tick("[data-finisher]")
+    s.pg.wait_for_timeout(200)
+    s.pg.click("#begin-session")
+    s.pg.wait_for_timeout(300)
+    w = draft(s)
+    return s, [i for i, e in enumerate(w["exercises"]) if e.get("finisher")]
+
+
+@case("R3a", "A coverage exercise takes a pain flag: mild is flagged and kept, sharp skips it; both reach the flag history")
+def r3a(pw):
+    s, fin = finisher_begun(pw)
+    try:
+        a, b = fin[0], fin[1]
+        s.pg.click('[data-flag="%d"]' % a)
+        s.pg.wait_for_timeout(200)
+        parts = s.ev("i => { const e = document.getElementById('flag-bp-' + i); return e ? [...e.options].map(o => o.value) : []; }", a)
+        label = text_of(s, "#flag-apply-%d" % a)
+        s.tap("#flag-apply-%d" % a)
+        s.pg.wait_for_timeout(300)
+        s.tap('[data-flag="%d"]' % b)
+        s.pg.wait_for_timeout(200)
+        s.choose("#flag-sev-%d" % b, "sharp")
+        s.pg.wait_for_timeout(200)
+        s.tap("#flag-apply-%d" % b)
+        s.pg.wait_for_timeout(300)
+        w = draft(s)
+        log_set(s, 0, 0, 8)
+        complete(s)
+        st = s.state()
+        ex = st["sessions"][-1]["exercises"]
+        hist = [(f.get("exerciseKey"), f.get("severity")) for f in st.get("flagsHistory", [])]
+        ids = [f.get("id") for f in st.get("flagsHistory", [])]
+        checks = {
+            "the panel lists the joints it loads": len(parts) > 0 and all(p in ("wrist", "elbow", "shoulder", "neck", "lowerBack", "hip", "knee", "ankle") for p in parts),
+            "mild offers a flag, not a swap": label.strip().lower() == "flag it",
+            "mild keeps the movement, flagged": (w["exercises"][a].get("flag") or {}).get("severity") == "mild"
+                and w["exercises"][a]["name"] == s.ev("id => DB.getExercise(id).name", w["exercises"][a]["id"]),
+            "sharp skips it": ex[b].get("skipped") is True,
+            "both in the flag history": (ex[a]["key"], "mild") in hist and (ex[b]["key"], "sharp") in hist,
+            "with two different ids (a sync unions by id)": len(ids) == 2 and len(set(ids)) == 2,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "parts %s; button %r; flags %s; skipped %s; history %s; ids distinct %s" % (
+                parts, label.strip(), [(e.get("flag") or {}).get("severity") for e in w["exercises"]],
+                [e.get("skipped") for e in ex], hist, len(set(ids)) == len(ids)), s.errors
+    finally:
+        s.close()
+
+
+@case("R3b", "A finisher pick with no set logged gets no coverage record; a trained one does")
+def r3b(pw):
+    s, fin = finisher_begun(pw)
+    try:
+        cov = s.ev(COVERAGE_SLOTS)
+        w = draft(s)
+        trained = w["exercises"][fin[0]]["slot"]
+        log_set(s, 0, 0, 8)                         # one main set
+        log_set(s, fin[0], 0, 10)                   # one set on the first pick only
+        complete(s)
+        made = sorted(k for k in s.state()["training"]["slots"] if k in cov)
+        ok = made == [trained]
+        return ok, "picks %s; logged on %s; records %s" % (
+            [w["exercises"][i]["slot"] for i in fin], trained, made), s.errors
+    finally:
+        s.close()
+
+
+@case("R3c", "Neck on avoid: the Coverage row names the limit, not equipment, and promises no start")
+def r3c(pw):
+    s = Session(pw, now=ist(2026, 10, 1, 12, 0))
+    try:
+        onboard(s)
+        open_settings(s)
+        s.choose('#set-limits [data-limit="neck"]', "avoid")
+        s.tap("#btn-settings-save")
+        s.pg.wait_for_timeout(300)
+        open_section(s, "program")
+        row = s.ev("""() => { const r = document.querySelector('#pg-coverage [data-pg-slot="neck"]');
+            return r ? r.innerText.replace(/\\s+/g, ' ') : ''; }""")
+        checks = {
+            "names the neck limit": "avoiding your neck" in row.lower(),
+            "doesn't blame equipment": "equipment" not in row.lower(),
+            "doesn't promise a start": "starts it" not in row,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "neck row %r" % row[:160], s.errors
+    finally:
+        s.close()
 
 
 def main() -> int:

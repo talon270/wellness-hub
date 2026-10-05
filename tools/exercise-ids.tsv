@@ -84,3 +84,67 @@ dip_alt_chair	dip	Chair Bench Dip
 dip_alt_twochair	dip	Two-Chair Dip
 push_incline	push	Incline Push-up
 squat_split	squat	Split Squat
+acc_curl_doorframe	accessory	Door-Frame Curl
+acc_curl_invrow	accessory	Underhand Inverted Row
+acc_curl_band	accessory	Band Curl
+acc_curl_db	accessory	Dumbbell Curl
+acc_curl_hammer	accessory	Hammer Curl
+acc_lateral_iso	accessory	Isometric Lateral Raise
+acc_lateral_band	accessory	Band Lateral Raise
+acc_lateral_db	accessory	Dumbbell Lateral Raise
+acc_lateral_leanaway	accessory	Lean-Away Lateral Raise
+acc_reardelt_tdraise	accessory	Prone T-Raise
+acc_reardelt_snowangel	accessory	Reverse Snow Angel
+acc_reardelt_bandpull	accessory	Band Pull-Apart
+acc_reardelt_facepull	accessory	Band Face Pull
+acc_reardelt_dbfly	accessory	Bent-Over Reverse Fly
+acc_cuff_walllift	accessory	Wall Slide with Lift-Off
+acc_cuff_pronew	accessory	Prone W Raise
+acc_cuff_bander	accessory	Band External Rotation
+acc_cuff_sidelying	accessory	Side-Lying External Rotation
+acc_traps_pike	accessory	Pike Shrug
+acc_traps_band	accessory	Band Shrug
+acc_traps_shrug	accessory	Shrug
+acc_neck_chintuck	accessory	Chin Tuck Hold
+acc_neck_fourway	accessory	Four-Way Neck Isometric
+acc_neck_lyingraise	accessory	Lying Neck Raise
+acc_grip_wring	accessory	Towel Wring Hold
+acc_grip_towelhang	accessory	Towel Hang
+acc_grip_farmer	accessory	Farmer Hold
+acc_grip_wristcurl	accessory	Wrist Curl
+acc_grip_revwristcurl	accessory	Reverse Wrist Curl
+acc_quad_wallsit	accessory	Wall Sit
+acc_quad_revlunge	accessory	Reverse Lunge
+acc_quad_stepup	accessory	Step-Up
+acc_quad_sissy	accessory	Assisted Sissy Squat
+acc_quad_dbsplit	accessory	Dumbbell Split Squat
+acc_quad_spanish	accessory	Spanish Squat
+acc_hamstring_slidecurl	accessory	Sliding Leg Curl
+acc_hamstring_slidecurl1	accessory	Single-Leg Sliding Leg Curl
+acc_hamstring_slrdl	accessory	Single-Leg RDL (Bodyweight)
+acc_hamstring_slrdldb	accessory	Single-Leg RDL with Dumbbell
+acc_hamstring_bandcurl	accessory	Band Leg Curl
+acc_calf_raise	accessory	Calf Raise on a Step
+acc_calf_single	accessory	Single-Leg Calf Raise
+acc_calf_bentknee	accessory	Bent-Knee Calf Raise
+acc_calf_weighted	accessory	Weighted Single-Leg Calf Raise
+acc_shin_wall	accessory	Wall Tibialis Raise
+acc_shin_single	accessory	Single-Leg Tibialis Raise
+acc_adductor_sidelying	accessory	Side-Lying Adduction
+acc_adductor_copknee	accessory	Copenhagen Plank, Knee on a Chair
+acc_adductor_copfoot	accessory	Copenhagen Plank, Foot on a Chair
+acc_adductor_band	accessory	Band Adduction
+acc_abductor_sidelying	accessory	Side-Lying Abduction
+acc_abductor_sideplank	accessory	Side Plank Abduction
+acc_abductor_bandwalk	accessory	Banded Lateral Walk
+acc_abductor_clamshell	accessory	Banded Clamshell
+acc_antirot_knees	accessory	Side Plank from Knees
+acc_antirot_sideplank	accessory	Side Plank
+acc_antirot_leg	accessory	Side Plank, Top Leg Raised
+acc_antirot_deadbug	accessory	Dead Bug
+acc_antirot_pallof	accessory	Pallof Press
+acc_antirot_suitcase	accessory	Suitcase Hold
+acc_backext_birddog	accessory	Bird Dog
+acc_backext_prone	accessory	Prone Back Extension
+acc_backext_revhyper	accessory	Reverse Hyperextension
+acc_backext_goodmorning	accessory	Dumbbell Good Morning

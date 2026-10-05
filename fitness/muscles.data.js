@@ -10,19 +10,24 @@
      window.MUSCLE_MAP      exerciseId -> { primary[], secondary[], stabiliser[] }
      window.MUSCLE_FALLBACK pattern -> same shape (safety net for future ids)
      window.MUSCLE_WEEK     the model behind each group's weekly target (1b)
+     window.MUSCLE_FLOORS   the weekly floor of direct sets per group (1c)
      window.MUSCLE_RANKS    ordered rank names, index 0 = level 1
 
-   THE TAXONOMY IS SIZED TO THIS APP
-     An earlier draft imported 19 groups from a general-purpose fitness site.
-     Five of them — neck, calves, adductors, traps, rear delts — have no
-     exercise in this 86-movement calisthenics library that meaningfully trains
-     them. A group that can never level up is a dead tile and an unearnable
-     badge, so they are not groups here. Traps and rear delts fold into
-     `upper_back`, which is honest for rows and scapular work.
+   THE TAXONOMY IS 22 GROUPS, EACH WITH A MOVEMENT THAT TRAINS IT
+     The first 14 were sized to the 86-movement library: five groups an imported
+     taxonomy had brought in (neck, calves, adductors, traps, rear delts) were
+     cut because nothing in it trained them, and a group that can never level up
+     is a dead tile and an unearnable badge. Stage 3 (plan D1) brought them back
+     together with the rotator cuff, abductors and shins, because it wrote the
+     movements that train them: 64 coverage exercises, each in a slot that tops
+     up one group (training.data.js SLOTS[x].coverage). So the rule is the same
+     and the library moved: a group exists only if some exercise has it as a
+     PRIMARY mover. `tools/check-muscle-map.js` enforces that, and there is no
+     `assist` exemption any more.
 
-     Adding a calf raise later? Add the exercise, map it to a new group, and
-     `tools/check-muscle-map.js` will confirm the group is reachable. Nothing
-     else needs to change: everything that says "every group" reads this list.
+     Adding a group later? Add the exercise, map it to the group, and the check
+     will confirm the group is reachable. Everything that says "every group"
+     reads this list.
 
    CONTRIBUTION TIERS
      primary    1.00  — the movement's actual target
@@ -48,25 +53,28 @@
     { key: "triceps",     label: "Triceps",          short: "Tri",    region: "back" },
     { key: "lats",        label: "Lats",             short: "Lats",   region: "back" },
     { key: "upper_back",  label: "Upper back",       short: "U.back", region: "back" },
-    /* Assist-only: no movement in an 86-exercise calisthenics library targets
-       the spinal erectors directly — they brace on hinges, rows and deep squats
-       and that is the whole of it. The group is kept because that work is real
-       and worth seeing, but it is marked so the audit and the balance badge
-       treat it honestly rather than expecting a primary movement that does not
-       and should not exist here. */
-    { key: "lower_back",  label: "Lower back",       short: "L.back", region: "back", assist: true },
+    /* Was assist-only (it braced on hinges, rows and deep squats and nothing
+       led with it). Stage 3's back-extension slot gives it a primary. */
+    { key: "lower_back",  label: "Lower back",       short: "L.back", region: "back" },
     { key: "biceps",      label: "Biceps",           short: "Bi",     region: "front" },
     { key: "forearms",    label: "Forearms & grip",  short: "Grip",   region: "front" },
     { key: "abs",         label: "Abs",              short: "Abs",    region: "front" },
-    /* Assist-only for the same reason: there is no side plank, Russian twist,
-       windshield wiper or suitcase carry in this library. The obliques get
-       genuine anti-rotation work from archer and one-arm variants, unilateral
-       squats and every hollow-body hold — 19 exercises touch them — but none of
-       those is an oblique exercise. */
-    { key: "obliques",    label: "Obliques",         short: "Obl",    region: "front", assist: true },
+    /* Was assist-only for the same reason: there was no side plank, Pallof
+       press or suitcase hold. Stage 3's anti-rotation slot adds them. */
+    { key: "obliques",    label: "Obliques",         short: "Obl",    region: "front" },
     { key: "glutes",      label: "Glutes",           short: "Glute",  region: "back" },
     { key: "quads",       label: "Quads",            short: "Quad",   region: "front" },
-    { key: "hamstrings",  label: "Hamstrings",       short: "Ham",    region: "back" }
+    { key: "hamstrings",  label: "Hamstrings",       short: "Ham",    region: "back" },
+    /* Stage 3 (plan D1). Traps and rear delts used to fold into upper_back; they
+       are their own groups now, so a row credits them separately. */
+    { key: "delts_rear",  label: "Rear delts",       short: "R.delt", region: "back" },
+    { key: "traps",       label: "Traps",            short: "Traps",  region: "back" },
+    { key: "rotator_cuff",label: "Rotator cuff",     short: "Cuff",   region: "back" },
+    { key: "neck",        label: "Neck",             short: "Neck",   region: "front" },
+    { key: "abductors",   label: "Abductors",        short: "Abd",    region: "back" },
+    { key: "adductors",   label: "Adductors",        short: "Add",    region: "front" },
+    { key: "calves",      label: "Calves",           short: "Calf",   region: "back" },
+    { key: "shins",       label: "Shins",            short: "Shin",   region: "front" }
   ];
 
   /* --------------------------------------------------------------------------
@@ -101,6 +109,52 @@
   };
 
   /* --------------------------------------------------------------------------
+     1c) WEEKLY FLOORS — direct sets, not template-relative targets
+     The weekly target above is built from the template's own slots, so a group
+     the template neglects gets a tiny target and reads "On target" (plan F7).
+     A floor is the other gauge: the least DIRECT work a group should get in 7
+     days, counted in performed sets where the group is a primary mover.
+
+       sets  the floor. 6 where a coverage slot tops the group up; 3 for the
+             rotator cuff, neck and shins, which are done at 12–20 reps and
+             aren't built up the way a muscle is; 3 for the seven groups only
+             the main slots train, so any template followed clears it. These
+             are product choices, not validated minimums — the Muscles screen
+             says so beside the number.
+       via   "main"      only the main slots train it; every template has to
+                         clear it, and tools/check-muscle-map.js checks that.
+             "coverage"  a coverage slot tops it up, and the check requires one
+                         whose exercises all count as direct work for it.
+
+     Groups a main slot already trains as a secondary (quads, hamstrings) are
+     still "coverage" here: the main slots reach them through secondary work, and
+     a floor counts primaries. */
+  var MUSCLE_FLOORS = {
+    chest:        { sets: 3, via: "main" },
+    delts_front:  { sets: 3, via: "main" },
+    triceps:      { sets: 3, via: "main" },
+    lats:         { sets: 3, via: "main" },
+    upper_back:   { sets: 3, via: "main" },
+    abs:          { sets: 3, via: "main" },
+    glutes:       { sets: 3, via: "main" },
+    quads:        { sets: 6, via: "coverage" },
+    hamstrings:   { sets: 6, via: "coverage" },
+    biceps:       { sets: 6, via: "coverage" },
+    delts_side:   { sets: 6, via: "coverage" },
+    delts_rear:   { sets: 6, via: "coverage" },
+    traps:        { sets: 6, via: "coverage" },
+    forearms:     { sets: 6, via: "coverage" },
+    obliques:     { sets: 6, via: "coverage" },
+    lower_back:   { sets: 6, via: "coverage" },
+    calves:       { sets: 6, via: "coverage" },
+    adductors:    { sets: 6, via: "coverage" },
+    abductors:    { sets: 6, via: "coverage" },
+    rotator_cuff: { sets: 3, via: "coverage" },
+    neck:         { sets: 3, via: "coverage" },
+    shins:        { sets: 3, via: "coverage" }
+  };
+
+  /* --------------------------------------------------------------------------
      2) RANKS — BASALT's own rock/forge vocabulary.
      These are NEVER shown without the underlying work-unit count beside them.
      "Granite" says nothing about 3,280 rep-units on its own, and a rank alone
@@ -128,7 +182,7 @@
   };
 
   /* --------------------------------------------------------------------------
-     4) THE MAP — every one of the 86 ids in EXERCISE_DB, explicitly.
+     4) THE MAP — every id in EXERCISE_DB (86 + the 64 coverage exercises), explicitly.
      `m(primary, secondary, stabiliser)` keeps the rows readable.
      ------------------------------------------------------------------------ */
   var MUSCLE_MAP = {};
@@ -164,16 +218,16 @@
   m("pull_4", ["lats", "upper_back"], ["biceps", "forearms"], ["abs"]);
   m("pull_5", ["lats", "biceps"], ["upper_back", "forearms"], ["abs"]);     /* chin-up → biceps lead */
   m("pull_6", ["lats", "upper_back"], ["biceps", "forearms"], ["abs", "obliques"]);
-  m("pull_e2_dbrow", ["upper_back", "lats"], ["biceps"], ["lower_back"]);
+  m("pull_e2_dbrow", ["upper_back", "lats"], ["biceps", "delts_rear", "traps"], ["lower_back"]);
   m("pull_alt_passivehang", ["forearms"], [], ["upper_back"]);
-  m("pull_alt_australian", ["upper_back"], ["lats", "biceps"], ["abs"]);    /* the one true rear-delt/row movement */
+  m("pull_alt_australian", ["upper_back"], ["lats", "biceps", "delts_rear", "traps"], ["abs"]);
   m("pull_alt_bandassist", ["lats", "upper_back"], ["biceps", "forearms"], ["abs"]);
-  m("pull_alt_row", ["upper_back", "lats"], ["biceps"], ["lower_back"]);
-  m("pull_alt_tabledoor", ["upper_back"], ["lats", "biceps"], ["abs"]);
-  m("pull_alt_towel", ["upper_back", "forearms"], ["lats", "biceps"], ["abs"]);
+  m("pull_alt_row", ["upper_back", "lats"], ["biceps", "delts_rear", "traps"], ["lower_back"]);
+  m("pull_alt_tabledoor", ["upper_back"], ["lats", "biceps", "delts_rear", "traps"], ["abs"]);
+  m("pull_alt_towel", ["upper_back", "forearms"], ["lats", "biceps", "delts_rear", "traps"], ["abs"]);
 
   /* ---- SQUAT: knee-dominant ---- */
-  m("squat_1", ["quads", "glutes"], ["hamstrings"], ["abs"]);
+  m("squat_1", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs"]);
   m("squat_2", ["quads", "glutes"], ["hamstrings"], ["abs"]);
   m("squat_3", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);   /* unilateral */
   m("squat_split", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]); /* unilateral, rear foot on the floor */
@@ -182,8 +236,8 @@
   m("squat_6", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);
   m("squat_e2_goblet", ["quads", "glutes"], ["hamstrings"], ["abs", "upper_back"]);
   m("squat_alt_narrow", ["quads"], ["glutes"], ["abs"]);
-  m("squat_alt_deep", ["quads", "glutes"], ["hamstrings"], ["abs", "lower_back"]);
-  m("squat_alt_cossack", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);
+  m("squat_alt_deep", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "lower_back"]);
+  m("squat_alt_cossack", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques"]);
   m("squat_alt_assistedpistol", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);
 
   /* ---- HINGE: hip-dominant ---- */
@@ -205,13 +259,13 @@
   m("core_6", ["abs"], ["obliques", "lower_back"], []);
 
   /* ---- SHOULDER: vertical pressing ---- */
-  m("shoulder_1", ["delts_front", "triceps"], ["delts_side"], ["abs"]);
-  m("shoulder_2", ["delts_front", "triceps"], ["delts_side"], ["abs"]);
-  m("shoulder_3", ["delts_front"], ["delts_side", "triceps"], ["abs", "forearms"]);
-  m("shoulder_4", ["delts_front"], ["delts_side", "triceps"], ["abs", "forearms"]);
-  m("shoulder_5", ["delts_front", "triceps"], ["delts_side"], ["abs", "forearms"]);
-  m("shoulder_6", ["delts_front", "triceps"], ["delts_side"], ["abs", "forearms"]);
-  m("shoulder_e2_ohp", ["delts_front", "delts_side"], ["triceps"], ["abs"]);
+  m("shoulder_1", ["delts_front", "triceps"], ["delts_side"], ["abs", "traps"]);
+  m("shoulder_2", ["delts_front", "triceps"], ["delts_side"], ["abs", "traps"]);
+  m("shoulder_3", ["delts_front"], ["delts_side", "triceps"], ["abs", "forearms", "traps"]);
+  m("shoulder_4", ["delts_front"], ["delts_side", "triceps"], ["abs", "forearms", "traps"]);
+  m("shoulder_5", ["delts_front", "triceps"], ["delts_side"], ["abs", "forearms", "traps"]);
+  m("shoulder_6", ["delts_front", "triceps"], ["delts_side"], ["abs", "forearms", "traps"]);
+  m("shoulder_e2_ohp", ["delts_front", "delts_side"], ["triceps"], ["abs", "traps"]);
 
   /* ---- DIP: triceps-led vertical pressing ---- */
   m("dip_1", ["triceps"], ["chest", "delts_front"], ["abs"]);
@@ -233,14 +287,105 @@
   m("skill_frontlever_2", ["lats", "abs"], ["upper_back"], ["forearms"]);
   m("skill_frontlever_3", ["lats", "abs"], ["upper_back", "glutes"], ["forearms"]);
   m("skill_frontlever_4", ["lats", "abs"], ["upper_back", "glutes"], ["forearms"]);
-  m("skill_handstand_1", ["delts_front", "abs"], ["triceps"], ["forearms"]);
-  m("skill_handstand_2", ["delts_front"], ["triceps", "abs"], ["forearms"]);
-  m("skill_handstand_3", ["delts_front"], ["triceps", "abs"], ["forearms"]);
-  m("skill_handstand_4", ["delts_front"], ["triceps", "abs"], ["forearms"]);
+  m("skill_handstand_1", ["delts_front", "abs"], ["triceps"], ["forearms", "traps"]);
+  m("skill_handstand_2", ["delts_front"], ["triceps", "abs"], ["forearms", "traps"]);
+  m("skill_handstand_3", ["delts_front"], ["triceps", "abs"], ["forearms", "traps"]);
+  m("skill_handstand_4", ["delts_front"], ["triceps", "abs"], ["forearms", "traps"]);
   m("skill_lsit_1", ["abs"], ["quads"], ["triceps"]);
   m("skill_lsit_2", ["abs"], ["quads", "obliques"], ["triceps", "forearms"]);
   m("skill_lsit_3", ["abs"], ["quads", "obliques"], ["triceps", "forearms"]);
   m("skill_vsit", ["abs"], ["quads", "obliques"], ["triceps", "forearms"]);
+
+  /* ---- COVERAGE (Stage 3, plan D2): upper body, neck and grip ----
+     Each slot tops up one group, so every exercise in it lists that group as a
+     PRIMARY: the weekly floor counts performed sets where the group is primary,
+     and tools/check-muscle-map.js fails on a slot member that doesn't. Anything
+     else the movement really does goes in the lower tiers. */
+  /* curl → biceps */
+  m("acc_curl_doorframe", ["biceps"], ["forearms"], ["abs"]);
+  m("acc_curl_invrow", ["biceps", "lats"], ["upper_back", "forearms", "delts_rear"], ["abs"]);  /* underhand: the biceps share the pull with the lats */
+  m("acc_curl_band", ["biceps"], ["forearms"], []);
+  m("acc_curl_db", ["biceps"], ["forearms"], []);
+  m("acc_curl_hammer", ["biceps"], ["forearms"], []);                       /* neutral grip: brachialis and forearm take more */
+  /* lateral → side delts */
+  m("acc_lateral_iso", ["delts_side"], ["rotator_cuff"], ["traps"]);
+  m("acc_lateral_band", ["delts_side"], ["rotator_cuff", "traps"], []);
+  m("acc_lateral_db", ["delts_side"], ["traps", "rotator_cuff"], ["forearms"]);
+  m("acc_lateral_leanaway", ["delts_side"], ["traps", "rotator_cuff"], ["obliques", "forearms"]);
+  /* reardelt → rear delts */
+  m("acc_reardelt_tdraise", ["delts_rear"], ["upper_back", "traps"], ["lower_back"]);
+  m("acc_reardelt_snowangel", ["delts_rear"], ["upper_back", "traps"], ["lower_back"]);
+  m("acc_reardelt_bandpull", ["delts_rear"], ["upper_back", "traps", "rotator_cuff"], []);
+  m("acc_reardelt_facepull", ["delts_rear"], ["rotator_cuff", "traps", "upper_back"], []);
+  m("acc_reardelt_dbfly", ["delts_rear"], ["upper_back", "traps"], ["lower_back", "forearms"]);
+  /* cuff → rotator cuff */
+  m("acc_cuff_walllift", ["rotator_cuff"], ["traps", "delts_rear"], []);
+  m("acc_cuff_pronew", ["rotator_cuff"], ["delts_rear", "upper_back", "traps"], ["lower_back"]);
+  m("acc_cuff_bander", ["rotator_cuff"], ["delts_rear"], []);
+  m("acc_cuff_sidelying", ["rotator_cuff"], ["delts_rear"], []);
+  /* traps → traps */
+  m("acc_traps_pike", ["traps"], ["delts_front"], ["abs", "triceps"]);
+  m("acc_traps_band", ["traps"], ["forearms"], []);
+  m("acc_traps_shrug", ["traps"], ["forearms"], ["abs"]);
+  /* neck → neck */
+  m("acc_neck_chintuck", ["neck"], [], []);
+  m("acc_neck_fourway", ["neck"], ["traps"], []);
+  m("acc_neck_lyingraise", ["neck"], ["traps"], []);
+  /* grip → forearms */
+  m("acc_grip_wring", ["forearms"], ["biceps"], []);
+  m("acc_grip_towelhang", ["forearms"], ["lats"], ["upper_back"]);
+  m("acc_grip_farmer", ["forearms"], ["traps"], ["abs", "obliques", "lower_back"]);
+  m("acc_grip_wristcurl", ["forearms"], [], []);
+  m("acc_grip_revwristcurl", ["forearms"], [], []);
+
+  /* ---- COVERAGE (Stage 3, plan D2): lower body and trunk ----
+     Same rule: the slot's group is a PRIMARY on every member. Where a movement
+     really works a second group about as hard (the dead bug, the reverse
+     hyper), the second group is still kept in a lower tier, so its floor isn't
+     padded by work that was bought for another group. */
+  /* quad → quads */
+  m("acc_quad_wallsit", ["quads"], ["glutes"], ["abs"]);
+  m("acc_quad_revlunge", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques"]);
+  m("acc_quad_stepup", ["quads", "glutes"], ["hamstrings", "calves"], ["abs", "obliques"]);
+  m("acc_quad_sissy", ["quads"], [], ["abs", "calves"]);
+  m("acc_quad_spanish", ["quads"], ["glutes"], ["abs"]);
+  m("acc_quad_dbsplit", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques", "forearms"]);
+  /* hamstring → hamstrings */
+  m("acc_hamstring_slidecurl", ["hamstrings"], ["glutes"], ["abs", "lower_back"]);
+  m("acc_hamstring_slidecurl1", ["hamstrings"], ["glutes"], ["abs", "lower_back", "obliques"]);
+  m("acc_hamstring_bandcurl", ["hamstrings"], ["calves"], ["abs"]);
+  m("acc_hamstring_slrdl", ["hamstrings", "glutes"], ["lower_back"], ["abs", "obliques"]);
+  m("acc_hamstring_slrdldb", ["hamstrings", "glutes"], ["lower_back"], ["abs", "obliques", "forearms"]);
+  /* calf → calves */
+  m("acc_calf_raise", ["calves"], [], ["abs"]);
+  m("acc_calf_single", ["calves"], [], ["abs", "obliques"]);
+  m("acc_calf_bentknee", ["calves"], [], ["quads", "abs"]);               /* knee bent: the lower calf takes it */
+  m("acc_calf_weighted", ["calves"], [], ["abs", "obliques", "forearms"]);
+  /* shin → shins */
+  m("acc_shin_wall", ["shins"], [], []);
+  m("acc_shin_single", ["shins"], [], ["abs"]);
+  /* adductor → adductors */
+  m("acc_adductor_sidelying", ["adductors"], [], ["abs"]);
+  m("acc_adductor_copknee", ["adductors"], ["obliques", "abs"], []);
+  m("acc_adductor_copfoot", ["adductors"], ["obliques", "abs"], []);
+  m("acc_adductor_band", ["adductors"], [], ["abductors", "abs"]);        /* the standing leg's abductors hold you up */
+  /* abductor → abductors */
+  m("acc_abductor_sidelying", ["abductors"], ["glutes"], ["obliques"]);
+  m("acc_abductor_sideplank", ["abductors"], ["obliques", "glutes"], ["abs"]);
+  m("acc_abductor_bandwalk", ["abductors"], ["glutes", "quads"], ["abs"]);
+  m("acc_abductor_clamshell", ["abductors"], ["glutes"], ["obliques"]);
+  /* antirot → obliques */
+  m("acc_antirot_knees", ["obliques"], ["abs"], ["abductors"]);
+  m("acc_antirot_sideplank", ["obliques"], ["abs", "abductors"], []);
+  m("acc_antirot_leg", ["obliques"], ["abs", "abductors"], []);           /* the raised leg abducts, but it's a hold: secondary */
+  m("acc_antirot_deadbug", ["abs", "obliques"], [], ["lower_back"]);      /* anti-extension and anti-rotation in one */
+  m("acc_antirot_pallof", ["obliques"], ["abs"], []);
+  m("acc_antirot_suitcase", ["obliques"], ["forearms", "traps"], ["abs", "lower_back"]);
+  /* backext → lower back */
+  m("acc_backext_birddog", ["lower_back"], ["glutes"], ["abs", "obliques"]);
+  m("acc_backext_prone", ["lower_back"], ["glutes", "upper_back"], []);
+  m("acc_backext_revhyper", ["lower_back"], ["glutes", "hamstrings"], ["abs"]);
+  m("acc_backext_goodmorning", ["lower_back"], ["hamstrings", "glutes"], ["abs"]);
 
   /* --------------------------------------------------------------------------
      5) EXPORT
@@ -249,6 +394,7 @@
   window.MUSCLE_MAP      = MUSCLE_MAP;
   window.MUSCLE_FALLBACK = MUSCLE_FALLBACK;
   window.MUSCLE_WEEK     = MUSCLE_WEEK;
+  window.MUSCLE_FLOORS   = MUSCLE_FLOORS;
   window.MUSCLE_RANKS    = MUSCLE_RANKS;
 
 })();

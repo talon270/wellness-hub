@@ -164,14 +164,49 @@ level-up toast, and the caption says it in one line. It is called
 **conditioning**, not strength, and not "level" — the app already has levels,
 on the progression ladders, and those measure something real.
 
-**The muscle map is sized to this app, not borrowed.** Every one of the 86
+**The muscle map is sized to this app, not borrowed.** Every one of the 150
 movements is mapped to the muscles it trains, at three weights: primary, real
 assistance, and bracing. Bracing is priced low on purpose — counting the core in
 a squat as 40% of squat volume made abs level three times faster than chest
-while barely being trained. Groups this library cannot reach aren't listed:
-there is no calf raise in calisthenics, so there is no calf tile to stare at
-forever. `node tools/check-muscle-map.js` enforces both halves of that — every
+while barely being trained. There are 22 groups, and every one has at least one
+movement that trains it as a primary mover: a calf raise, a tibialis raise and a
+neck isometric are in the library now, so calves, shins and neck have tiles that
+can move. `node tools/check-muscle-map.js` enforces both halves — every
 exercise mapped, and every group actually reachable.
+
+**Direct sets against a floor catch what a template target can't.** "Vs. your
+template" is circular by construction: it is built from your template's own
+slots, so a group the template skips gets a tiny target and reads **On target**.
+Biceps in a rows-only week showed exactly that — assisting every row, never
+the prime mover, 0 direct sets. The Muscles screen now also counts **direct
+sets in 7 days** (a logged set where the group is a primary mover; secondary
+and bracing work counts for nothing here) against a weekly floor: 3 for the
+seven groups only your main slots train, 6 for the twelve a coverage slot tops
+up (quads among them, which squats also reach), 3 for rotator cuff, neck and
+shins. **Neglected** means below the floor, furthest short
+first — 20 of 22 groups after a week of rows. The floors are product choices,
+not validated minimums, and the screen says so beside the column.
+
+**The finisher and the Accessory session top up what the week is short on.**
+Both pick from 15 coverage slots (curl, lateral raise, rear delt, rotator cuff,
+traps, neck, grip, quad, hamstring, calf, shin, adductor, abductor,
+anti-rotation, back extension), 64 movements in all, each a ladder with an
+equipment-free first rung under the same step-up rule as the main slots. The
+**finisher** is a tick on the Workout screen, off until you turn it on: four
+picks after the main slots for the groups furthest below their floor, skipping
+any trained directly in the last 48 hours, each with its reason ("Biceps: 0 of 6
+direct sets this week"). Remove or swap one, or put it back. The **Accessory
+session** is a card on the ready, done-today and rest screens: 2 to 6 of the same
+picks on their own, on any day. It moves no rotation, rest day or attendance —
+the report counts it on its own line — and it does count for muscles, PRs,
+evidence, the BASALT streak and the fitness habit. Program's **Coverage** card
+lists each slot's movement and the week's count, and *Pin to* puts a slot first
+on chosen weekdays whatever its shortfall, though never past your equipment,
+exclusions or limits. Limits: the picks are a rule of thumb from your own logs,
+not a prescription; the minutes shown use the same 2.5 min a set plus rest as the
+main session, which overstates short isometric work; and "Full Sweep" and
+"Balanced Build" now span 22 groups, so they are harder (earned badges keep their
+date).
 
 **Weekly targets follow your template.** "Above target" compares your week
 against what a week of *your* template delivers to that group: its slots, its
@@ -271,6 +306,62 @@ day as a ticked checkbox, applied only if you save it ticked, and reversible in
 Program. Loaded movements are no longer locked behind Era II: anyone who owns
 dumbbells or kettlebells finds them in Swap, with the weight marked per hand or
 total.
+
+**You can overrule the ladder, and your choice stays.** Program → a slot →
+*Change exercise* lists every movement in that slot in three groups — *On your
+path*, *Branches* (Archer Push-up, Shrimp Squat) and *Weighted* — each tagged
+with why it might not work today: gear you lack, an exclusion, a joint you
+avoid. The pick is saved as the slot's prescription at the bottom of its range,
+marked "chosen by you", and stays until a step or another choice moves it. Before
+this, no slot could ever hold a branch move or a weighted one, so a path's end
+was a dead end: Decline Push-up could only be "swapped" for one session. Skill
+attempts (planche, lever, handstand, L-sit) aren't offered here; they stay in
+Skills. At the end of a path the card's optional next moves are now buttons
+(*Step into Archer Push-up*), and stepping back from a branch move goes to the
+movement that offers it.
+
+**Knuckle push-ups are a grip, not a rung.** Program → *Push-ups on: Palms /
+Knuckles* sets a standing grip for the six push-ups where a fist on the floor is
+a real option (Wall, Incline, Push-up, Decline, Wide, Negative); Diamond, Archer
+and Pseudo Planche stay on palms because the hand position is the point of
+them. The Today preview has a *Knuckles today* tick for one session. Knuckles
+count as slightly harder: a knuckles session is evidence for a palms
+prescription, a palms session isn't evidence for a knuckles one, and switching
+to knuckles starts that evidence again. That ordering is a product rule, not a
+measurement. A wrist pain swap named "Fist Push-up" used to relabel Push-up and
+flag it, so a knuckles user couldn't progress and their report filled with pain
+they didn't have; it now keeps the exercise on knuckles, and is still a pain
+swap — flagged, not evidence.
+
+**Exclusions and joint limits filter movements; they don't assess you.**
+*Exclude* in Change exercise takes a movement out of prescriptions, steps and
+Swap lists (Swap shows it behind *Show excluded*, and a one-off swap still
+works); Program's *Excluded movements* card is the way back. Settings → *Joint
+limits* sets each of eight joints to *Careful* or *Avoid*. Avoid removes the
+movements that load that joint heavily; careful only warns and ranks them lower;
+*Allow anyway* lets one movement past an avoid. A step, a swap list and the
+assessment all route round a blocked movement to the nearest one you allow. The
+scores behind this are a rubric applied by hand — 368 scores across the 150
+movements, 161 of them "heavy" — not a measurement, and the app can't see an
+injury or your form. If something hurts, stop.
+
+**Hold, and your own sets and range.** *Hold* pauses step-ups on one slot while
+leaving step-back offers on: the card says "Holding at 3 × 12 … step-ups are
+paused". *Sets & range* sets your own count (1–6) and range (top at least 2 above
+the bottom, up to 50 reps or 300 s) and survives a goal change; changing the sets
+starts that slot's evidence again, because a different number of sets is a
+different prescription.
+
+**Equipment is finer, and weights are the ones you have.** "Pull-up bar" used to
+stand for four things, so a doorway-bar owner was told Parallel Bar Dip and
+Band-Assisted Pull-up were ready. Dip bars, a waist-height bar, resistance bands
+and parallettes are now their own items in setup and Settings. The upgrade turned
+on only those your own sessions or slots show you have (a logged Parallel Bar Dip
+turns on dip bars), and a one-time *Check your equipment* card lists all four with
+the reason, per device. Settings → *Weights you have* sets, per implement,
+either an adjustable step and heaviest weight or a fixed list; a load step goes to
+the next weight you have. With nothing set, the steps are what they were:
+dumbbells +2.5 kg, kettlebells +4 kg, no limit.
 
 ---
 

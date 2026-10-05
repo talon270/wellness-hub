@@ -28,7 +28,7 @@
 
 .ms-row {
   display: grid;
-  grid-template-columns: minmax(96px, 1.1fr) minmax(104px, .9fr) minmax(140px, 1.6fr) 64px 116px 76px;
+  grid-template-columns: minmax(96px, 1.1fr) minmax(104px, .9fr) minmax(140px, 1.6fr) 64px 104px 132px 76px;
   align-items: center;
   gap: var(--sp-3);
   width: 100%;
@@ -65,6 +65,12 @@
 .ms-row__units { font-size: var(--fs-2xs); color: var(--text-400); white-space: nowrap; }
 .ms-row__win   { text-align: right; color: var(--text-200); }
 .ms-row__last  { font-size: var(--fs-xs); color: var(--text-400); }
+/* Direct sets against the floor: the words say "of", the warn colour only
+   backs them up. The suffix is for the stacked layout, where the column
+   header is hidden. */
+.ms-row__direct { font-size: var(--fs-xs); color: var(--text-300); }
+.ms-row__direct.is-short { color: var(--warn); }
+.ms-row__dsuffix { display: none; }
 
 .ms-row__heat { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-300); }
 
@@ -154,6 +160,8 @@
   .ms-row__lvl  { grid-column: 2; text-align: right; }
   .ms-row__bar  { grid-column: 1 / -1; }
   .ms-row__win  { display: none; }
+  .ms-row__direct { grid-column: 1 / -1; }
+  .ms-row__dsuffix { display: inline; }
   .ms-row__heat { grid-column: 1; }
   .ms-row__last { grid-column: 2; text-align: right; }
 }

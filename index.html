@@ -322,6 +322,16 @@
         <div class="set-sec__label">Equipment</div>
         <p class="faint text-xs" style="margin:0 0 var(--sp-3)">Toggle what you have access to. This controls which movements appear as "ready" when you swap exercises.</p>
         <div class="set-equip" id="set-equip"></div>
+        <div class="set-sec__label mt-4" style="margin-bottom:var(--sp-2)">Weights you have</div>
+        <p class="faint text-xs" style="margin:0 0 var(--sp-3)">A load step goes to the next weight you actually have. Adjustable dumbbells step by the amount you set, up to the heaviest you list; fixed ones go to the next on your list. Blank is today's default: dumbbells +2.5 kg, kettlebells +4 kg, no limit.</p>
+        <div class="stack" id="set-weights"></div>
+      </div>
+
+      <!-- JOINT LIMITS -->
+      <div class="set-sec">
+        <div class="set-sec__label">Joint limits</div>
+        <p class="faint text-xs" style="margin:0 0 var(--sp-3)"><b>Careful</b> warns on a movement and ranks it lower in Swap lists. <b>Avoid</b> takes out movements that load that joint heavily (you can allow one anyway, from Program). This filters movements by a rubric scored by hand, not measured; it can't assess an injury or see your form. If something hurts, stop and ask someone who can examine it.</p>
+        <div class="set-grid" id="set-limits"></div>
       </div>
 
       <!-- REST TIMER -->
@@ -350,6 +360,7 @@
         </div>
       </div>
 
+      <p class="text-sm" id="set-err" role="alert" style="color:var(--danger,#f66);margin:0" hidden></p>
       <button class="btn btn--primary btn--block" id="btn-settings-save">Save changes</button>
 
       <!-- DATA -->
@@ -503,6 +514,7 @@
 <script src="fitness/training.js"></script>      <!-- step up / repeat / reduce; basalt.js's v4 migration needs it -->
 <script src="fitness/basalt.js"></script>   <!-- the calisthenics engine -->
 <script src="fitness/muscles.data.js"></script> <!-- exercise -> muscle map -->
+<script src="fitness/coverage.js"></script>     <!-- which coverage slots a finisher or mini-session picks -->
 <script src="fitness/phases.data.js"></script>  <!-- per-phase activation + pose rigs -->
 <script src="fitness/phases.js"></script>       <!-- phase visualiser in the guide modal -->
 <script src="fitness/muscles.js"></script>      <!-- muscle coverage + conditioning levels -->
