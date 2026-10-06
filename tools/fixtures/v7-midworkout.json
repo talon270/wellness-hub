@@ -1,0 +1,1309 @@
+{
+ "_note": "localStorage as the schema v7 build (HEAD 7331c54: Stage 1 and 2 of plans/PLAN-yellow-dude.md, with the guides) left it, mid-workout, captured 2026-10-07 by real clicks with the clock set to Asia/Kolkata dates (scratchpad capture script, step 4.1): onboarded Mon 5 Oct (rotation template, Not sure on every assessment question); Settings ticked pull-up bar, jump rope, sturdy box and weighted vest and saved; Muscle-up put in the Pull slot and Jump Rope in the Conditioning slot from their Exercises pages (Train this in my slot); Conditioning pinned to Wednesdays; the finisher ticked on. Then a finished Push workout at 07:30 on Wed 7 Oct (main sets at 5, every finisher set at the top of its range, each rated Just right), whose finisher is Jump Rope because it was pinned, and Pull begun 07:30 on Fri 9 Oct with 3 / 3 logged on its first movement (Muscle-up), not finished. The Nordic anchor is off and no Nordic curl is logged. Y15 seeds it into the current tree to check a v7 save survives the upgrade.",
+ "ironframe.ui": {
+  "muscle.seenLevels": {
+   "chest": 1,
+   "delts_front": 1,
+   "delts_side": 1,
+   "triceps": 1,
+   "lats": 1,
+   "upper_back": 1,
+   "lower_back": 1,
+   "biceps": 1,
+   "forearms": 1,
+   "abs": 1,
+   "obliques": 1,
+   "glutes": 1,
+   "quads": 1,
+   "hamstrings": 1,
+   "delts_rear": 1,
+   "traps": 1,
+   "rotator_cuff": 1,
+   "neck": 1,
+   "abductors": 1,
+   "adductors": 1,
+   "calves": 1,
+   "shins": 1
+  },
+  "section": "today",
+  "today.workout": {
+   "dayType": "pull",
+   "startedISO": "2026-10-09T02:00:02.288Z",
+   "warmup": [
+    false,
+    false,
+    false,
+    false,
+    false
+   ],
+   "cooldown": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "exercises": [
+    {
+     "slot": "pull",
+     "pattern": "skill",
+     "id": "skill_muscleup_full",
+     "name": "Muscle-up",
+     "level": null,
+     "mode": "reps",
+     "unit": "reps",
+     "equipment": [
+      "pullupBar"
+     ],
+     "cues": [
+      "Use a fixed, bodyweight-rated high bar with plenty of room above it and a safe landing below.",
+      "Pull high and fast, leading with your chest toward the bar.",
+      "Turn over smoothly and press to a straight-arm support on the bar.",
+      "Lower with control and reset between reps, rather than kipping."
+     ],
+     "mistakes": [
+      "A chicken-wing turnover, with one arm trailing.",
+      "Kipping to get through the sticking point."
+     ],
+     "readiness": "Expert work — you need a high pull to the lower chest, a controlled turnover and a straight-bar dip before the full movement.",
+     "injury": "The shoulders, elbows and wrists take heavy load; stop on pain, and step down from the bar if you lose control at the top.",
+     "rx": {
+      "exerciseId": "skill_muscleup_full",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       1,
+       5
+      ],
+      "unit": "reps",
+      "acceptedAt": "2026-10-05T02:00:07.833Z",
+      "why": "chosen by you"
+     },
+     "range": [
+      1,
+      5
+     ],
+     "target": 1,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 120,
+     "sets": [
+      {
+       "value": 3,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": 3,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": "moderate",
+     "flag": null
+    },
+    {
+     "slot": "row",
+     "pattern": "pull",
+     "id": "pull_alt_tabledoor",
+     "name": "Table / Door-Edge Row",
+     "level": null,
+     "mode": "reps",
+     "unit": "reps",
+     "equipment": [],
+     "cues": [
+      "Find a sturdy, heavy table (or a solid door braced fully open on its hinge side).",
+      "Lie underneath, reach up and grip the edge with both hands.",
+      "Keep the body in a straight plank line, heels on the floor.",
+      "Pull your chest up toward the edge, squeezing the back, then lower with control."
+     ],
+     "mistakes": [
+      "Using a light table that could tip — only use something that won't move.",
+      "Letting the hips sag instead of holding a rigid line."
+     ],
+     "readiness": "A no-bar horizontal pull — bend the knees to make it easier, straighten the body to make it harder.",
+     "injury": "Test the surface is rock-solid before loading it; keep the neck neutral.",
+     "rx": {
+      "exerciseId": "pull_alt_tabledoor",
+      "setup": {
+       "bodyAngle": "kneesBent"
+      },
+      "sets": 3,
+      "range": [
+       6,
+       12
+      ],
+      "unit": "reps",
+      "acceptedAt": "2026-10-05T02:00:02.759Z",
+      "why": "not sure at setup — the first movement"
+     },
+     "range": [
+      6,
+      12
+     ],
+     "target": 6,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 120,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    },
+    {
+     "slot": "hinge",
+     "pattern": "hinge",
+     "id": "hinge_1",
+     "name": "Glute Bridge",
+     "level": 1,
+     "mode": "reps",
+     "unit": "reps",
+     "equipment": [],
+     "cues": [
+      "Lie on your back, knees bent, feet flat and close to the hips.",
+      "Drive through the heels and lift the hips to a straight line.",
+      "Squeeze the glutes hard at the top — don't arch the lower back.",
+      "Lower with control without resting on the floor."
+     ],
+     "mistakes": [
+      "Pushing through the toes instead of the heels.",
+      "Overarching the lumbar spine to fake height."
+     ],
+     "readiness": "Advance at 20 reps with a strong 2-sec glute squeeze at the top.",
+     "injury": "Initiate from the glutes, not the lower back.",
+     "rx": {
+      "exerciseId": "hinge_1",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       6,
+       12
+      ],
+      "unit": "reps",
+      "acceptedAt": "2026-10-05T02:00:02.759Z",
+      "why": "not sure at setup — the first movement"
+     },
+     "range": [
+      6,
+      12
+     ],
+     "target": 6,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 120,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    },
+    {
+     "slot": "core",
+     "pattern": "core",
+     "id": "core_1",
+     "name": "Plank",
+     "level": 1,
+     "mode": "hold",
+     "unit": "sec",
+     "equipment": [],
+     "cues": [
+      "Forearms under shoulders, body in one straight line.",
+      "Brace the abs and squeeze the glutes — posteriorly tilt the pelvis.",
+      "Push the floor away to keep the upper back broad.",
+      "Breathe shallow but steady; don't let the hips sag."
+     ],
+     "mistakes": [
+      "Hips sagging or piking up.",
+      "Holding the breath and losing the brace."
+     ],
+     "readiness": "Advance at a 60-second rock-solid hold.",
+     "injury": "If the lower back aches, tuck the pelvis harder and shorten the hold.",
+     "rx": {
+      "exerciseId": "core_1",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       30,
+       60
+      ],
+      "unit": "sec",
+      "acceptedAt": "2026-10-05T02:00:02.759Z",
+      "why": "not sure at setup — the first movement"
+     },
+     "range": [
+      30,
+      60
+     ],
+     "target": 30,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 60,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null
+    },
+    {
+     "slot": "cuff",
+     "pattern": "accessory",
+     "id": "acc_cuff_walllift",
+     "name": "Wall Slide with Lift-Off",
+     "level": null,
+     "mode": "reps",
+     "unit": "reps",
+     "equipment": [],
+     "cues": [
+      "Stand with your back, head and hips against a wall and your feet a short step out. Bend the elbows to 90° with the forearms and the backs of the hands on the wall.",
+      "Slide the arms up the wall into a Y, keeping them in contact.",
+      "At the top, lift the hands a few centimetres off the wall and hold for a beat.",
+      "Lower with the arms still against the wall."
+     ],
+     "mistakes": [
+      "Letting the lower back arch away from the wall as the arms rise.",
+      "Shrugging the shoulders toward the ears."
+     ],
+     "readiness": "Ready to move on when every set reaches the top of the range on two different days.",
+     "injury": "Stay inside the range where the forearms still touch the wall. The work is in the small, controlled lift, not the reach.",
+     "rx": {
+      "exerciseId": "acc_cuff_walllift",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       12,
+       20
+      ],
+      "unit": "reps",
+      "acceptedAt": null,
+      "why": null
+     },
+     "range": [
+      12,
+      20
+     ],
+     "target": 12,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 120,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null,
+     "finisher": true,
+     "reason": "Rotator cuff: 0 of 3 direct sets this week"
+    },
+    {
+     "slot": "traps",
+     "pattern": "accessory",
+     "id": "acc_traps_pike",
+     "name": "Pike Shrug",
+     "level": null,
+     "mode": "reps",
+     "unit": "reps",
+     "equipment": [],
+     "cues": [
+      "Start in a pike: hands on the floor, hips high, legs straight or knees slightly bent, so your body makes an inverted V.",
+      "Keep the arms straight and push the floor away so the shoulders rise toward your ears.",
+      "Let the shoulders sink between the arms, then shrug up again.",
+      "Keep your head between your arms and your neck relaxed."
+     ],
+     "mistakes": [
+      "Bending the elbows, which turns it into a pike push-up.",
+      "Moving at the hips instead of the shoulders."
+     ],
+     "readiness": "Ready to move on when every set reaches the top of the range on two different days.",
+     "injury": "It loads the wrists like a pike push-up. Warm them up first, or rest on your fists if they complain.",
+     "rx": {
+      "exerciseId": "acc_traps_pike",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       10,
+       15
+      ],
+      "unit": "reps",
+      "acceptedAt": null,
+      "why": null
+     },
+     "range": [
+      10,
+      15
+     ],
+     "target": 10,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 120,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null,
+     "finisher": true,
+     "reason": "Traps: 0 of 6 direct sets this week"
+    },
+    {
+     "slot": "neck",
+     "pattern": "accessory",
+     "id": "acc_neck_chintuck",
+     "name": "Chin Tuck Hold",
+     "level": null,
+     "mode": "hold",
+     "unit": "sec",
+     "equipment": [],
+     "cues": [
+      "Sit or stand tall with your eyes level.",
+      "Draw the chin straight back, as if making a double chin, without tilting the head up or down.",
+      "Hold the position with the back of the neck long, and keep breathing.",
+      "Release slowly."
+     ],
+     "mistakes": [
+      "Tilting the head down instead of sliding it back.",
+      "Clenching the jaw and holding your breath."
+     ],
+     "readiness": "Ready to move on when the hold is steady for the full time on two different days.",
+     "injury": "Move slowly and never jerk; stop at dizziness, pain or tingling in the neck, arms or hands.",
+     "rx": {
+      "exerciseId": "acc_neck_chintuck",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       10,
+       20
+      ],
+      "unit": "sec",
+      "acceptedAt": null,
+      "why": null
+     },
+     "range": [
+      10,
+      20
+     ],
+     "target": 10,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 60,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null,
+     "finisher": true,
+     "reason": "Neck: 0 of 3 direct sets this week"
+    },
+    {
+     "slot": "grip",
+     "pattern": "accessory",
+     "id": "acc_grip_wring",
+     "name": "Towel Wring Hold",
+     "level": null,
+     "mode": "hold",
+     "unit": "sec",
+     "equipment": [],
+     "cues": [
+      "Take a dry hand towel and grip it with both hands, a fist's width apart.",
+      "Twist your hands in opposite directions as if wringing out water.",
+      "Hold the squeeze hard and steady, with your arms straight in front of you.",
+      "Release, and swap the twist direction between sets."
+     ],
+     "mistakes": [
+      "Wringing in short bursts instead of holding the squeeze.",
+      "Locking the wrists bent so the wrist tires before the forearm does."
+     ],
+     "readiness": "Ready to move on when the hold is steady for the full time on two different days.",
+     "injury": "Use a strong, dry towel and keep the wrists straight. Stop if they ache sharply.",
+     "rx": {
+      "exerciseId": "acc_grip_wring",
+      "setup": {},
+      "sets": 3,
+      "range": [
+       15,
+       30
+      ],
+      "unit": "sec",
+      "acceptedAt": null,
+      "why": null
+     },
+     "range": [
+      15,
+      30
+     ],
+     "target": 15,
+     "era2": false,
+     "accessory": false,
+     "note": "",
+     "swapped": false,
+     "restSec": 60,
+     "sets": [
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      },
+      {
+       "value": null,
+       "weight": null,
+       "done": false
+      }
+     ],
+     "difficulty": null,
+     "flag": null,
+     "finisher": true,
+     "reason": "Forearms & grip: 0 of 6 direct sets this week"
+    }
+   ],
+   "notes": "",
+   "setCount": 3,
+   "volumeMode": "standard",
+   "recovery": null,
+   "dayKey": "2026-10-09"
+  },
+  "rt": null
+ },
+ "ironframe.state.v1": {
+  "version": 7,
+  "meta": {
+   "createdAt": "2026-10-05T02:00:00.696Z",
+   "updatedAt": "2026-10-09T02:00:02.287Z",
+   "onboarded": true
+  },
+  "profile": {
+   "name": "",
+   "age": null,
+   "sex": "male",
+   "heightCm": null,
+   "weightKg": null,
+   "goal": "both",
+   "weightDirection": null,
+   "activity": "moderate",
+   "bmi": null,
+   "tdee": 2800,
+   "surplusTarget": 3300,
+   "macros": {
+    "protein": 116,
+    "carbs": 413,
+    "fat": 92
+   },
+   "hydrationTargetL": 3.2
+  },
+  "equipment": {
+   "pullupBar": true,
+   "dumbbells": true,
+   "bench": true,
+   "kettlebells": true,
+   "rings": false,
+   "nothing": false,
+   "bands": false,
+   "parallettes": false,
+   "dipBars": false,
+   "lowBar": false,
+   "vest": true,
+   "abWheel": false,
+   "jumpRope": true,
+   "box": true,
+   "barbell": false,
+   "nordicAnchor": false
+  },
+  "equipmentLoads": {},
+  "prefs": {
+   "restDefaultSec": 120,
+   "restHoldSec": 60,
+   "volumeMode": "standard",
+   "sessionLength": "focused",
+   "template": "rotation",
+   "finisher": "on"
+  },
+  "running": {
+   "goal": null,
+   "startISO": null,
+   "runDays": [
+    3,
+    6,
+    0
+   ],
+   "runLog": [],
+   "streak": {
+    "count": 0,
+    "lastISO": null,
+    "best": 0
+   },
+   "weekOffset": 0,
+   "askedWeek": null,
+   "moved": {}
+  },
+  "era": 1,
+  "benchmarks": {
+   "pushups": {
+    "label": "15 clean push-ups",
+    "metric": "reps",
+    "target": 15,
+    "current": 0,
+    "complete": false
+   },
+   "pull": {
+    "label": "5 pull-ups / 20 inverted rows",
+    "metric": "reps",
+    "target": 5,
+    "altTarget": 20,
+    "current": 0,
+    "complete": false
+   },
+   "lsit": {
+    "label": "30s L-sit tuck hold",
+    "metric": "sec",
+    "target": 30,
+    "current": 0,
+    "complete": false
+   },
+   "bulgarian": {
+    "label": "10 Bulgarian split squats /leg",
+    "metric": "reps",
+    "target": 10,
+    "current": 0,
+    "complete": false
+   },
+   "hollow": {
+    "label": "30s hollow body hold",
+    "metric": "sec",
+    "target": 30,
+    "current": 0,
+    "complete": false
+   }
+  },
+  "tiers": {
+   "push": {
+    "level": 1,
+    "repsTarget": 8,
+    "progress": 0
+   },
+   "pull": {
+    "level": 1,
+    "repsTarget": 5,
+    "progress": 0
+   },
+   "squat": {
+    "level": 1,
+    "repsTarget": 12,
+    "progress": 0
+   },
+   "hinge": {
+    "level": 1,
+    "repsTarget": 12,
+    "progress": 0
+   },
+   "core": {
+    "level": 1,
+    "repsTarget": 30,
+    "progress": 0
+   },
+   "shoulder": {
+    "level": 1,
+    "repsTarget": 6,
+    "progress": 0
+   },
+   "dip": {
+    "level": 1,
+    "repsTarget": 8,
+    "progress": 0
+   }
+  },
+  "currentPhase": {
+   "number": 1,
+   "startISO": "2026-10-05T02:00:00.696Z",
+   "lengthDays": 28,
+   "action": "start",
+   "weighIns": [],
+   "template": "rotation"
+  },
+  "sessions": [
+   {
+    "id": "s_1791338405229",
+    "dateISO": "2026-10-07T02:00:05.229Z",
+    "dayKey": "2026-10-07",
+    "type": "push",
+    "exercises": [
+     {
+      "key": "push_1",
+      "pattern": "push",
+      "name": "Wall Push-up",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 5,
+        "weight": 0
+       },
+       {
+        "reps": 5,
+        "weight": 0
+       },
+       {
+        "reps": 5,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "push",
+      "rx": {
+       "exerciseId": "push_1",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        6,
+        12
+       ],
+       "unit": "reps",
+       "acceptedAt": "2026-10-05T02:00:02.759Z",
+       "why": "not sure at setup — the first movement"
+      }
+     },
+     {
+      "key": "shoulder_1",
+      "pattern": "shoulder",
+      "name": "Pike Push-up",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 5,
+        "weight": 0
+       },
+       {
+        "reps": 5,
+        "weight": 0
+       },
+       {
+        "reps": 5,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "shoulder",
+      "rx": {
+       "exerciseId": "shoulder_1",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        6,
+        12
+       ],
+       "unit": "reps",
+       "acceptedAt": "2026-10-05T02:00:02.759Z",
+       "why": "not sure at setup — the first movement"
+      }
+     },
+     {
+      "key": "dip_1",
+      "pattern": "dip",
+      "name": "Bench Dip",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 5,
+        "weight": 0
+       },
+       {
+        "reps": 5,
+        "weight": 0
+       },
+       {
+        "reps": 5,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "dip",
+      "rx": {
+       "exerciseId": "dip_1",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        6,
+        12
+       ],
+       "unit": "reps",
+       "acceptedAt": "2026-10-05T02:00:02.759Z",
+       "why": "not sure at setup — the first movement"
+      }
+     },
+     {
+      "key": "core_1",
+      "pattern": "core",
+      "name": "Plank",
+      "era2": false,
+      "accessory": false,
+      "mode": "hold",
+      "unit": "sec",
+      "sets": [
+       {
+        "reps": 5,
+        "weight": 0
+       },
+       {
+        "reps": 5,
+        "weight": 0
+       },
+       {
+        "reps": 5,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "core",
+      "rx": {
+       "exerciseId": "core_1",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        30,
+        60
+       ],
+       "unit": "sec",
+       "acceptedAt": "2026-10-05T02:00:02.759Z",
+       "why": "not sure at setup — the first movement"
+      }
+     },
+     {
+      "key": "cond_rope",
+      "pattern": "accessory",
+      "name": "Jump Rope",
+      "era2": false,
+      "accessory": false,
+      "mode": "hold",
+      "unit": "sec",
+      "sets": [
+       {
+        "reps": 60,
+        "weight": 0
+       },
+       {
+        "reps": 60,
+        "weight": 0
+       },
+       {
+        "reps": 60,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "conditioning",
+      "finisher": true,
+      "rx": {
+       "exerciseId": "cond_rope",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        30,
+        60
+       ],
+       "unit": "sec",
+       "acceptedAt": "2026-10-05T02:00:09.663Z",
+       "why": "chosen by you"
+      }
+     },
+     {
+      "key": "acc_curl_doorframe",
+      "pattern": "accessory",
+      "name": "Door-Frame Curl",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 15,
+        "weight": 0
+       },
+       {
+        "reps": 15,
+        "weight": 0
+       },
+       {
+        "reps": 15,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "curl",
+      "finisher": true,
+      "rx": {
+       "exerciseId": "acc_curl_doorframe",
+       "setup": {
+        "lean": "slight"
+       },
+       "sets": 3,
+       "range": [
+        10,
+        15
+       ],
+       "unit": "reps",
+       "acceptedAt": null,
+       "why": null
+      }
+     },
+     {
+      "key": "acc_lateral_iso",
+      "pattern": "accessory",
+      "name": "Isometric Lateral Raise",
+      "era2": false,
+      "accessory": false,
+      "mode": "hold",
+      "unit": "sec",
+      "sets": [
+       {
+        "reps": 30,
+        "weight": 0
+       },
+       {
+        "reps": 30,
+        "weight": 0
+       },
+       {
+        "reps": 30,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "lateral",
+      "finisher": true,
+      "rx": {
+       "exerciseId": "acc_lateral_iso",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        15,
+        30
+       ],
+       "unit": "sec",
+       "acceptedAt": null,
+       "why": null
+      }
+     },
+     {
+      "key": "acc_reardelt_tdraise",
+      "pattern": "accessory",
+      "name": "Prone T-Raise",
+      "era2": false,
+      "accessory": false,
+      "mode": "reps",
+      "unit": "reps",
+      "sets": [
+       {
+        "reps": 15,
+        "weight": 0
+       },
+       {
+        "reps": 15,
+        "weight": 0
+       },
+       {
+        "reps": 15,
+        "weight": 0
+       }
+      ],
+      "difficulty": "moderate",
+      "skipped": false,
+      "flag": null,
+      "slot": "reardelt",
+      "finisher": true,
+      "rx": {
+       "exerciseId": "acc_reardelt_tdraise",
+       "setup": {},
+       "sets": 3,
+       "range": [
+        10,
+        15
+       ],
+       "unit": "reps",
+       "acceptedAt": null,
+       "why": null
+      }
+     }
+    ],
+    "warmupDone": false,
+    "cooldownDone": false,
+    "notes": "",
+    "volume": 192,
+    "completed": true,
+    "flags": []
+   }
+  ],
+  "bodyweightLog": [],
+  "measurements": [],
+  "sleepLog": [],
+  "nutritionLog": [],
+  "prs": [
+   {
+    "id": "pr_1791338405229_push_1",
+    "exerciseId": "push_1",
+    "exercise": "Wall Push-up",
+    "kind": "reps",
+    "value": 5,
+    "dateISO": "2026-10-07T02:00:05.229Z"
+   },
+   {
+    "id": "pr_1791338405229_shoulder_1",
+    "exerciseId": "shoulder_1",
+    "exercise": "Pike Push-up",
+    "kind": "reps",
+    "value": 5,
+    "dateISO": "2026-10-07T02:00:05.229Z"
+   },
+   {
+    "id": "pr_1791338405229_dip_1",
+    "exerciseId": "dip_1",
+    "exercise": "Bench Dip",
+    "kind": "reps",
+    "value": 5,
+    "dateISO": "2026-10-07T02:00:05.229Z"
+   },
+   {
+    "id": "pr_1791338405229_core_1",
+    "exerciseId": "core_1",
+    "exercise": "Plank",
+    "kind": "hold",
+    "value": 5,
+    "dateISO": "2026-10-07T02:00:05.229Z"
+   },
+   {
+    "id": "pr_1791338405229_cond_rope",
+    "exerciseId": "cond_rope",
+    "exercise": "Jump Rope",
+    "kind": "hold",
+    "value": 60,
+    "dateISO": "2026-10-07T02:00:05.229Z"
+   },
+   {
+    "id": "pr_1791338405229_acc_curl_doorframe",
+    "exerciseId": "acc_curl_doorframe",
+    "exercise": "Door-Frame Curl",
+    "kind": "reps",
+    "value": 15,
+    "dateISO": "2026-10-07T02:00:05.229Z"
+   },
+   {
+    "id": "pr_1791338405229_acc_lateral_iso",
+    "exerciseId": "acc_lateral_iso",
+    "exercise": "Isometric Lateral Raise",
+    "kind": "hold",
+    "value": 30,
+    "dateISO": "2026-10-07T02:00:05.229Z"
+   },
+   {
+    "id": "pr_1791338405229_acc_reardelt_tdraise",
+    "exerciseId": "acc_reardelt_tdraise",
+    "exercise": "Prone T-Raise",
+    "kind": "reps",
+    "value": 15,
+    "dateISO": "2026-10-07T02:00:05.229Z"
+   }
+  ],
+  "goals": [],
+  "streak": {
+   "count": 1,
+   "lastISO": "2026-10-07",
+   "best": 1
+  },
+  "flagsHistory": [],
+  "phaseHistory": [],
+  "training": {
+   "slots": {
+    "push": {
+     "exerciseId": "push_1",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-10-05T02:00:02.759Z",
+     "why": "not sure at setup — the first movement"
+    },
+    "row": {
+     "exerciseId": "pull_alt_tabledoor",
+     "setup": {
+      "bodyAngle": "kneesBent"
+     },
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-10-05T02:00:02.759Z",
+     "why": "not sure at setup — the first movement"
+    },
+    "pull": {
+     "exerciseId": "skill_muscleup_full",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      1,
+      5
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-10-05T02:00:07.833Z",
+     "why": "chosen by you"
+    },
+    "squat": {
+     "exerciseId": "squat_1",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-10-05T02:00:02.759Z",
+     "why": "not sure at setup — the first movement"
+    },
+    "hinge": {
+     "exerciseId": "hinge_1",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-10-05T02:00:02.759Z",
+     "why": "not sure at setup — the first movement"
+    },
+    "core": {
+     "exerciseId": "core_1",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      30,
+      60
+     ],
+     "unit": "sec",
+     "acceptedAt": "2026-10-05T02:00:02.759Z",
+     "why": "not sure at setup — the first movement"
+    },
+    "shoulder": {
+     "exerciseId": "shoulder_1",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-10-05T02:00:02.759Z",
+     "why": "not sure at setup — the first movement"
+    },
+    "dip": {
+     "exerciseId": "dip_1",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      6,
+      12
+     ],
+     "unit": "reps",
+     "acceptedAt": "2026-10-05T02:00:02.759Z",
+     "why": "not sure at setup — the first movement"
+    },
+    "conditioning": {
+     "exerciseId": "cond_rope",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      30,
+      60
+     ],
+     "unit": "sec",
+     "acceptedAt": "2026-10-05T02:00:09.663Z",
+     "why": "chosen by you"
+    },
+    "curl": {
+     "exerciseId": "acc_curl_doorframe",
+     "setup": {
+      "lean": "slight"
+     },
+     "sets": 3,
+     "range": [
+      10,
+      15
+     ],
+     "unit": "reps",
+     "acceptedAt": null,
+     "why": "added for coverage"
+    },
+    "lateral": {
+     "exerciseId": "acc_lateral_iso",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      15,
+      30
+     ],
+     "unit": "sec",
+     "acceptedAt": null,
+     "why": "added for coverage"
+    },
+    "reardelt": {
+     "exerciseId": "acc_reardelt_tdraise",
+     "setup": {},
+     "sets": 3,
+     "range": [
+      10,
+      15
+     ],
+     "unit": "reps",
+     "acceptedAt": null,
+     "why": "added for coverage"
+    }
+   },
+   "decisions": {},
+   "assessment": {
+    "at": "2026-10-05T02:00:02.759Z",
+    "answers": {}
+   },
+   "exclusions": {},
+   "limitations": null,
+   "grip": null,
+   "equipmentCheck": null,
+   "pins": {
+    "conditioning": {
+     "days": [
+      3
+     ],
+     "at": "2026-10-05T02:00:10.381Z"
+    }
+   }
+  },
+  "recoveryBlocks": []
+ }
+}

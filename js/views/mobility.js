@@ -122,6 +122,23 @@
         { name: "Knees to chest", sec: 40, cue: "Hug both knees in and rock gently side to side." },
         { name: "Legs up the wall", sec: 90, cue: "Lie down, legs vertical against a wall. Nothing to do but breathe." }
       ]
+    },
+    {
+      id: "hip-rotation",
+      emoji: "🔄",
+      name: "Hip Rotation",
+      tag: "Hips that won't turn",
+      blurb: "Hips that only hinge and squat lose their turn in and out, and the knees and " +
+             "low back pay for it. Six slow positions on the floor, none forced: stop short " +
+             "of pinching, and let the range grow over weeks rather than in one sitting.",
+      steps: [
+        { name: "Downward dog to deep lunge", sec: 60, cue: "Press the hips back in dog, then step one foot forward gently — no bouncing. Alternate sides, a few slow passes." },
+        { name: "Kneeling Cossack to hamstring", sec: 60, cue: "Shift the hips toward the bent knee, then extend the other leg only as far as it goes. Knee tracks over the toes. Swap at the chime." },
+        { name: "Rotating glute bridge", sec: 45, cue: "Drive through the planted foot and rotate as one unit, hips staying up. No twisting on the planted knee. Swap at the chime." },
+        { name: "Seated hip rotation, knees bent", sec: 45, cue: "Both knees bent, hands behind you. Let the knees fall one way, then the other, without pulling them down." },
+        { name: "Seated hip rotation, leg out", sec: 45, cue: "Rotate the hip first, then extend one leg only while the pelvis stays steady. Keep the knee bent if it twinges. Swap at the chime." },
+        { name: "Knee-to-chest hold", sec: 40, cue: "On your back, draw one knee in to a mild stretch. Back stays on the floor, head down. Swap at the chime." }
+      ]
     }
   ];
 
@@ -131,7 +148,7 @@
   /* ---------------------------------------------------------------------
      ROUTINE PLAYER
      Walks the step list, showing what's now and what's next, with a chime at
-     every transition. One implementation for all five routines.
+     every transition. One implementation for all six routines.
      ------------------------------------------------------------------- */
   var player = null;
 
@@ -616,7 +633,7 @@
             "Ten minutes here is worth more than an extra set almost anywhere else.</p>" +
         "</div>" +
 
-        '<div class="wh-exgrid">' + ROUTINES.map(function (r) {
+        '<div class="wh-exgrid wh-exgrid--max3">' + ROUTINES.map(function (r) {
           var total = r.steps.reduce(function (n, s) { return n + s.sec; }, 0);
           return '<div class="wh-ex">' +
             '<div class="wh-ex__head"><div class="wh-ex__ic">' + r.emoji + "</div>" +
@@ -652,7 +669,7 @@
             "release into it — that release is most of the gain, and it takes 60–120 seconds. " +
             "Best done <em>after</em> training or on its own, not as a warm-up before heavy work.</p>" +
         "</div>" +
-        '<div class="wh-exgrid">' + HOLDS.map(function (h) {
+        '<div class="wh-exgrid wh-exgrid--max3">' + HOLDS.map(function (h) {
           return '<div class="wh-ex">' +
             '<div class="wh-ex__head"><div class="wh-ex__ic">' + h.emoji + "</div>" +
               '<div><div class="wh-ex__name">' + Hub.esc(h.name) + "</div>" +

@@ -10825,18 +10825,28 @@
   var SKILL_TRACKS = {
     planche: {
       label: "Planche", icon: "skill",
-      intro: "A straight-arm pushing skill where the body floats parallel to the floor on the hands alone. Built over months: master each leverage step before opening the body further.",
-      ids: ["skill_planche_1","skill_planche_2","skill_planche_3","skill_planche_4","skill_planche_5"]
+      intro: "A straight-arm pushing skill where the body floats parallel to the floor on the hands alone. Built over months: master each leverage step before opening the body further. A band or a box takes some of the weight at the early rungs, and the two push-up rungs come after the holds they build on.",
+      ids: ["skill_planche_band","skill_planche_1","skill_planche_boxtuck","skill_planche_2","skill_planche_3","skill_planche_boxpushup","skill_planche_4","skill_planche_pushup","skill_planche_5"]
     },
     frontlever: {
       label: "Front Lever", icon: "skill",
-      intro: "A straight-arm pulling skill: the body holds horizontal beneath a bar, facing the ceiling. Progress by lengthening the lever — tuck, advanced tuck, straddle, then full.",
-      ids: ["skill_frontlever_1","skill_frontlever_2","skill_frontlever_3","skill_frontlever_4"]
+      intro: "A straight-arm pulling skill: the body holds horizontal beneath a bar, facing the ceiling. Progress by lengthening the lever — tuck, advanced tuck, straddle, then full. A band, a slow negative, one leg out and raises between the holds fill the gaps between rungs.",
+      ids: ["skill_frontlever_band","skill_frontlever_1","skill_frontlever_negative","skill_frontlever_2","skill_frontlever_oneleg","skill_frontlever_raise","skill_frontlever_3","skill_frontlever_4"]
+    },
+    backlever: {
+      label: "Back Lever", icon: "skill",
+      intro: "The front lever's mirror: the body holds horizontal beneath a bar, facing the floor, with the shoulders stretched behind you. It loads the shoulders and elbows in a position you rarely train, so the rungs are slow on purpose — skin the cat first, then tuck, straddle and full, with a slow negative before the straddle and before the full lever.",
+      ids: ["skill_backlever_skinthecat","skill_backlever_1","skill_backlever_transition","skill_backlever_2","skill_backlever_straddleneg","skill_backlever_3","skill_backlever_fullneg","skill_backlever_4"]
+    },
+    muscleup: {
+      label: "Muscle-up", icon: "skill",
+      intro: "A pull-up that carries on over the bar into a dip, in one smooth line. It is two skills — a pull that reaches your chest and a turnover that gets the elbows above the bar — so the rungs train each before you join them. Rep ranges here start at 1, because a single clean rep is the first real milestone.",
+      ids: ["skill_muscleup_explosive","skill_muscleup_turnover","skill_muscleup_band","skill_muscleup_full"]
     },
     handstand: {
       label: "Handstand", icon: "skill",
-      intro: "The foundational inversion. Build shoulder endurance against a wall, learn the stacked line, then transfer balance to your hands for a free hold.",
-      ids: ["skill_handstand_1","skill_handstand_2","skill_handstand_3","skill_handstand_4"]
+      intro: "The foundational inversion. Build shoulder endurance against a wall, learn the stacked line, then transfer balance to your hands for a free hold. Pike holds come first, wall walks and the cartwheel exit teach you to get in and out, and the parallette, bent-arm and one-arm holds after the free hold are optional extras.",
+      ids: ["skill_handstand_pike","skill_handstand_pikeelev","skill_handstand_1","skill_handstand_wallwalk","skill_handstand_2","skill_handstand_cartwheel","skill_handstand_3","skill_handstand_toetap","skill_handstand_split","skill_handstand_4","skill_handstand_parallette","skill_handstand_bentarm","skill_handstand_onearm"]
     },
     lsit: {
       label: "L-Sit & Compression", icon: "skill",
@@ -10928,7 +10938,7 @@
      4) VIEW STATE + RENDER
      -------------------------------------------------------------------- */
   var skillUi = { tab: "planche" };
-  var TAB_ORDER = ["planche","frontlever","handstand","lsit","variations","mobility"];
+  var TAB_ORDER = ["planche","frontlever","backlever","muscleup","handstand","lsit","variations","mobility"];
 
   /* Public skills API — lets the Today view suggest a skill and jump straight
      to the right track. suggestFor() maps a lifting day to a skill that pairs
@@ -11391,7 +11401,7 @@
     },
     sprint: {
       id: "sprint", name: "Sprint", tag: "Speed - 10 weeks",
-      desc: "Lay a short aerobic base, then layer in strides and progressively sharper sprint repeats to build raw speed and power from nothing.",
+      desc: "Lay a short aerobic base, then layer in strides and progressively sharper sprint repeats to build raw speed and power from nothing. A short hill works for any sprint session.",
       weeks: 10, sessionsHint: "3 runs / week", icon: '<path d="M5 12h14M13 5l7 7-7 7"/>',
       build: planSprint
     }

@@ -1124,6 +1124,9 @@ svg.wh-i {
 
 /* ===== 6b. EYE CARE ===== */
 .wh-exgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--wh-s4); }
+/* At most three across, so six cards fill two even rows on a wide screen
+   instead of five and an orphan; narrower screens still drop to two or one. */
+.wh-exgrid--max3 { grid-template-columns: repeat(auto-fill, minmax(max(250px, calc((100% - 2 * var(--wh-s4)) / 3)), 1fr)); }
 .wh-ex {
   display: flex; flex-direction: column; gap: var(--wh-s3);
   background: var(--wh-surface); border: 1px solid var(--wh-line);

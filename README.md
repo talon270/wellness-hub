@@ -54,7 +54,7 @@ tomorrow's lifting.
 | **Dashboard** | Every streak, a date navigator for backfilling, a next-reminder countdown, one-tap quick logs (including your own habits), recent badges, a rotating tip |
 | **Fitness** | The full BASALT calisthenics OS — programming, progressions, PRs, phase evaluation, running plans, and a **Muscles** view: which muscle groups your training actually hit, which have gone cold, and a conditioning level per group |
 | **Desk & Movement** | A **sitting clock** that nudges you when one stretch runs too long, stand-break goal and streak, interval stand-up reminders, 6 **movement snacks** (60–120s, guided), and a one-off desk-ergonomics checklist |
-| **Mobility** | 5 guided joint routines (wrist prep, morning flow, desk reset, hips & shoulders, spine decompression), 6 flexibility holds, rest-day marker, 12-point soreness map, **niggle/injury log** with severity tracking and a **photo series** |
+| **Mobility** | 6 guided joint routines (wrist prep, morning flow, desk reset, hips & shoulders, spine decompression, hip rotation), 6 flexibility holds, rest-day marker, 12-point soreness map, **niggle/injury log** with severity tracking and a **photo series** |
 | **Eye Care** | 20-20-20 rule with a break timer, 5 animated guided exercises |
 | **Dental** | 2-minute quadrant brushing timer, floss log, toothbrush replacement tracker, tips library |
 | **Body Care** | Skin & sun (AM/PM routines, sunscreen re-apply counter, monthly ABCDE self-exam, **mole photo log with before/after compare**), hair & scalp, nails, hands & grip/callus care, feet, **hearing** (60/60 rule, loud-exposure log, tinnitus tracking) |
@@ -164,7 +164,7 @@ level-up toast, and the caption says it in one line. It is called
 **conditioning**, not strength, and not "level" — the app already has levels,
 on the progression ladders, and those measure something real.
 
-**The muscle map is sized to this app, not borrowed.** Every one of the 150
+**The muscle map is sized to this app, not borrowed.** Every one of the 263
 movements is mapped to the muscles it trains, at three weights: primary, real
 assistance, and bracing. Bracing is priced low on purpose — counting the core in
 a squat as 40% of squat volume made abs level three times faster than chest
@@ -190,8 +190,9 @@ not validated minimums, and the screen says so beside the column.
 **The finisher and the Accessory session top up what the week is short on.**
 Both pick from 15 coverage slots (curl, lateral raise, rear delt, rotator cuff,
 traps, neck, grip, quad, hamstring, calf, shin, adductor, abductor,
-anti-rotation, back extension), 64 movements in all, each a ladder with an
-equipment-free first rung under the same step-up rule as the main slots. The
+anti-rotation, back extension), 78 movements in all, each a ladder with an
+equipment-free first rung under the same step-up rule as the main slots. A
+sixteenth, Conditioning, joins only on a day you pin it (below). The
 **finisher** is a tick on the Workout screen, off until you turn it on: four
 picks after the main slots for the groups furthest below their floor, skipping
 any trained directly in the last 48 hours, each with its reason ("Biceps: 0 of 6
@@ -209,7 +210,7 @@ main session, which overstates short isometric work; and "Full Sweep" and
 date).
 
 **The Exercises section is the one place a movement is explained.** It lists all
-150 movements, one page each: a written guide (set up, one rep, breathing,
+263 movements, one page each: a written guide (set up, one rep, breathing,
 tempo, where you should and shouldn't feel it, mistakes with their fix, when to
 stop), the muscles in three tiers on a front-and-back drawing, easier and harder
 moves taken from the ladder, and what your own program and log say about it —
@@ -224,8 +225,9 @@ push-ups that take that grip. **The guides never state a rep range, a set count
 or a hold time** — the app's rule is the only source of those, and
 `node tools/check-exercise-content.js` fails on 14 phrasings that would restate
 one. Limits worth knowing:
-- The 150 guides were written from the app's own cues and general knowledge, not
-  by a coach; the planche, handstand, front-lever, L-sit, Copenhagen and neck
+- The 263 guides were written from the app's own cues and general knowledge, not
+  by a coach (the 113 added from the Yellow Dude catalogue also from its card text,
+  never from footage); the planche, handstand, front-lever, L-sit, Copenhagen and neck
   guides are the ones to read critically.
 - The drawing is simplified: on a phone each muscle shape is 9–30 px, and the
   side-delt strip is about 3 px wide on the back view. The **Muscle** select
@@ -371,8 +373,8 @@ limits* sets each of eight joints to *Careful* or *Avoid*. Avoid removes the
 movements that load that joint heavily; careful only warns and ranks them lower;
 *Allow anyway* lets one movement past an avoid. A step, a swap list and the
 assessment all route round a blocked movement to the nearest one you allow. The
-scores behind this are a rubric applied by hand — 368 scores across the 150
-movements, 161 of them "heavy" — not a measurement, and the app can't see an
+scores behind this are a rubric applied by hand — 692 scores across the 263
+movements, 324 of them "heavy" — not a measurement, and the app can't see an
 injury or your form. If something hurts, stop.
 
 **Hold, and your own sets and range.** *Hold* pauses step-ups on one slot while
@@ -392,6 +394,45 @@ the reason, per device. Settings → *Weights you have* sets, per implement,
 either an adjustable step and heaviest weight or a fixed list; a load step goes to
 the next weight you have. With nothing set, the steps are what they were:
 dumbbells +2.5 kg, kettlebells +4 kg, no limit.
+
+**The Yellow Dude catalogue added 113 movements and kept every ladder's first step.** Of
+its 218 cards, 89 were already in the app, 114 became 113 movements (Muscle-up,
+Back Lever, Ring Pelican Curl, Jump Rope — two pistol-squat cards are one box
+height setting), 6 became a *Hip Rotation* routine in
+Mobility, 4 were already in Mobility, and 2 are running: the sprint plan already
+had one, and the other became a sentence in the Sprint goal — a short hill works
+for any sprint session. Three are left out: two cards say "pending exact-variant
+review", and the third is a generic name for three that are in. Skills gained
+**Back Lever** and **Muscle-up** tracks, and new steps in Planche, Front Lever and
+Handstand. Six equipment items joined (weighted vest, ab wheel, jump rope, box,
+barbell and rack, Nordic anchor), all off; the upgrade turns the Nordic anchor on
+only if a Nordic curl is in your slots or your log. Low-rep movements got their
+own ranges, so a Muscle-up reads 1–5 reps instead of 6–12, and continuous work
+reads "for 30–60 s" instead of "hold". The catalogue's doses and video links were
+not imported: a link marks where a name was spoken, not a demonstration, so each
+movement is defined by its card text and its guide, not by footage. Two things
+did change on existing paths: four that used to end (Pseudo Planche Push-up,
+Archer Pull-up, Freestanding Handstand, Cossack Squat) now offer a step up, and
+someone on Archer Push-up with no Decline Push-up in their log now steps back to
+Staggered-Hand Push-up, not Decline.
+
+**A variant is its own movement, not a setup on an old one.** Feet-elevated
+rows, a floor L-sit and a deficit split squat could have been a new setting on
+Inverted Row, L-Sit and Bulgarian Split Squat. Then every logged session without
+the new key would stop counting as evidence for the new prescription, and
+someone's history would quietly weigh less. As separate movements, no existing
+session, slot or record changes. The cost is 113 more entries, and most are
+offered by nothing: you reach a grip-width, parallette or crunch variant from
+*Exercises*, *Swap* or *Train this in my slot*, so no one is stepped sideways
+mid-ladder.
+
+**Conditioning is never picked for you.** The Conditioning slot (jumping jacks,
+rope, burpees, box and broad jumps) trains no muscle group, and the picker
+chooses by which group is furthest behind, so nothing can ask for it. It runs
+only on the days you pin it to the finisher or a mini-session. Its sets still
+count for the muscles they work, so a pinned rope day lowers the calf shortfall
+the picker sees — a thin credit for a jumping jack, kept because every movement
+needs one primary muscle.
 
 ---
 

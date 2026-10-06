@@ -676,3 +676,92 @@ The checker passed on the first run after writing; no draft string was rejected.
 **Left over.** F5 and F7, both yours. Then W13.
 
 **Untracked:** the eight `*.backup-20261007-000740.*` files, which the handoff's `git add` excludes.
+
+## 2026-10-07 · W13 · step 4.1 tracks, Mobility, Running, close-out
+
+**Where.** Branch `yellow-dude`, on top of R3's tree. Sonnet 5.5. Nothing committed. The log has no entry recording Stage 4's approval; I went on your instruction to run W13, as W8–W12 did. The tree still holds the other session's uncommitted v8 (`basalt.js`, Y6/Y7 and the v8 hunks of `check-workout.py`); I touched none of it.
+
+**Files.** Backups are `*.backup-20261007-004222.*` (`basalt.js`, `mobility.js`, `README.md`, `service-worker.js`, `check-workout.py`, this log).
+- `fitness/basalt.js`:
+  - `SKILL_TRACKS`: new **Back Lever** (8 rungs, skin the cat to full) and **Muscle-up** (4) tracks with intros. New steps in Planche (9 rungs), Front Lever (8) and Handstand (13). `TAB_ORDER` is now eight tabs.
+  - Order follows each record's `offer`/`next` join, not the plan's prose: the band lean first, the box tuck after the lean, the box push-up after the advanced tuck, the planche push-up after the straddle; the band front lever first, the negative after the tuck, one-leg and raise after the advanced tuck; pike and elevated pike first, wall walk, cartwheel exit, toe tap and split hold in their rungs' places, parallette, bent-arm and one-arm last.
+  - Sprint goal `desc` gains "A short hill works for any sprint session." No plan change.
+- `js/views/mobility.js`: the `hip-rotation` routine, **Hip Rotation**, tag "Hips that won't turn", six steps (M04–M09) in original words, 4:55 in all, with an emoji like the other five. A comment said "five routines"; it says six.
+- `README.md`: the Mobility row (6 routines); counts that were 150 are now 263 (muscle map, Exercises, guides) and the joint-score line is **692 scores across 263 movements, 324 heavy** (computed from `JOINT_STRESS`; the old 368 / 161 reproduce on `b0bae7a`). A paragraph on what the catalogue added and what it left out, and the two "things most get wrong" paragraphs: variants as their own IDs, and conditioning never picked.
+- `service-worker.js`: `CACHE_VERSION` v87 → v88. No new file, so `PRECACHE` and `index.html` are unchanged.
+- `tools/fixtures/v7-midworkout.json` (new): a v7 save written by real clicks on a v7 build (HEAD `7331c54` with the guide files copied in, extracted into the scratchpad). Muscle-up in the Pull slot, Jump Rope in Conditioning pinned to Wednesdays, a finished Push day whose finisher is Jump Rope (60 / 60 / 60 s), and Pull begun with 3 / 3 logged. `_note` says all of this.
+- `tools/check-workout.py`: cases **Y11–Y15**.
+
+**Deviations from the plan.**
+1. **The plan's "v7 fixture" has no consumer in the plan.** I wrote Y15 for it: a v7 save opens in this tree with sessions, slots, pin and PRs byte-identical. **It passes before W13 too**, since nothing W13 changed touches it; it guards Stage 2 and the other session's v7 → v8 step, and says "saved v7, opened at v8".
+2. **Y12 and Y13 also pass on the pre-W13 tree.** They check the muscle-up and timed wording the plan lists under 4.1 ("read 1–5", "read for"), which Stages 1–2 already delivered. Only Y11 and Y14 are W13's before/after.
+3. **Hip Rotation steps are timed 40–60 s each, not from the cards.** The cards give "3–5 slow transitions" and "10–30 s holds"; the other routines are plain timed steps, so the seconds are my product guess.
+4. **Muscle-up shows "reps" and eccentric rungs too** ("Front Lever Negative · reps"): the Skills row reads only `mode`.
+
+**Check lines.** "Before" is a scratch tree with the pre-W13 `basalt.js` and `mobility.js`, run through `HELTH_INDEX`.
+
+| Case | Before | After |
+|---|---|---|
+| Y11 | FAIL — six tabs, Planche 5 rungs, no Back Lever or Muscle-up | PASS — 8 tabs, rungs planche 9 / frontlever 8 / backlever 8 / muscleup 4 / handstand 13, in ladder order, no sideways scroll, at 390 and 1440 px |
+| Y12 | PASS | PASS — "Your Pull slot trains this now: 3 × 1–5 reps."; "Your Conditioning slot trains this now: 3 sets for 30–60 s." |
+| Y13 | PASS | PASS — unpinned: no conditioning pick; pinned Wed: it is fifth, "Pinned for Wed", three "Start set timer" buttons, no hold timers on it |
+| Y14 | FAIL — five tiles, no Hip Rotation | PASS — six tiles, the six steps in order, "Hip Rotation complete", mobility sessions today 0 → 1 |
+| Y15 | PASS | PASS |
+
+| Check (final tree, run by a test-runner agent) | Result |
+|---|---|
+| The eight Node checks | all exit 0: training, training-data, muscle-map, coverage, bodymap all passed / OK; syncmerge 10 pass, 0 fail; androidupdate 17 passed; exercise-content "5 script tags and 5 PRECACHE entries" |
+| `python3 tools/check-workout.py` | **93 pass, 2 fail, 0 error** — P9 and V5, the v8 failures R3 recorded as F5. Before Y11–Y15 it was 88 pass, 2 fail |
+
+**Screens, by clicks.** Back Lever track at 390 / 1440 / 1920 px in selene and selene-day: eight tabs wrap onto three lines at 390 px, document width equals the viewport at every size, 0 page errors, the page centred beside the sidebar at 1920. The Hip Rotation tile at 1440 px in both themes matches the other five. Not driven: the 390 px Mobility tile, and each of the other four tracks by eye (Y11 reads their rung lists).
+
+**Observed, not changed.**
+- **COSMETIC (low), pre-existing:** each Skills rung prints its name and kind with no gap ("Skin the Catreps · pullupBar, rings") and the gear as raw tokens (`pullupBar`, `rings`). Every old track does the same.
+- **Unconfirmed, pre-existing:** Today estimates a 3-set movement at about 13.5 min (a four-movement Push day reads ~54 min, and the finisher adds +54). The same numbers show on HEAD and on the pre-W13 tree, so W13 didn't cause them; I haven't checked whether they are intended.
+
+**Left over.** R4: all screens, both themes, 390 / 1440 / 1920 px. Still yours from R3: F5 (commit Stage 3 and 4 without `basalt.js`'s v8 hunks) and F7 (Ring Pelican Curl). `basalt.js` now carries W13's `SKILL_TRACKS` and Sprint hunks mixed with the other session's v8, so that file can't be committed whole for this plan.
+
+**Untracked:** the six `*.backup-20261007-004222.*` files, which the handoff's `git add` excludes; `tools/fixtures/v7-midworkout.json` is meant to be committed.
+
+## 2026-10-07 · R4 · step 4.2 review, then its fixes
+
+**Where.** Branch `yellow-dude`, on top of W13's tree. Opus 5.5. The review changed no code; you then asked for the bugs fixed. Nothing committed.
+
+**Review.** Part F re-run: the eight Node checks pass; `check-workout.py` 93 pass, 2 fail (P9, V5). Both PASS with HEAD's v7 `basalt.js`, so they are the other session's v8, as R3's F5 said. Y11 and Y14 fail on the pre-W13 `basalt.js` and `mobility.js`. Driven by clicks, 0 page errors: the five changed Skills tracks at 390 / 1440 / 1920 px in selene and selene-day (no sideways scroll; centred beside the sidebar at 1920); all 38 rungs on them open a page with Before you start first and no "undefined", "NaN" or "null"; the Sprint goal's hill sentence; the Hip Rotation tile and player at all three widths in both themes.
+
+| Finding | Severity | Status |
+|---|---|---|
+| F1 · At 1920 px Hip Rotation sat alone on a second row of the Routines grid: rows [5] before W13, [5, 1] after (1440: [4, 1] → [4, 2]) | COSMETIC (low) | fixed: `.wh-exgrid--max3` caps that grid at three across |
+| F2 · README said the coverage slots hold "64 movements"; the checker says 78, and Conditioning is a sixteenth slot | INCONSISTENCY (low) | fixed: 78, plus one sentence on Conditioning |
+| F3 · Rotating glute bridge is per side (card M06) but got no midpoint chime and its cue named no swap | COSMETIC (low) | fixed: "Swap at the chime." on the cue, which the player's `/swap/i` rule picks up |
+| F4 · Y11's summary printed the expected rung counts, so a failing run claimed "planche: 9" while the screen showed 5 | NOISE (low) | fixed: it prints what it measured |
+| F5 · v8 hunks sit in `README.md` too (the weekly-days paragraph, lines 21–30), not only `basalt.js` and Y6/Y7 in `check-workout.py` | process | **yours**: commit Stages 3 and 4 hunk by hunk |
+
+**Files.** Backups are `*.backup-20261007-020523.*` (`hub.css`, `mobility.js`, `README.md`, `check-workout.py`, `service-worker.js`, this log).
+- `css/hub.css`: `.wh-exgrid--max3`. `js/views/mobility.js`: the Routines grid takes it; the glute bridge cue.
+- `README.md`: the coverage line. `tools/check-workout.py`: Y11's summary; new case **Y16** (Routines rows at 1440 and 1920 px; a midpoint chime on every per-side Hip Rotation step), with a header line.
+- `service-worker.js`: `CACHE_VERSION` v90 → v91 (the other session had reached v90).
+
+**Check lines.** "Before" is a scratch copy of the live tree with the two 020523 backups of `hub.css` and `mobility.js`.
+
+| Case | Before | After |
+|---|---|---|
+| Y16 | FAIL — rows {1440: [4, 2], 1920: [5, 1]}; glute bridge 0 chimes | PASS — rows {1440: [3, 3], 1920: [3, 3]}; Cossack, glute bridge, leg out and knee-to-chest 1 chime each |
+| Y11 on the pre-W13 tree | reported "planche: 9" | reports "planche: 5, frontlever: 4 …" |
+| Routines grid by clicks, selene and selene-day | — | 390 px one column, 16 px gutters, no overflow; 1920 px [3, 3], centred beside the sidebar |
+| Eight Node checks (test-runner agent) | — | all exit 0 (syncmerge 10 pass, androidupdate 17 passed) |
+| `python3 tools/check-workout.py` (test-runner agent) | 93 pass, 2 fail | **94 pass, 2 fail, 0 error**: P9 and V5, the v8 failures |
+
+**Then, on your instruction: the Flexibility grid (pre-existing).** Mobility → Flexibility's six holds orphaned the same way. `mobility.js:672` now takes `wh-exgrid--max3`; Y16 checks it too. Backups `*.backup-20261007-022700.*` (`mobility.js`, `service-worker.js`, `check-workout.py`, this log); `CACHE_VERSION` v91 → v92.
+
+| Case | Before | After |
+|---|---|---|
+| Y16 | FAIL — holds per row {1440: [4, 2], 1920: [5, 1]} | PASS — holds {1440: [3, 3], 1920: [3, 3]}; routines and chimes as above |
+| Y14 | — | PASS |
+| Holds grid by clicks, selene and selene-day | — | 390 px one column, 16 px gutters, no overflow; 1920 px [3, 3], centred; a hold's Start runs; 0 page errors |
+
+Not re-run after this one-token change: the full `check-workout.py` and the Node checks, none of which read the Mobility view.
+
+**Still open:** R3's F7 (Ring Pelican Curl), W2's Era II chips, W7's vest-burpee range and calf credit, and the Skills rung name/kind gap with raw tokens.
+
+**Untracked:** the six `*.backup-20261007-020523.*` files.

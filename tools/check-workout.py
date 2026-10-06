@@ -81,6 +81,20 @@ WELLNESS HUB · WORKOUT REGRESSION HARNESS
   · Y9-Y10   R1's findings: a v5 card not yet shown survives the v7 upgrade,
              and a device that showed it gets only the six (Y9); every
              Settings equipment tile is one line (Y10)
+  · Y11-Y14  plans/PLAN-yellow-dude.md step 4.1: the Skills tabs and their
+             rung order, with the two new tracks, at 390 and 1440 px (Y11);
+             a muscle-up reads 1-5 reps and a jump rope "for 30-60 s" on the
+             page you reach by Train this in my slot (Y12); Conditioning pinned
+             to today runs in the finisher and unpinned never does (Y13); the
+             Hip Rotation routine is listed, played through and logged once (Y14)
+  · Y15      the v7 fixture (tools/fixtures/v7-midworkout.json, written by the
+             v7 build): a save that holds a Muscle-up slot, a pinned
+             Conditioning slot, a finished session with Jump Rope in its
+             finisher and a Pull workout half logged opens in this tree with
+             every one of them intact (Y15)
+  · Y16      R4's fixes: the Mobility routines and flexibility holds fill even
+             rows at 1440 and 1920 px, and every per-side Hip Rotation step
+             chimes at its midpoint
 
 Retired in step 2.4 (W8), because Stage 2 removed what they measured; each
 reason is in plans/PROGRESS-workout-progression.md:
@@ -4146,6 +4160,290 @@ def y10(pw):
     finally:
         VIEWPORT = saved
     return not bad, ("taller than the rest: " + "; ".join(bad) + " | " if bad else "") + "; ".join(shown), errors
+
+
+# --- Y11-Y14 · tracks, conditioning and the new routine (plan step 4.1) ------
+TRACK_TABS = ["Planche", "Front Lever", "Back Lever", "Muscle-up", "Handstand",
+              "L-Sit & Compression", "Variations", "Mobility"]
+TRACK_RUNGS = {
+    "planche": ["Band-Assisted Planche Lean", "Planche Lean", "Box-Supported Tuck Planche", "Tuck Planche",
+                "Advanced Tuck Planche", "Box-Supported Straddle Planche Push-up", "Straddle Planche",
+                "Planche Push-up", "Full Planche"],
+    "frontlever": ["Band-Assisted Front Lever", "Tuck Front Lever", "Front Lever Negative",
+                   "Advanced Tuck Front Lever", "One-Leg Front Lever", "Front Lever Raise",
+                   "Straddle Front Lever", "Full Front Lever"],
+    "backlever": ["Skin the Cat", "Tuck Back Lever", "Tuck-to-Straddle Transition", "Advanced Tuck Back Lever",
+                  "Straddle Back Lever Negative", "Straddle Back Lever", "Full Back Lever Negative",
+                  "Full Back Lever"],
+    "muscleup": ["High Pull-up", "Bar Turnover Drill", "Band-Assisted Muscle-up", "Muscle-up"],
+    "handstand": ["Pike Hold", "Feet-Elevated Pike Hold", "Wall Plank (Toes on Wall)", "Wall Walk",
+                  "Chest-to-Wall Handstand", "Cartwheel Exit Drill", "Back-to-Wall Handstand",
+                  "Split-Leg Wall Toe Tap", "Split-Leg Handstand Hold", "Freestanding Handstand",
+                  "Parallette Handstand", "Bent-Arm Handstand Hold", "One-Arm Handstand"],
+}
+
+
+@case("Y11", "Skills: eight tabs, the five tracks list their rungs in ladder order, no sideways scroll at 390 and 1440 px")
+def y11(pw):
+    global VIEWPORT
+    saved, shown, bad, errors = VIEWPORT, [], [], []
+    try:
+        for w, h in ((390, 844), (1440, 950)):
+            VIEWPORT = {"width": w, "height": h}
+            s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+            try:
+                onboard(s)
+                open_section(s, "skills")
+                tabs = s.ev("() => [...document.querySelectorAll('.skill-cat-tabs .skill-tab')].map(b => b.textContent)")
+                if tabs != TRACK_TABS:
+                    bad.append("%d px tabs %s" % (w, tabs))
+                counts = {}
+                for track, want in TRACK_RUNGS.items():
+                    s.tap('[data-skilltab="%s"]' % track)
+                    s.pg.wait_for_timeout(120)
+                    got = s.ev("() => [...document.querySelectorAll('.skill-rung__name')].map(b => b.textContent)")
+                    counts[track] = len(got)      # measured, not TRACK_RUNGS: a failing run must report what it saw
+                    if got != want:
+                        bad.append("%d px %s: %s" % (w, track, got))
+                    if s.ev("() => document.documentElement.scrollWidth > innerWidth"):
+                        bad.append("%d px %s scrolls sideways" % (w, track))
+                shown.append("%d px: %d tabs, rungs %s" % (w, len(tabs), counts))
+                errors += s.errors
+            finally:
+                s.close()
+    finally:
+        VIEWPORT = saved
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "; ".join(shown), errors
+
+
+def own_gear(s: Session, *tokens):
+    """Fixture: tick equipment in the saved state, then reload."""
+    s.ev("""t => { const st = App.getState(); t.forEach(k => { st.equipment[k] = true; }); App.saveState(); }""", list(tokens))
+    s.pg.reload()
+    s.pg.wait_for_timeout(700)
+    to_fitness(s)
+
+
+def train_from_page(s: Session, query: str, ex_id: str) -> str:
+    """Exercises -> search -> open the page -> Train this in my slot; returns the page text."""
+    open_section(s, "exercises")
+    s.tap("[data-dx-back]")      # the section reopens on the last page you read
+    s.pg.wait_for_timeout(200)
+    s.put("[data-dx-q]", query)
+    s.pg.wait_for_timeout(250)
+    s.tap('[data-dx-open="%s"]' % ex_id)
+    s.pg.wait_for_timeout(300)
+    s.tap("[data-dx-train]")
+    s.pg.wait_for_timeout(300)
+    return s.ev("() => document.body.innerText")
+
+
+@case("Y12", "Train this in my slot: Muscle-up reads 3 x 1-5 reps, Jump Rope reads 3 sets for 30-60 s, not a hold")
+def y12(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+    try:
+        onboard(s)
+        own_gear(s, "pullupBar", "jumpRope")
+        mu = train_from_page(s, "Muscle-up", "skill_muscleup_full")
+        jr = train_from_page(s, "Jump Rope", "cond_rope")
+        mu_line = next((l for l in mu.splitlines() if "trains this now" in l), "no line")
+        jr_line = next((l for l in jr.splitlines() if "trains this now" in l), "no line")
+        checks = {
+            "muscle-up is taken": "Muscle-up is now your Pull slot's exercise" in mu,
+            "muscle-up reads 3 × 1–5 reps": mu_line == "Your Pull slot trains this now: 3 × 1–5 reps.",
+            "jump rope is taken": "Jump Rope is now your Conditioning slot's exercise" in jr,
+            "jump rope reads for 30-60 s": jr_line == "Your Conditioning slot trains this now: 3 sets for 30–60 s.",
+            "jump rope is not called a hold": "hold" not in jr_line.lower(),
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "muscle-up: %r; jump rope: %r" % (mu_line, jr_line), s.errors
+    finally:
+        s.close()
+
+
+@case("Y13", "Conditioning: pinned to today it joins the finisher with a set timer; unpinned it is never picked")
+def y13(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))      # a Wednesday
+    try:
+        onboard(s)
+        open_today(s)
+        pick_day(s, "push")
+        s.tick("[data-finisher]")
+        s.pg.wait_for_timeout(300)
+        unpinned = [slot for slot, _ in preview_order(s)]
+        open_section(s, "program")
+        s.tap('[data-pin-day="conditioning:3"]')
+        s.pg.wait_for_timeout(200)
+        pins = s.ev("() => App.getState().training.pins.conditioning")
+        open_today(s)
+        pick_day(s, "push")
+        s.pg.wait_for_timeout(300)
+        pinned = [slot for slot, _ in preview_order(s)]
+        text = s.ev("() => document.body.innerText")
+        s.tap("#begin-session")
+        s.pg.wait_for_timeout(300)
+        timer_btns = s.ev("() => document.querySelectorAll('button[aria-label=\"Start set timer\"]').length")
+        checks = {
+            "never picked unpinned": "conditioning" not in unpinned,
+            "the pin saved Wednesday": bool(pins) and pins.get("days") == [3],
+            "picked when pinned": "conditioning" in pinned,
+            "its range reads 'for'": "3 sets for 30–60 s" in text,
+            "its reason is on the card": "Pinned for Wed" in text,
+            "its three sets get a set timer, not a hold timer": timer_btns == 3,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "unpinned slots %s; pinned %s; set-timer buttons %d" % (unpinned, pinned, timer_btns), s.errors
+    finally:
+        s.close()
+
+
+@case("Y14", "Hip Rotation: listed with six steps, played through, and logged as one mobility session")
+def y14(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+    try:
+        explore = s.pg.get_by_role("button", name="Explore first")
+        if explore.count():
+            explore.click()
+        s.tap('.wh-navbtn[data-view="mobility"]')
+        s.pg.wait_for_timeout(400)
+        before = s.ev("() => Hub.day().mobility || 0")
+        tile = s.ev("""() => { const b = document.querySelector('[data-routine="hip-rotation"]');
+            const c = b && b.closest('.wh-ex'); return c ? c.innerText : null; }""")
+        tiles = s.ev("() => [...document.querySelectorAll('[data-routine]')].map(b => b.dataset.routine)")
+        s.tap('[data-routine="hip-rotation"]')
+        s.pg.wait_for_timeout(300)
+        steps = [s.ev("() => (document.querySelector('#mb-step') || {}).textContent")]
+        for _ in range(5):
+            s.tap("#mb-skip")
+            s.pg.wait_for_timeout(150)
+            steps.append(s.ev("() => (document.querySelector('#mb-step') || {}).textContent"))
+        s.tap("#mb-skip")
+        s.pg.wait_for_timeout(300)
+        done = s.ev("() => document.body.innerText")
+        after = s.ev("() => Hub.day().mobility || 0")
+        checks = {
+            "six routines listed, Hip Rotation last": len(tiles) == 6 and tiles[-1] == "hip-rotation",
+            "the tile names it, six steps, and its tag": bool(tile) and "Hip Rotation" in tile and "6 steps" in tile
+                and "Hips that won't turn" in tile,
+            "the six steps play in order": steps == ["Downward dog to deep lunge", "Kneeling Cossack to hamstring",
+                "Rotating glute bridge", "Seated hip rotation, knees bent", "Seated hip rotation, leg out",
+                "Knee-to-chest hold"],
+            "it ends on the complete card": "Hip Rotation complete" in done,
+            "one completion logged": after == before + 1,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "tiles %s; steps %s; mobility sessions today %s -> %s" % (tiles, steps, before, after), s.errors
+    finally:
+        s.close()
+
+
+FIXTURE_V7 = ROOT / "tools" / "fixtures" / "v7-midworkout.json"
+
+
+def v7_fixture() -> dict:
+    """localStorage as the schema v7 build left it, mid-workout: the two keys."""
+    fx = json.loads(FIXTURE_V7.read_text())
+    return {k: v for k, v in fx.items() if not k.startswith("_")}
+
+
+@case("Y15", "A v7 save with Muscle-up, a pinned Conditioning slot and a Jump Rope session opens with all of it intact")
+def y15(pw):
+    fx = v7_fixture()
+    v7 = fx[STORAGE_KEY]
+    s = Session(pw, now=ist(2026, 10, 9, 8, 0))
+    try:
+        seed_and_reload(s, fx)
+        st = s.state()
+        to_fitness(s)
+        open_section(s, "program")
+        program = s.ev("() => document.body.innerText")
+        open_today(s)
+        w = draft(s)
+        open_section(s, "exercises")
+        s.put("[data-dx-q]", "Jump Rope")
+        s.pg.wait_for_timeout(250)
+        s.tap('[data-dx-open="cond_rope"]')
+        s.pg.wait_for_timeout(300)
+        page = s.ev("() => document.body.innerText")
+        same = lambda a, b: jdump(a) == jdump(b)
+        rope = next((e for x in st["sessions"] for e in x["exercises"] if e.get("key") == "cond_rope"), {})
+        checks = {
+            "the finished session is byte-identical": same(st["sessions"], v7["sessions"]),
+            "its Jump Rope sets read 60 / 60 / 60": [x.get("reps") for x in rope.get("sets", [])] == [60, 60, 60],
+            "the slots are byte-identical": same(st["training"]["slots"], v7["training"]["slots"]),
+            "the Conditioning pin is Wednesday": (st["training"].get("pins") or {}).get("conditioning", {}).get("days") == [3],
+            "the PRs are byte-identical": same(st["prs"], v7["prs"]),
+            "the four ticked items stay on, the anchor off": all(st["equipment"].get(k) for k in ("pullupBar", "jumpRope", "box", "vest"))
+                and not st["equipment"].get("nordicAnchor"),
+            "no equipment card is invented": not (st["training"].get("equipmentCheck") or {}).get("tokens"),
+            "Program lists Muscle-up on 1–5 and Jump Rope": "Muscle-up" in program and "1–5" in program and "Jump Rope" in program,
+            "the half-logged Pull workout is still on Today": bool(w) and w["exercises"][0]["sets"][0].get("value") == 3
+                and w["exercises"][0]["sets"][1].get("value") == 3,
+            "the Jump Rope page keeps your best": "Best: 60 s, longest set" in page,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "saved v%s, opened at v%s: %d session, slots %s, pin %s" % (
+                v7["version"], st["version"], len(st["sessions"]),
+                {k: st["training"]["slots"][k].get("exerciseId") for k in ("pull", "conditioning")},
+                (st["training"].get("pins") or {}).get("conditioning", {}).get("days")), s.errors
+    finally:
+        s.close()
+
+
+@case("Y16", "Mobility routines and flexibility holds fill even rows at 1440 and 1920 px, and every per-side Hip Rotation step chimes at its midpoint")
+def y16(pw):
+    global VIEWPORT
+    saved, rows, holds, chimes, errors = VIEWPORT, {}, {}, {}, []
+    try:
+        for w, h in ((1440, 950), (1920, 1080)):
+            VIEWPORT = {"width": w, "height": h}
+            s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+            try:
+                explore = s.pg.get_by_role("button", name="Explore first")
+                if explore.count():
+                    explore.click()
+                s.tap('.wh-navbtn[data-view="mobility"]')
+                s.pg.wait_for_timeout(400)
+                rows[w] = s.ev("""() => { const m = {}; document.querySelectorAll('[data-routine]').forEach(b => {
+                    const t = Math.round(b.closest('.wh-ex').getBoundingClientRect().top); m[t] = (m[t] || 0) + 1; });
+                    return Object.values(m); }""")
+                s.tap('[data-mobpill="flexibility"]')
+                s.pg.wait_for_timeout(300)
+                holds[w] = s.ev("""() => { const m = {}; document.querySelectorAll('.wh-exgrid > .wh-ex').forEach(e => {
+                    if (!e.offsetParent) return; const t = Math.round(e.getBoundingClientRect().top); m[t] = (m[t] || 0) + 1; });
+                    return Object.values(m); }""")
+                s.tap('[data-mobpill="routines"]')
+                s.pg.wait_for_timeout(300)
+                if w == 1440:
+                    # Count Hub.cueChange calls past each step's midpoint; the step names come from the screen.
+                    s.ev("() => { window.__ch = 0; const o = Hub.cueChange; Hub.cueChange = function () { window.__ch++; return o.apply(this, arguments); }; }")
+                    s.tap('[data-routine="hip-rotation"]')
+                    s.pg.wait_for_timeout(300)
+                    for sec in (60, 60, 45, 45, 45, 40):
+                        name, before = s.ev("() => document.querySelector('#mb-step').textContent"), s.ev("() => window.__ch")
+                        s.pg.clock.run_for((sec // 2 + 3) * 1000)
+                        chimes[name] = s.ev("() => window.__ch") - before
+                        s.tap("#mb-skip")
+                        s.pg.wait_for_timeout(150)
+                errors += s.errors
+            finally:
+                s.close()
+    finally:
+        VIEWPORT = saved
+    # Downward dog and the bent-knee rotation alternate within the step, so they need no chime.
+    per_side = ["Kneeling Cossack to hamstring", "Rotating glute bridge", "Seated hip rotation, leg out", "Knee-to-chest hold"]
+    checks = {
+        "no lone routine on a row at 1440 or 1920": all(r and min(r) == max(r) for r in rows.values()),
+        "no lone flexibility hold on a row at 1440 or 1920": all(r and min(r) == max(r) for r in holds.values()),
+        "every per-side step chimes once": all(chimes.get(n) == 1 for n in per_side),
+    }
+    bad = [k for k, ok in checks.items() if not ok]
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+        "routines per row %s; holds per row %s; midpoint chimes %s" % (rows, holds, chimes), errors
 
 
 def main() -> int:
