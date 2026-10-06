@@ -1840,7 +1840,12 @@ def p8(pw):
 #   Upper / lower U, L     4/wk  -> 3 x 8 x 2.0 x 1 day    = 48  (U rows once without a bar)
 #   Rotation      4 types  3.5/wk-> 3 x 8 x 0.875 x 2 days = 42  (pull day, full-body day)
 # and with a bar, Upper rows AND pulls, so its lats double to 96.
-P9_LATS = {"fullbody3": 72, "fullbody2": 48, "upperlower": 48, "rotation": 42}
+# Lats target with no pull-up bar: 3 sets x 8 reps per row, perWeek split evenly
+# across the template's day types, one row per day that names row or pull (a
+# barless pull becomes the row it duplicates). Worked by hand, not read from the
+# app: fullbody1 1 x 24; split5 upper + splitpull, 1 each; split6 splitpull x 2.
+P9_LATS = {"fullbody3": 72, "fullbody2": 48, "upperlower": 48, "rotation": 42,
+           "fullbody1": 24, "split5": 48, "split6": 48}
 
 
 @case("P9", "Muscle-map targets follow the template, and check-muscle-map.js passes for each")
@@ -1849,13 +1854,14 @@ def p9(pw):
     root = pathlib.Path(INDEX_URL[len("file://"):]).parent
     tool = subprocess.run(["node", str(root / "tools" / "check-muscle-map.js")], capture_output=True, text=True, cwd=str(root))
     tool_lines = [l for l in tool.stdout.splitlines() if re.search(r"^\s+\u2713 \w+\s+[\d.]+/wk", l)]
-    got, errors = {}, []
+    got, errors, offered = {}, [], None
     for tpl in P9_LATS:
         s = Session(pw, now=ist(2026, 10, 1, 12, 0))
         try:
             onboard(s, template=tpl)
             read = lambda: s.ev("() => { const m = App.muscles.model(7).find(r => r.key === 'lats'); return m && m.target; }")
             got[tpl] = read()
+            offered = offered or s.ev("() => App.engine.TEMPLATE_ORDER.slice()")
             if tpl == "upperlower":
                 s.ev("() => { App.getState().equipment.pullupBar = true; App.saveState(); }")
                 got["upperlower+bar"] = read()
@@ -1865,12 +1871,16 @@ def p9(pw):
     want = dict(P9_LATS, **{"upperlower+bar": 96})
     checks = {
         "check-muscle-map.js exits 0": tool.returncode == 0,
-        "it audits all four templates": len(tool_lines) == 4,
+        # Counted against the app's own list, not a literal: a new template must
+        # be audited by the tool and given a hand-worked value above.
+        "it audits every template the app offers": offered is not None and len(tool_lines) == len(offered),
+        "P9_LATS covers every template the app offers": offered is not None and set(P9_LATS) == set(offered),
         "lats target per template, no pull-up bar, and Upper with one": got == want,
     }
     bad = [k for k, v in checks.items() if not v]
     return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
-        "tool exit %s, %d template lines; lats %s, wanted %s" % (tool.returncode, len(tool_lines), got, want), errors
+        "tool exit %s, %d template lines, app offers %s; lats %s, wanted %s" % (
+            tool.returncode, len(tool_lines), offered, got, want), errors
 
 
 # --- T27-T31 · R3's findings ---------------------------------------------------
@@ -2850,7 +2860,9 @@ def v5(pw):
         checks = {
             "version %s" % schema: st["version"] == schema and schema >= 6,
             "v6 defaults: finisher off, no pins": st["prefs"].get("finisher") == "off" and tr.get("pins") == {},
-            "other prefs unchanged": {k: v for k, v in st["prefs"].items() if k != "finisher"} == v5s["prefs"],
+            # weeklyDays is v8's default, added unset; Y6 checks the same on the v6 fixture
+            "other prefs unchanged": {k: v for k, v in st["prefs"].items() if k not in ("finisher", "weeklyDays")} == v5s["prefs"],
+            "v8 leaves the weekly target unset": schema < 8 or st["prefs"].get("weeklyDays", "absent") is None,
             "slots unchanged": tr["slots"] == v5s["training"]["slots"],
             # equipmentCheck and v7's six equipment keys are the v6 -> v7 step's, which Y6 checks
             "decisions, exclusions, limits, grip unchanged": all(tr.get(k) == v5s["training"][k] for k in (
@@ -3989,13 +4001,15 @@ def y6(pw):
                 saved = json.loads(s.raw())
                 ui = json.loads(s.ev("() => localStorage.getItem('ironframe.ui')"))
                 same = lambda a, b: jdump(a) == jdump(b)
-                diff = [k for k in v6 if k not in ("version", "equipment", "training", "meta") and not same(saved.get(k), v6[k])]
+                diff = [k for k in v6 if k not in ("version", "equipment", "training", "meta", "prefs") and not same(saved.get(k), v6[k])]
+                diff += ['prefs.' + k for k in v6['prefs'] if not same(saved['prefs'].get(k), v6['prefs'][k])]
+                checks['v8 leaves the weekly target unset'] = saved['prefs'].get('weeklyDays') is None
                 diff += ["training." + k for k in v6["training"] if k != "equipmentCheck" and not same(saved["training"].get(k), v6["training"][k])]
                 diff += ["meta." + k for k in v6["meta"] if k != "updatedAt" and not same(saved["meta"].get(k), v6["meta"][k])]
                 diff += ["equipment." + k for k in v6["equipment"] if saved["equipment"].get(k) is not v6["equipment"][k]]
                 extra = sorted(set(saved) - set(v6)) + ["training." + k for k in sorted(set(saved["training"]) - set(v6["training"]))]
                 checks["round trip: sessions, slots, PRs and every other key byte-identical"] = not diff and not extra \
-                    and saved["version"] == 7 and saved["equipment"].get("jumpRope") is True
+                    and saved["version"] == schema and saved["equipment"].get("jumpRope") is True
                 checks["the mid-workout draft is untouched"] = same(ui.get("today.workout"), fx["ironframe.ui"]["today.workout"])
                 checks["migrated twice is identical"] = twice
                 s.tap("[data-eqcheck-ok]")
@@ -4037,7 +4051,7 @@ def y7(pw):
             try_to_log(old)
             kept = old.raw() == raw
             banner = banner_visible(old, BANNER_NEWER)
-            ok = v7.get("version") == 7 and v7["equipment"].get("vest") is True and build == 6 and kept and banner
+            ok = v7.get("version", 0) >= 7 and v7["equipment"].get("vest") is True and build == 6 and kept and banner
             return ok, "saved at v%s with vest %s; opened by a v%s build: key unchanged=%s, banner=%s" % (
                 v7.get("version"), v7["equipment"].get("vest"), build, kept, banner), errors + old.errors
         finally:

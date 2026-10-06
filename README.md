@@ -18,6 +18,17 @@ way.
 
 **Open `index.html` and it runs.**
 
+**Choose your weekly strength days.** In **Fitness → Program → Strength days
+per week**, choose **1–6 days**, inspect the split and recovery guidance, then
+apply it. The choice is also part of Fitness setup. Workout and Overview count
+distinct completed main-workout days in the local Monday–Sunday week; reaching
+the target suggests recovery until Monday. Logged muscle overlap can add a
+rest day, including after accessory work. **Train anyway** remains available.
+Older saves keep their existing flexible template until a count is selected.
+The rest guide includes a sample week, guidance between sessions and your
+current between-set timers. Calendar spacing is guidance, not a recovery test.
+See the [app review and improvement suggestions](plans/wellness-app-review.md).
+
 **A week of runs you didn't log is never skipped for you.** The running plan
 used to count weeks by the calendar alone: two weeks with nothing logged put a
 9-week plan on week 3, with no question asked. Now, when the week behind you has

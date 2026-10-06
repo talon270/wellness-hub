@@ -45,7 +45,7 @@
     }
   ];
   var UI_KEY        = "ironframe.ui";        // tiny, non-schema UI prefs
-  var SCHEMA_VERSION = 7;                    // v2: prefs.sessionLength · v3: repaired progression targets · v4: training prescriptions · v5: equipment split, weights, exclusions, limitations, grip · v6: coverage slots, the finisher, pins, mini-sessions · v7: six more equipment items, the Nordic anchor inferred
+  var SCHEMA_VERSION = 8;                    // v8: optional weekly-day target and new split templates; older builds must not reinterpret them
 
   /* ----------------------------------------------------------------------
      STATIC PROGRAM DATA — Level 1–6 progressions per movement pattern.
@@ -174,6 +174,7 @@
         /* The template (engine TEMPLATES). null is the rotation, which every
            save had before templates existed; it stays until you choose. */
         template: null,
+        weeklyDays: null,        // v8: chosen strength days, 1–6; null preserves the legacy flexible schedule
         /* v6: "on" appends about 20 minutes of coverage work to every main
            workout (engine.buildWorkout, plan D3). Off until you turn it on. */
         finisher: "off"
@@ -323,6 +324,9 @@
          read-only instead of misreading them — its recoveryOffer would call
          recommend on a coverage exercise it doesn't know. */
       if (state.version < 7) toV7(state);            // v6 -> v7, after toV5's record
+      /* v7 -> v8 is additive: weeklyDays stays null until selected. Existing
+         templates, phase denominators, history and prescriptions stay intact.
+         The version guard protects saves with the new whole/split day types. */
       state.version = SCHEMA_VERSION;
     } else {
       // Same version: still backfill keys added during default development.
@@ -2132,7 +2136,8 @@
      rotation day they resemble: Full Body A and B the full-body set, Upper the
      push set (the pull set opens with a dead hang, which needs a bar), Lower
      the leg set. */
-  [["fullA", "fullbody"], ["fullB", "fullbody"], ["upper", "push"], ["lower", "legs"]].forEach(function (p) {
+  [["fullA", "fullbody"], ["fullB", "fullbody"], ["upper", "push"], ["lower", "legs"],
+   ["whole", "fullbody"], ["splitpush", "push"], ["splitpull", "fullbody"], ["splitlegs", "legs"]].forEach(function (p) {
     WARMUPS[p[0]] = WARMUPS[p[1]];
     COOLDOWNS[p[0]] = COOLDOWNS[p[1]];
   });
@@ -2518,6 +2523,7 @@
      so it's labelled here and nowhere else in the schedule. */
   var DAY_LABEL = { push: "Push Day", pull: "Pull Day", legs: "Leg Day", fullbody: "Full Body",
                     fullA: "Full Body A", fullB: "Full Body B", upper: "Upper", lower: "Lower",
+                    whole: "Whole body", splitpush: "Push", splitpull: "Pull", splitlegs: "Legs",
                     mini: "Accessory session" };
   var DAY_DESC = {
     push: "Press, shoulders, dips & core — anterior chain power.",
@@ -2527,7 +2533,11 @@
     fullA: "Push, row, squat and core — every major pattern in one session.",
     fullB: "Shoulders, pull, hinge and core — the other half of the body.",
     upper: "Push, row, shoulders and pull, plus dips if they're on your plan.",
-    lower: "Squat, hinge and core — the legs get the whole session."
+    lower: "Squat, hinge and core — the legs get the whole session.",
+    whole: "Push, row, squat, hinge and core in one session.",
+    splitpush: "Chest, shoulders and triceps; pulling and legs have their own days.",
+    splitpull: "Rows and vertical pulls; hinges stay on leg day.",
+    splitlegs: "Squat, hinge and core; upper-body work has its own days."
   };
   /* `row` names the row slot explicitly; slotsFor turns `pull` into the row
      when you have no bar, so a no-bar Full Body B rows as well. */
@@ -2539,7 +2549,11 @@
     fullA: ["push", "row", "squat", "core"],
     fullB: ["shoulder", "pull", "hinge", "core"],
     upper: ["push", "row", "shoulder", "pull", "dip"],
-    lower: ["squat", "hinge", "core"]
+    lower: ["squat", "hinge", "core"],
+    whole: ["push", "row", "squat", "hinge", "core"],
+    splitpush: ["push", "shoulder", "dip"],
+    splitpull: ["row", "pull"],
+    splitlegs: ["squat", "hinge", "core"]
   };
 
   /* Templates (plan D1) — chosen, never imposed. A save without one keeps
@@ -2557,18 +2571,87 @@
      2 or 3 full-body sessions a week is the same template at a different
      plan: the rest rule already allows either, so only perWeek differs. */
   var TEMPLATES = {
+    fullbody1:  { label: "Full body ×1", short: "1 a week", order: ["whole"], perWeek: 1, rest: "afterEach",
+                  desc: "One whole-body session a week. A manageable start; two days is the general strength-training guideline." },
     fullbody3:  { label: "Full body ×3", short: "3 a week", order: ["fullA", "fullB"], perWeek: 3, rest: "afterEach",
                   desc: "A and B alternating, three sessions a week, a rest day after each." },
     fullbody2:  { label: "Full body ×2", short: "2 a week", order: ["fullA", "fullB"], perWeek: 2, rest: "afterEach",
                   desc: "A and B alternating, two sessions a week, a rest day after each." },
     upperlower: { label: "Upper / lower", short: "4 a week", order: ["upper", "lower"], perWeek: 4, rest: "sameType",
                   desc: "Upper and Lower can run back to back; a rest day comes before repeating either." },
+    split5:    { label: "Upper / lower + split", short: "5 a week", order: ["upper", "lower", "splitpush", "splitpull", "splitlegs"], perWeek: 5, rest: "split",
+                  desc: "Upper, Lower, Push, Pull and Legs, with two days off strength work. Build up to this frequency." },
+    split6:    { label: "Push / pull / legs", short: "6 a week", order: ["splitpush", "splitpull", "splitlegs"], perWeek: 6, rest: "split",
+                  desc: "Push, Pull and Legs twice, with one day off strength work. Intended for established training habits." },
     rotation:   { label: "Current rotation", short: "every other day", order: ROTATION, perWeek: 3.5, rest: "afterEach",
                   desc: "Push, Pull, Legs, Full Body in turn, a rest day after each." }
   };
-  var TEMPLATE_ORDER = ["fullbody3", "fullbody2", "upperlower", "rotation"];
+  var TEMPLATE_ORDER = ["fullbody3", "fullbody2", "upperlower", "fullbody1", "split5", "split6", "rotation"];
+  var WEEKLY_TEMPLATES = { 1: "fullbody1", 2: "fullbody2", 3: "fullbody3", 4: "upperlower", 5: "split5", 6: "split6" };
+  /* Examples, not fixed appointments. Sessions still follow actual logs. */
+  var WEEKLY_EXAMPLES = { 1: "Mon: Whole body. Tue–Sun: rest or light activity.",
+    2: "Mon: Full Body A. Thu: Full Body B. Other days: rest or light activity.",
+    3: "Mon: A. Wed: B. Fri: A. Alternate A/B next week; other days are recovery days.",
+    4: "Mon: Upper. Tue: Lower. Thu: Upper. Fri: Lower. Wed, Sat and Sun: recovery.",
+    5: "Mon: Upper. Tue: Lower. Wed: Push. Thu: Pull. Fri: Legs. Weekend: recovery.",
+    6: "Mon/Thu: Push. Tue/Fri: Pull. Wed/Sat: Legs. Sun: recovery." };
   function templateOf(s) { return TEMPLATES[s && s.prefs && s.prefs.template] || TEMPLATES.rotation; }
   function templateId(s) { return TEMPLATES[s && s.prefs && s.prefs.template] ? s.prefs.template : "rotation"; }
+  function weeklyGoal(s) {
+    var n = s && s.prefs && s.prefs.weeklyDays;
+    /* A merge with a device using an older template cannot pair that template
+       with an incompatible day target. Unset or mismatched stays flexible. */
+    return Number.isInteger(n) && WEEKLY_TEMPLATES[n] === templateId(s) ? n : null;
+  }
+  /* A day key is a local calendar date, not UTC midnight (which falls on
+     the previous evening in timezones west of UTC). Noon avoids DST edges. */
+  function calendarDate(key) { return lib.parse(key + "T12:00:00"); }
+  function shiftKey(key, days) { return lib.dayKey(lib.addDays(calendarDate(key), days)); }
+  function weekProgress(s, key) {
+    var start = shiftKey(key, -((calendarDate(key).getDay() + 6) % 7)), seen = {};
+    (s.sessions || []).forEach(function (x) {
+      var d = lib.sessionDay(x);
+      if (x.completed && x.kind !== "mini" && d >= start && d <= key) seen[d] = true;
+    });
+    return { start: start, days: Object.keys(seen).length, goal: weeklyGoal(s) };
+  }
+
+  /* Selected weekly plans and the new splits check primary muscles of
+     performed sets, including accessories. Bracing alone is not treated as
+     another hard workout. Calendar-day spacing does not measure recovery. */
+  function splitOverlap(tpl, done, key) {
+    var next = nextDayAfter(tpl, done), wanted = {}, recent = {};
+    var primary = function (id, pattern) {
+      var map = (window.MUSCLE_MAP || {})[id] || (window.MUSCLE_FALLBACK || {})[pattern];
+      return map ? map.primary : [];
+    };
+    engine.slotsFor(next, (App.getState().prefs || {}).sessionLength).forEach(function (it) {
+      primary(it.rx.exerciseId, it.slot).forEach(function (g) { wanted[g] = true; });
+    });
+    engine.completedSessions().forEach(function (x) {
+      if (lib.daysBetween(lib.sessionDay(x), key) !== 1) return;
+      (x.exercises || []).forEach(function (ex) {
+        if (engine.skipped(ex) || !(ex.sets || []).some(function (st) { return Number(st.reps) > 0; })) return;
+        primary(ex.key, ex.pattern).forEach(function (g) { recent[g] = true; });
+      });
+    });
+    return Object.keys(wanted).some(function (g) { return recent[g]; });
+  }
+
+  function restRule(tpl, done, key) {
+    var before = done.filter(function (x) { return lib.sessionDay(x) < key; });
+    var week = weekProgress(App.getState(), shiftKey(key, -1));
+    var monday = calendarDate(key).getDay() === 1;
+    if (week.goal && !monday && week.days >= week.goal) return "weekly";
+    if ((week.goal || tpl.rest === "split") && splitOverlap(tpl, before, key)) return "overlap";
+    if (restOn(tpl, done, key)) return before.length && tpl.order.indexOf(before[before.length - 1].type) < 0 ? "switched" : tpl.rest;
+    return null;
+  }
+  function nextAvailable(tpl, done, key) {
+    /* At most the remainder of this week plus a recovery day into the next. */
+    for (var i = 0; i < 9 && restRule(tpl, done, key); i++) key = shiftKey(key, 1);
+    return key;
+  }
 
   /* The day after the last of `done` in the template's order; the first day
      when the last session isn't one of the template's (or there is none). */
@@ -2591,12 +2674,13 @@
     if (!before.length) return false;
     var lastKey = lib.sessionDay(before[before.length - 1]);
     if (lib.daysBetween(lastKey, key) !== 1) return false;
+    if (tpl.rest === "split" && tpl.order.indexOf(before[before.length - 1].type) >= 0) return false;
     if (tpl.rest !== "sameType" || tpl.order.indexOf(before[before.length - 1].type) < 0) return true;
     var next = nextDayAfter(tpl, before), trained = {};
     before.forEach(function (x) { trained[lib.sessionDay(x)] = true; });
     var same = before.filter(function (x) { return x.type === next; });
     if (!same.length) return false;
-    for (var d = lib.sessionDay(same[same.length - 1]); d < key; d = lib.dayKey(lib.addDays(d, 1))) {
+    for (var d = lib.sessionDay(same[same.length - 1]); d < key; d = shiftKey(d, 1)) {
       if (!trained[d]) return false;            // a day off since then
     }
     return true;
@@ -2700,6 +2784,9 @@
     DAY_PATTERNS: DAY_PATTERNS, TARGET_SETS: TARGET_SETS,
     VOLUME_MODES: VOLUME_MODES, volumeModeOf: volumeModeOf,
     TEMPLATES: TEMPLATES, TEMPLATE_ORDER: TEMPLATE_ORDER,
+    WEEKLY_TEMPLATES: WEEKLY_TEMPLATES, WEEKLY_EXAMPLES: WEEKLY_EXAMPLES,
+    weeklyGoal: weeklyGoal,
+    weekProgress: function (s) { return weekProgress(s, lib.today()); },
     template: function () { return templateOf(App.getState()); },
     templateId: function () { return templateId(App.getState()); },
     DAY_ACCESSORY: DAY_ACCESSORY, LENGTH_MODES: LENGTH_MODES,
@@ -3149,31 +3236,22 @@
       return 0;
     },
 
-    /* Rest-day gate — at most the one day immediately after a session is a
-       mandatory rest day, by your template's rule (restOn). Derived from the
-       last COMPLETED session's actual date, never a fixed weekday: train
-       Tuesday and Wednesday is rest, whatever calendar day that lands on.
-       That is the "relative to your last session" schedule, as opposed to
-       fixed weekdays you'd have to set up and keep in sync with how you
-       actually train.
-
-       Deliberately a single rest day, not a weekly-count cadence: the
-       template's perWeek is what attendance is measured against, and the gate
-       never blocks a day just because the week's count is reached. */
+    /* Recovery follows completed training days and, when explicitly chosen,
+       the Monday–Sunday target. Flexible legacy templates keep their original
+       spacing rule. Train anyway remains available; missed days add no debt. */
     restDayInfo: function (s) {
       var done = engine.mainSessions(), tpl = templateOf(App.getState()), today = lib.today();
-      if (!done.length) return { isRest: false };
-      var lastKey = lib.sessionDay(done[done.length - 1]);
+      var last = done[done.length - 1], lastKey = last && lib.sessionDay(last);
       /* Trained today already: doneTodayInfo's state, not this gate. Past
          that, the template's rule decides (restOn): after any session, or
          before repeating a day type. */
-      if (lastKey >= today || !restOn(tpl, done, today)) return { isRest: false };
+      var rule = restRule(tpl, done, today);
+      if (lastKey >= today || !rule) return { isRest: false };
       return {
         isRest: true, lastKey: lastKey,
-        lastType: done[done.length - 1].type,
-        /* "switched": the last session was under another template (R3-3) */
-        rule: tpl.order.indexOf(done[done.length - 1].type) < 0 ? "switched" : tpl.rest,
-        nextKey: lib.dayKey(lib.addDays(lastKey, 2))
+        lastType: last && last.type,
+        rule: rule,
+        nextKey: nextAvailable(tpl, done, today)
       };
     },
 
@@ -3195,39 +3273,34 @@
       var todayKey = lib.today();
       var todays = done.filter(function (x) { return lib.sessionDay(x) === todayKey; });
       if (!todays.length) return { isDone: false };
-      /* Tomorrow is a rest day by the template's rule (always, except the
-         first of an Upper/Lower pair), and then the day after is next. */
-      var restTomorrow = restOn(templateOf(App.getState()), done, lib.dayKey(lib.addDays(todayKey, 1)));
+      /* Find the next date allowed by both recovery and the weekly target. */
+      var tomorrow = shiftKey(todayKey, 1);
+      var nextKey = nextAvailable(templateOf(App.getState()), done, tomorrow);
+      var restTomorrow = nextKey !== tomorrow;
       return {
         isDone: true,
         todayType: todays[todays.length - 1].type,
         count: todays.length,
         restTomorrow: restTomorrow,
-        nextKey: lib.dayKey(lib.addDays(todayKey, restTomorrow ? 2 : 1))
+        nextKey: nextKey
       };
     },
 
-    /* nextSession — the one future date the app can honestly stand behind.
-       Past the mandatory rest day, when you train next is your call, not a
-       fixed cadence, so this deliberately returns a single date rather than a
-       projected schedule. Uses the same rule as restDayInfo (day right after
-       your last session is rest) instead of the old Mon/Tue/Thu/Fri guess. */
+    /* One next available date, shared by Workout, Overview and the calendar.
+       Recovery and the selected weekly target constrain it; later sessions
+       depend on when the user actually trains. */
     nextSession: function (s) {
-      var done = engine.mainSessions();
       var todayKey = lib.today();
       var type = engine.recommendedDayType();
-      if (!done.length) {
-        return { dateISO: lib.parse(todayKey).toISOString(), key: todayKey, type: type, isToday: true };
-      }
       var doneToday = engine.doneTodayInfo(s);
       var nextKey;
       if (doneToday.isDone) {
-        nextKey = doneToday.nextKey;                      // rest tomorrow, train the day after
+        nextKey = doneToday.nextKey;
       } else {
         var restInfo = engine.restDayInfo(s);
         nextKey = restInfo.isRest ? restInfo.nextKey : todayKey;
       }
-      return { dateISO: lib.parse(nextKey).toISOString(), key: nextKey, type: type, isToday: nextKey === todayKey };
+      return { dateISO: calendarDate(nextKey).toISOString(), key: nextKey, type: type, isToday: nextKey === todayKey };
     },
 
     /* The session on `key`, for the only days the app can stand behind (the
@@ -3365,10 +3438,18 @@
        none, so the row it trains can step up; a row you left out stays out
        (Program's Add brings it back). Returns the closed period, or null when
        nothing changed. */
-    setTemplate: function (id) {
+    setTemplate: function (id, weeklyDays) {
       var s = App.getState();
-      if (!TEMPLATES[id] || id === templateId(s)) return null;
+      if (!TEMPLATES[id]) return null;
+      var days = WEEKLY_TEMPLATES[weeklyDays] === id ? Number(weeklyDays) : null;
+      if (id === templateId(s)) {
+        if (weeklyGoal(s) === days) return null;
+        s.prefs.weeklyDays = days;
+        App.saveState();
+        return { weeklyOnly: true };
+      }
       (s.prefs || (s.prefs = {})).template = id;
+      s.prefs.weeklyDays = days;
       var names = TEMPLATES[id].order.some(function (d) { return DAY_PATTERNS[d].indexOf("row") >= 0; });
       if (names && !s.training.slots.row) {
         var first = firstAllowed("row", trainingCtx(s));
@@ -3832,7 +3913,8 @@
       benchmarks: JSON.parse(JSON.stringify(s.benchmarks)),
       /* Preselected, visibly, on the goal step: three full-body sessions a
          week is the plan most people can keep. Any card changes it. */
-      template: "fullbody3"
+      template: "fullbody3",
+      weeklyDays: 3
     };
   }
 
@@ -3910,8 +3992,11 @@
       '<div class="stack">' + cards + '</div>' +
       '<p class="faint text-xs">Your goal sets your rep ranges and the rest timer after rep sets. Bodyweight (gain, hold or lose) is a separate, optional setting.</p>' +
       '<div><h2 class="display h3">How do you want to train?</h2></div>' +
+      '<div class="field"><span class="field__label">Strength days per week</span>' +
+        frequencyChoicesHtml(onb.draft.weeklyDays, "data-onb-days") + '</div>' +
+      restGuidanceHtml(E.TEMPLATES[tpl], onb.draft.weeklyDays) +
       '<div class="stack" id="onb-templates">' + tcards + '</div>' +
-      '<p class="faint text-xs">The template decides which days you train and what attendance counts against. Change either later in Settings and Program.</p>' +
+      '<p class="faint text-xs">Or choose a flexible template above. A weekly choice sets your strength-day target; specific weekdays remain flexible. Change it later in Program.</p>' +
       '<div class="row" style="gap:var(--sp-3)">' +
         '<button class="btn btn--ghost" data-onb="back">Back</button>' +
         '<button class="btn btn--primary grow" data-onb="next">Continue →</button>' +
@@ -4052,7 +4137,14 @@
       c.addEventListener("click", function () { onb.draft.profile.goal = c.dataset.goal; renderOnboarding(); });
     });
     body.querySelectorAll("[data-template]").forEach(function (c) {
-      c.addEventListener("click", function () { onb.draft.template = c.dataset.template; renderOnboarding(); });
+      c.addEventListener("click", function () { onb.draft.template = c.dataset.template; onb.draft.weeklyDays = null; renderOnboarding(); });
+    });
+    body.querySelectorAll("[data-onb-days]").forEach(function (c) {
+      c.addEventListener("click", function () {
+        onb.draft.weeklyDays = Number(c.dataset.onbDays);
+        onb.draft.template = WEEKLY_TEMPLATES[onb.draft.weeklyDays];
+        renderOnboarding();
+      });
     });
     body.querySelectorAll("[data-equip]").forEach(function (c) {
       c.addEventListener("click", function (e) {
@@ -4106,7 +4198,7 @@
     var template = App.engine.TEMPLATES[d.template] ? d.template : "rotation";
     var patch = { profile: d.profile, equipment: d.equipment, benchmarks: d.benchmarks, era: 1, tiers: tiers,
                   training: { slots: slots, decisions: {}, assessment: { at: at, answers: d.assess || {} } },
-                  prefs: { template: template, restDefaultSec: TD().GOAL_REST_SEC[d.profile.goal] || 120 },
+                  prefs: { template: template, weeklyDays: d.weeklyDays || null, restDefaultSec: TD().GOAL_REST_SEC[d.profile.goal] || 120 },
                   currentPhase: { template: template } };
     onb.draft = null; onb.step = 0;
     App.completeOnboarding(patch);
@@ -4150,7 +4242,41 @@
     });
   }
   /* share with later parts */
-  App.ui = { stepperHtml: stepperHtml, wireSteppers: wireSteppers, field: field, opt: opt };
+  App.ui = { stepperHtml: stepperHtml, wireSteppers: wireSteppers, field: field, opt: opt,
+    frequencyChoicesHtml: frequencyChoicesHtml, restGuidanceHtml: restGuidanceHtml, weeklySummaryHtml: weeklySummaryHtml };
+
+  function frequencyChoicesHtml(value, attr) {
+    return '<div class="row wrap" role="group" aria-label="Strength days per week" style="gap:var(--sp-2)">' +
+      [1, 2, 3, 4, 5, 6].map(function (n) {
+        return '<button type="button" class="btn btn--sm ' + (n === value ? 'btn--primary' : 'btn--ghost') + '" ' + attr + '="' + n +
+          '" aria-pressed="' + (n === value) + '">' + n + (n === 1 ? ' day' : ' days') + '</button>';
+      }).join('') + '</div>';
+  }
+  function restGuidanceHtml(tpl, days) {
+    var s = App.getState(), n = Number(days), chosen = n >= 1 && n <= 6;
+    return '<div class="stack" data-rest-guidance style="gap:var(--sp-2)">' +
+      '<p class="text-sm" style="margin:0"><b>' + (chosen ? (7 - n) + (n === 6 ? ' day' : ' days') + ' without planned strength work each week.' : 'Recovery between strength sessions.') + '</b> ' +
+        (tpl.rest === 'afterEach' ? 'Leave a full rest day between these sessions.' : 'Different muscle groups can train on consecutive days; leave a full day before training the same muscles hard again.') + '</p>' +
+      (chosen ? '<p class="faint text-xs" style="margin:0" data-week-example><b>Example week:</b> ' + esc(WEEKLY_EXAMPLES[n]) + ' Your actual next session follows your logs.</p>' : '') +
+      '<details><summary class="text-sm">How much rest? Between sessions and sets</summary><div class="stack mt-2">' +
+      '<p class="muted text-sm" style="margin:0">One full day between hard sessions for the same muscles is a starting guideline, roughly 48 hours at the same workout time. The app uses calendar-day spacing; it cannot measure recovery. Take longer or reduce the work if unusually tired or still sore; stop a painful movement. Easy walking and gentle mobility can fit on rest days.</p>' +
+      '<p class="faint text-xs" style="margin:0">Want to move all seven days? Use the extra day for light activity. ' +
+        (chosen && n >= 5 ? 'Five or six strength days need an established routine; more days do not automatically mean better results. ' : '') +
+        '<a href="https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/strength-training/art-20046670" target="_blank" rel="noopener noreferrer">Rest guidance</a> · ' +
+        '<a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener noreferrer">Training frequency</a></p>' +
+      '<p class="faint text-xs" style="margin:0">Between sets, your current timers are ' + restRepPref(s) + ' seconds after reps and ' + restHoldPref(s) +
+        ' seconds after holds. Rest longer if needed to repeat clean technique; adjust the timers in Fitness settings.</p></div></details></div>';
+  }
+  function weeklySummaryHtml(s) {
+    var week = engine.weekProgress(s);
+    if (!week.goal) return '';
+    return '<div class="card stack mt-4" data-weekly-summary><div class="row between wrap"><b class="text-sm">' + week.days + ' of ' + week.goal +
+      ' strength days this week</b><span class="badge">Mon–Sun</span></div>' +
+      '<p class="muted text-sm" style="margin:0">' + (week.days >= week.goal ? 'Weekly target reached. More strength work is optional; recovery is part of your plan.' :
+        (week.goal - week.days) + ' more planned. Keep recovery between sessions; missed days do not become a debt.') +
+      ' Your weekly plan reserves ' + (7 - week.goal) + ((7 - week.goal) === 1 ? ' day' : ' days') + ' for rest or light activity.</p>' +
+      '<p class="faint text-xs" style="margin:0">Leave one full day before working the same muscles hard again. Extra accessory work and hard runs also need recovery. Change days and see the rest guide in Program.</p></div>';
+  }
 
   /* ======================================================================
      D. TODAY — the live session engine
@@ -4226,6 +4352,8 @@
   /* Why today is a rest day, in the words of your template's rule. */
   function restReason(restInfo) {
     var next = engine.recommendedDayType();
+    if (restInfo.rule === "weekly") return "You reached your chosen strength-day target for this week. Use the remaining days for recovery or light activity; the weekly count starts again on Monday.";
+    if (restInfo.rule === "overlap") return "Yesterday's logged work trained muscles used by " + DAY_LABEL[next] + ". Leave a full day before loading them again; take longer if you still need recovery.";
     if (restInfo.rule === "sameType") {
       return DAY_LABEL[next] + " and " + DAY_LABEL[restInfo.lastType] + " ran back to back, so a rest day comes before " +
         DAY_LABEL[next] + " again.";
@@ -4299,6 +4427,7 @@
 
     el.innerHTML =
       head("Workout", "Session engine", "Resting today") +
+      weeklySummaryHtml(s) +
       recoveryHtml(s) +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Rest day</div>' +
@@ -4336,6 +4465,7 @@
 
     el.innerHTML =
       head("Workout", "Session engine", "Done for today") +
+      weeklySummaryHtml(s) +
       recoveryHtml(s) +
       '<div class="card card--accent card--pad-lg hero stack">' +
         '<div class="row between wrap"><div><div class="eyebrow">Done today</div>' +
@@ -4384,6 +4514,7 @@
 
     el.innerHTML =
       head("Workout", "Session engine", rec ? DAY_LABEL[rec] + " is up next" : "Let's train") +
+      weeklySummaryHtml(s) +
       recoveryHtml(s) +
       upgradeCardHtml(s) +
       equipCheckHtml(s) +
@@ -6391,6 +6522,7 @@
 
       /* ---- hero / next-session CTA ---- */
       heroCard(s, rec, wip, engine.restDayInfo(s), engine.doneTodayInfo(s)) +
+      ui.weeklySummaryHtml(s) +
 
       /* ---- day-one coaching (only before the first session) ----
          Below the hero: on day one the thing to do is start, and the four
@@ -7228,7 +7360,7 @@
     '</div>';
   }
 
-  /* Project the next session — just the one. Past the mandatory rest day,
+  /* Project the next session — just the one. Past the suggested recovery,
      when you train next is your call, not a fixed cadence, so this doesn't
      pretend to forecast a schedule; it defers to engine.nextSession, the same
      rule the start area's rest-day gate uses. Returns an array of 0 or 1
@@ -8488,6 +8620,12 @@
 
       ui.equipCheckHtml(s) +
 
+      '<div class="card mt-4 stack" id="pg-weekly"><div class="card__head"><div class="card__title">Strength days per week</div>' +
+        '<span class="badge" data-weekly-current>' + (engine.weeklyGoal(s) ? engine.weeklyGoal(s) + (engine.weeklyGoal(s) === 1 ? ' day' : ' days') : 'Flexible template') + '</span></div>' +
+        '<p class="muted text-sm">Choose a weekly target. Preview the split and recovery days, then apply it. Completed main workouts count once per day, Monday through Sunday.</p>' +
+        ui.frequencyChoicesHtml(engine.weeklyGoal(s), 'data-weekly-days') +
+        ui.restGuidanceHtml(tpl, engine.weeklyGoal(s)) + '<div id="pg-week-preview" aria-live="polite"></div></div>' +
+
       '<div class="card card--notch stack">' +
         '<div class="card__head"><div class="card__title">Current phase</div>' +
           '<span class="badge badge--primary">P' + phase.number + ((Number(phase.volumeFactor) || 1) < 1 ? ' · legacy deload' : '') + '</span></div>' +
@@ -8796,36 +8934,44 @@
      days and slots, what attendance would count against, and that the
      current phase closes with what it has. The Switch button is the only
      thing that applies it — no confirm(). */
-  function templatePreviewHtml(id) {
+  function templatePreviewHtml(id, days) {
     var s = App.getState(), tpl = engine.TEMPLATES[id], phase = s.currentPhase;
     var ev = evaluate(s), row = s.training.slots.row;
+    var changing = id !== engine.templateId();
     var namesRow = tpl.order.some(function (d) { return engine.DAY_PATTERNS[d].indexOf("row") >= 0; });
     return '<div class="card card--glass stack mt-2" data-tpl-preview="' + id + '">' +
       '<div class="card__head"><div class="card__title">' + esc(tpl.label) + '</div><span class="badge">' + esc(tpl.short) + '</span></div>' +
       '<p class="muted text-sm">' + esc(tpl.desc) + ' Attendance would count against ' + planned28(tpl) + ' planned sessions in a 28-day phase.</p>' +
+      ui.restGuidanceHtml(tpl, days) +
       '<div class="pg-split">' + templateDaysHtml(tpl, null) + '</div>' +
       (namesRow && row && row.off ? '<p class="faint text-xs">You left the row out, so it stays out of these days. Add it under Your prescriptions to train it.</p>' : '') +
-      '<p class="text-sm" data-tpl-close>Switching closes Phase ' + phase.number + ' today, on day ' + ev.dayInfo.day + ', with ' +
+      (changing ? '<p class="text-sm" data-tpl-close>Switching closes Phase ' + phase.number + ' today, on day ' + ev.dayInfo.day + ', with ' +
         ev.sampleSize + ' of ' + ev.expected + ' planned sessions, and starts Phase ' + (phase.number + 1) + ' under ' + esc(tpl.label) +
-        '. Your prescriptions and history don\'t change.</p>' +
+        '. Your prescriptions and history don\'t change.</p>' : '<p class="text-sm" data-tpl-close>Your split and phase stay the same. ' +
+          (days ? 'After ' + days + ' strength days in a week, recovery is suggested until Monday.' : 'The weekly target is removed; your template\'s recovery rule still applies.') + '</p>') +
       '<div class="row" style="gap:var(--sp-2)">' +
-        '<button class="btn btn--primary btn--sm grow" data-tpl-apply="' + id + '" type="button">Switch to ' + esc(tpl.label) + '</button>' +
+        '<button class="btn btn--primary btn--sm grow" data-tpl-apply="' + id + '" data-tpl-days="' + (days || '') + '" type="button">' +
+          (days ? 'Use ' + days + ' days per week' : 'Switch to ' + esc(tpl.label)) + '</button>' +
         '<button class="btn btn--ghost btn--sm" data-tpl-cancel type="button">Keep ' + esc(engine.template().label) + '</button>' +
       '</div></div>';
   }
 
   function wireProgram(el, s) {
     /* template: preview first, then Switch */
-    var pv = el.querySelector("#pg-tpl-preview");
-    el.querySelectorAll("[data-tpl-pick]").forEach(function (b) {
+    el.querySelectorAll("[data-tpl-pick], [data-weekly-days]").forEach(function (b) {
       b.addEventListener("click", function () {
-        pv.innerHTML = templatePreviewHtml(b.dataset.tplPick);
+        var days = Number(b.dataset.weeklyDays) || null;
+        el.querySelector('#pg-tpl-preview').innerHTML = '';
+        el.querySelector('#pg-week-preview').innerHTML = '';
+        var pv = el.querySelector(days ? '#pg-week-preview' : '#pg-tpl-preview');
+        pv.innerHTML = templatePreviewHtml(days ? engine.WEEKLY_TEMPLATES[days] : b.dataset.tplPick, days);
         var cancel = pv.querySelector("[data-tpl-cancel]");
         cancel.addEventListener("click", function () { pv.innerHTML = ""; });
         pv.querySelector("[data-tpl-apply]").addEventListener("click", function () {
-          var id = this.dataset.tplApply, closed = engine.setTemplate(id);
-          if (!closed) return;
-          App.toast("Switched to " + engine.TEMPLATES[id].label + ". Phase " + closed.number + " closed at " +
+          var id = this.dataset.tplApply, days = Number(this.dataset.tplDays) || null, closed = engine.setTemplate(id, days);
+          if (!closed) { pv.innerHTML = ''; return; }
+          App.toast(closed.weeklyOnly ? (days ? days + ' strength days per week selected.' : 'Flexible template selected.') :
+            "Switched to " + engine.TEMPLATES[id].label + ". Phase " + closed.number + " closed at " +
             closed.attended + " of " + closed.planned + " planned; Phase " + (closed.number + 1) + " starts today.", "success");
           App.refresh();
         });
