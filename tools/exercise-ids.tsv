@@ -148,3 +148,116 @@ acc_backext_birddog	accessory	Bird Dog
 acc_backext_prone	accessory	Prone Back Extension
 acc_backext_revhyper	accessory	Reverse Hyperextension
 acc_backext_goodmorning	accessory	Dumbbell Good Morning
+push_alt_knee	push	Knee Push-up
+push_alt_kneeassist	push	Knee-Assisted Push-up
+push_alt_partial	push	Partial-Range Push-up
+push_alt_staggered	push	Staggered-Hand Push-up
+push_alt_onearmassist	push	Assisted One-Arm Push-up
+push_alt_pseudoweighted	push	Weighted Pseudo Planche Push-up
+push_alt_parallette	push	Parallette Push-up
+push_alt_slider	push	Towel Squeeze Push-up
+push_alt_ringcross	push	Ring Crossover Press
+push_alt_fingertip	push	Fingertip Push-up
+skill_planche_band	skill	Band-Assisted Planche Lean
+skill_planche_boxtuck	skill	Box-Supported Tuck Planche
+skill_planche_boxpushup	skill	Box-Supported Straddle Planche Push-up
+skill_planche_pushup	skill	Planche Push-up
+shoulder_alt_pikeneg	shoulder	Negative Pike Push-up
+skill_handstand_pike	skill	Pike Hold
+skill_handstand_pikeelev	skill	Feet-Elevated Pike Hold
+skill_handstand_wallwalk	skill	Wall Walk
+skill_handstand_cartwheel	skill	Cartwheel Exit Drill
+skill_handstand_toetap	skill	Split-Leg Wall Toe Tap
+skill_handstand_split	skill	Split-Leg Handstand Hold
+skill_handstand_parallette	skill	Parallette Handstand
+skill_handstand_bentarm	skill	Bent-Arm Handstand Hold
+skill_handstand_onearm	skill	One-Arm Handstand
+dip_alt_negative	dip	Dip Negative
+dip_alt_support	dip	Parallel Bar Support Hold
+dip_alt_ringsupport	dip	Ring Support Hold
+pull_alt_australianfe	pull	Feet-Elevated Inverted Row
+pull_alt_archerrow	pull	Archer Row
+pull_alt_tableweighted	pull	Weighted Table Row
+pull_alt_bandrow	pull	Band Bent-Over Row
+skill_frontlever_band	skill	Band-Assisted Front Lever
+skill_frontlever_negative	skill	Front Lever Negative
+skill_frontlever_oneleg	skill	One-Leg Front Lever
+skill_frontlever_raise	skill	Front Lever Raise
+pull_alt_ringassist	pull	Feet-Assisted Ring Pull-up
+pull_alt_neutral	pull	Neutral-Grip Pull-up
+pull_alt_wide	pull	Wide-Grip Pull-up
+pull_alt_close	pull	Close-Grip Pull-up
+pull_alt_hollow	pull	Hollow-Body Pull-up
+pull_alt_arched	pull	Arched-Back Pull-up
+pull_alt_towelgrip	pull	Towel-Grip Pull-up
+pull_alt_c2b	pull	Chest-to-Bar Pull-up
+pull_alt_onearm	pull	One-Arm Pull-up
+pull_alt_weighted	pull	Weighted Pull-up
+skill_muscleup_explosive	skill	High Pull-up
+skill_muscleup_turnover	skill	Bar Turnover Drill
+skill_muscleup_band	skill	Band-Assisted Muscle-up
+skill_muscleup_full	skill	Muscle-up
+skill_backlever_skinthecat	skill	Skin the Cat
+skill_backlever_1	skill	Tuck Back Lever
+skill_backlever_transition	skill	Tuck-to-Straddle Transition
+skill_backlever_2	skill	Advanced Tuck Back Lever
+skill_backlever_straddleneg	skill	Straddle Back Lever Negative
+skill_backlever_3	skill	Straddle Back Lever
+skill_backlever_fullneg	skill	Full Back Lever Negative
+skill_backlever_4	skill	Full Back Lever
+squat_alt_box	squat	Box Squat
+squat_alt_jump	squat	Jump Squat
+squat_alt_bulgarianw	squat	Weighted Bulgarian Split Squat
+squat_alt_deficit	squat	Deficit Bulgarian Split Squat
+squat_alt_boxpistol	squat	Box Pistol Squat
+squat_alt_pistolneg	squat	Negative Pistol Squat
+squat_alt_barbell	squat	Barbell Back Squat
+squat_alt_cossackw	squat	Weighted Cossack Squat
+squat_alt_dragonassist	squat	Assisted Dragon Squat
+squat_alt_dragon	squat	Dragon Squat
+hinge_alt_nordicband	hinge	Band-Assisted Nordic Curl
+hinge_alt_nordicarm	hinge	Arm-Assisted Nordic Curl
+core_alt_onefoot	core	Single-Foot Plank
+core_alt_plankweighted	core	Weighted Plank
+core_alt_hollowrock	core	Hollow Body Rock
+core_alt_floorlsit	core	Floor L-Sit
+core_alt_chairlegraise	core	Two-Chair Leg Raise
+core_alt_pikelift	core	Seated Pike Leg Lift
+core_alt_hangknee	core	Hanging Knee Raise
+core_alt_hangleg	core	Hanging Straight-Leg Raise
+core_alt_t2b	core	Toes-to-Bar
+core_alt_lyingleg	core	Lying Leg Raise
+core_alt_situp	core	Sit-up
+core_alt_crunch	core	Crunch
+core_alt_bicycle	core	Bicycle Crunch
+core_alt_legshold	core	Straight-Leg Hold
+core_alt_flutter	core	Flutter Kicks
+core_alt_abwheelknee	core	Kneeling Ab Wheel Rollout
+core_alt_abwheelstand	core	Standing Ab Wheel Rollout
+acc_curl_pelican	accessory	Ring Pelican Curl
+acc_curl_ring	accessory	Ring Biceps Curl
+acc_reardelt_ringfacepull	accessory	Ring Face Pull
+acc_traps_proney	accessory	Prone Y Raise
+acc_grip_falsegrip	accessory	False-Grip Ring Hang
+acc_grip_ricebucket	accessory	Rice Bucket Hand Drill
+acc_backext_superman	accessory	Superman Hold
+acc_antirot_hipraise	accessory	Side Plank Hip Raise
+acc_quad_wallsit1	accessory	Single-Leg Wall Sit
+acc_quad_wallsitw	accessory	Weighted Wall Sit
+acc_quad_lunge	accessory	Forward Lunge
+acc_quad_stepupw	accessory	Weighted Step-Up
+acc_calf_floor	accessory	Floor Calf Raise
+acc_calf_wallsit	accessory	Wall-Sit Calf Raise
+cond_jacks	accessory	Jumping Jack
+cond_ropeless	accessory	Ropeless Jump Rope
+cond_rope	accessory	Jump Rope
+cond_ropealt	accessory	Alternating-Foot Jump Rope
+cond_ropeboxer	accessory	Boxer-Step Jump Rope
+cond_doubleunder	accessory	Double-Under Jump Rope
+cond_ropeweighted	accessory	Weighted Jump Rope
+cond_burpeenojump	accessory	No-Jump Burpee
+cond_burpee	accessory	Burpee
+cond_burpeetuck	accessory	Tuck-Jump Burpee
+cond_burpeevest	accessory	Weighted Vest Burpee
+cond_boxjump	accessory	Box Jump
+cond_broadjump	accessory	Broad Jump

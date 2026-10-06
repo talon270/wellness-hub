@@ -13,7 +13,7 @@
   "use strict";
   var C = window.EXERCISE_CONTENT = window.EXERCISE_CONTENT || {};
   var B = window.EXERCISE_CONTENT_BATCHES = window.EXERCISE_CONTENT_BATCHES || {};
-  B.b = "complete";
+  B.b = "pending";
 
   C.pull_4 = {
     summary: "A vertical pull from a dead hang until your chin clears the bar, the main bodyweight builder for your lats and upper back.",

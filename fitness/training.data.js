@@ -50,7 +50,8 @@
      Six more came with schema v7 (plans/PLAN-yellow-dude.md): `vest` (a
      weighted vest or a loaded backpack), `abWheel`, `jumpRope`, `box` (a
      sturdy box or step to sit to, step on or jump onto), `barbell` (with
-     plates) and `nordicAnchor` (whatever holds your ankles for a Nordic
+     plates and a squat rack: Barbell Back Squat is unracked, so the token
+     means both) and `nordicAnchor` (whatever holds your ankles for a Nordic
      curl: a strap, a partner, heavy furniture). Furniture itself — a chair,
      a table, a door, a wall — is never a token.
 
@@ -64,6 +65,12 @@
      same steps — whose first rung needs no equipment; its loaded options sit
      beside the path and its band moves sit at the end of it. Its exercises are
      `pattern: "accessory"` in the DB and `acc_<slot>_<slug>` here.
+
+     One coverage slot trains no muscle: `conditioning` (Yellow Dude, Group D),
+     flagged `conditioning: true` with `trains: []`. No muscle shortfall can ask
+     for it, so Coverage.pick takes it only on a weekday you pinned it to. Its
+     exercises are `cond_<slug>`; their sets still count for the muscles
+     muscles.data.js lists as primary.
    ========================================================================== */
 (function () {
   "use strict";
@@ -109,9 +116,50 @@
      the goal and coverage ranges, because a first muscle-up is one rep under
      every goal. Only the plain rep kinds (reps, unilateral) take one:
      eccentrics already sit at 3–6, and loaded work progresses by weight.
-     Empty until the catalogue adds its first entry; the check refuses a key
-     that isn't a reps or unilateral exercise. */
-  var REP_RANGES = {};
+     The check refuses a key that isn't a reps or unilateral exercise. No
+     exercise that predates the Yellow Dude catalogue is listed: moving one
+     would move the evidence thresholds under sessions already logged. */
+  var REP_RANGES = {
+    /* 1–5: expert or single-limb work, where one clean rep is the milestone. */
+    skill_planche_boxpushup: [1, 5],
+    skill_planche_pushup:    [1, 5],
+    /* 3–6: power or near-maximal work; quality falls off past about six. */
+    push_alt_onearmassist:   [3, 6],
+    push_alt_fingertip:      [3, 6],
+    push_alt_ringcross:      [3, 6],
+    skill_handstand_wallwalk:[3, 6],
+    skill_handstand_cartwheel:[3, 6],
+    skill_handstand_toetap:  [3, 6],
+    /* Group B (pull). 1–5: the muscle-up's three rungs after the high pull,
+       the one-arm pull-up, and the front lever raise. 3–6: the high pull, the
+       chest-to-bar and towel-grip pull-ups, skin the cat and the tuck-to-
+       straddle transition. */
+    skill_muscleup_turnover: [1, 5],
+    skill_muscleup_band:     [1, 5],
+    skill_muscleup_full:     [1, 5],
+    pull_alt_onearm:         [1, 5],
+    skill_frontlever_raise:  [1, 5],
+    skill_muscleup_explosive:[3, 6],
+    skill_backlever_skinthecat:[3, 6],
+    skill_backlever_transition:[3, 6],
+    pull_alt_c2b:            [3, 6],
+    pull_alt_towelgrip:      [3, 6],
+    /* Group C (squat, hinge, core). 3–6: a jump, the two dragon squats (balance
+       and a twisting knee), toes-to-bar and the standing ab-wheel rollout, all
+       near-maximal or power moves where quality falls off past about six. */
+    squat_alt_jump:          [3, 6],
+    squat_alt_dragon:        [3, 6],
+    squat_alt_dragonassist:  [3, 6],
+    core_alt_t2b:            [3, 6],
+    core_alt_abwheelstand:   [3, 6],
+    /* Group D (conditioning). 3–6: the tuck-jump burpee, the box jump and the
+       broad jump are power moves, so quality falls off past about six. The
+       other conditioning reps (the two burpees and the vest burpee) take the
+       coverage range, 10–15, like any coverage slot. */
+    cond_burpeetuck:         [3, 6],
+    cond_boxjump:            [3, 6],
+    cond_broadjump:          [3, 6]
+  };
 
   /* Rest after a rep set for a NEW profile, by goal. A profile that already
      exists keeps the rest it has: changing your goal never rewrites a setting
@@ -152,7 +200,45 @@
     acc_antirot_knees:    [20, 40],
     acc_antirot_sideplank:[20, 40],
     acc_antirot_leg:      [15, 30],
-    acc_antirot_suitcase: [20, 40]
+    acc_antirot_suitcase: [20, 40],
+    /* Dip supports (Yellow Dude, Group A). Product guesses on the engine's own
+       formula (start = half the advance point, to the nearest 5 s): a straight-
+       arm support on fixed bars is held like a plank, and on rings it is held
+       shorter because the rings have to be steadied as well. */
+    dip_alt_support:     [20, 40],
+    dip_alt_ringsupport: [15, 30],
+    /* Group C (Yellow Dude). Product guesses against the nearest hold: a
+       single-foot plank and a weighted plank are harder per second than the
+       plank (30–60), so they start shorter, like the side planks; the straight-
+       leg hold is hollow-body's (15–30), a long lever on the lower back; flutter
+       kicks are continuous movement, so 20–40 s of it; a floor L-sit lifts the
+       hips from a flat floor with no handles, so even 5 s is a real hold. */
+    core_alt_onefoot:       [20, 40],
+    core_alt_plankweighted: [20, 40],
+    core_alt_floorlsit:     [5, 15],
+    core_alt_legshold:      [15, 30],
+    core_alt_flutter:       [20, 40],
+    /* Group D (Yellow Dude). Product guesses against the nearest hold. A single-
+       leg wall sit is the two-leg sit's range halved (30–60 → 15–30), and a
+       weighted one starts shorter, like the farmer hold (20–40). The false-grip
+       hang is harder than the towel hang (15–30), so it starts at 10. The superman
+       hold lifts a little and holds, so it takes hollow body's 15–30. The rice
+       bucket and every jump-rope and jumping-jack set are timed work, and the
+       count of 30–60 s is the plank's: low-load, continuous. A double-under is
+       a skill and a weighted rope loads the shoulders, so those two start
+       shorter (10–20 s and 20–40 s). */
+    acc_quad_wallsit1:     [15, 30],
+    acc_quad_wallsitw:     [20, 40],
+    acc_grip_falsegrip:    [10, 20],
+    acc_grip_ricebucket:   [30, 60],
+    acc_backext_superman:  [15, 30],
+    cond_jacks:            [30, 60],
+    cond_ropeless:         [30, 60],
+    cond_rope:             [30, 60],
+    cond_ropealt:          [30, 60],
+    cond_ropeboxer:        [30, 60],
+    cond_doubleunder:      [10, 20],
+    cond_ropeweighted:     [20, 40]
   };
 
   /* A skill is judged against its own standard, taken from the exercise's
@@ -166,7 +252,24 @@
     skill_frontlever_4: null,
     skill_handstand_1: 45, skill_handstand_2: 45, skill_handstand_3: null,
     skill_handstand_4: 30,
-    skill_lsit_1: 30, skill_lsit_2: 30, skill_lsit_3: 20, skill_vsit: null
+    skill_lsit_1: 30, skill_lsit_2: 30, skill_lsit_3: 20, skill_vsit: null,
+    /* Yellow Dude, Group A. Product guesses, each set against its nearest
+       neighbour: an assisted rung is held as long as the rung it assists; a
+       harder inverted rung has a shorter standard; the one-arm handstand has
+       no number, like the V-sit, so the card never offers a step from it. */
+    skill_planche_band: 30,  skill_planche_boxtuck: 20,
+    skill_handstand_pike: 45, skill_handstand_pikeelev: 30,
+    skill_handstand_split: 20, skill_handstand_parallette: 20,
+    skill_handstand_bentarm: 10, skill_handstand_onearm: null,
+    /* Yellow Dude, Group B. The band front lever is held as long as the rung it
+       leads to (advanced tuck, 15 s): the band takes weight, so a longer lever
+       is reachable at the same standard. The one-leg lever sits between the
+       advanced tuck and the straddle, so it takes the straddle's 10 s. The back
+       lever mirrors the front lever's 20 / 15 / 10 s, and the full one has no
+       number, like the full front lever, because nothing follows it. */
+    skill_frontlever_band: 15, skill_frontlever_oneleg: 10,
+    skill_backlever_1: 20, skill_backlever_2: 15, skill_backlever_3: 10,
+    skill_backlever_4: null
   };
 
   /* Per implement, not per exercise: a dumbbell comes in 2.5 kg steps, a
@@ -224,6 +327,7 @@
     pull_alt_tabledoor:  { key: "bodyAngle", values: BODY_ANGLE },
     pull_alt_towel:      { key: "bodyAngle", values: BODY_ANGLE },
     pull_alt_australian: { key: "bodyAngle", values: BODY_ANGLE },
+    pull_alt_bandrow:    { key: "band", values: BAND_TENSION },
     pull_alt_bandassist: { key: "band", values: [
       { id: "heavy",  label: "Heavy band" },
       { id: "medium", label: "Medium band" },
@@ -255,7 +359,20 @@
     acc_adductor_band:      { key: "band", values: BAND_TENSION },
     acc_abductor_bandwalk:  { key: "band", values: BAND_TENSION },
     acc_abductor_clamshell: { key: "band", values: BAND_TENSION },
-    acc_antirot_pallof:     { key: "band", values: BAND_TENSION }
+    acc_antirot_pallof:     { key: "band", values: BAND_TENSION },
+    /* Group C (Yellow Dude). A box pistol gets harder by sitting to a lower box,
+       so the values run high to low. The assisted Nordic curl gets harder as the
+       band gets lighter, backwards from every other band move here, the same way
+       pull_alt_bandassist runs. */
+    squat_alt_boxpistol: { key: "box", values: [
+      { id: "high", label: "High box" },
+      { id: "low",  label: "Low box" }
+    ] },
+    hinge_alt_nordicband: { key: "band", values: [
+      { id: "heavy",  label: "Heavy band" },
+      { id: "medium", label: "Medium band" },
+      { id: "light",  label: "Light band" }
+    ] }
   };
 
   /* --------------------------------------------------------------------------
@@ -269,13 +386,14 @@
     push:     { label: "Push",     first: ["push_1"],
                 loaded: ["push_e2_weighted", "push_e2_dbpress"] },
     row:      { label: "Row",      first: ["pull_alt_tabledoor", "pull_alt_towel"],
-                loaded: ["pull_alt_row", "pull_e2_dbrow"] },
-    pull:     { label: "Pull",     first: ["pull_1"], loaded: [],
+                loaded: ["pull_alt_row", "pull_e2_dbrow", "pull_alt_tableweighted"] },
+    pull:     { label: "Pull",     first: ["pull_1"], loaded: ["pull_alt_weighted"],
                 none: "Needs a pull-up bar. Without one, the row slot carries pulling." },
-    squat:    { label: "Squat",    first: ["squat_1"], loaded: ["squat_e2_goblet"] },
+    squat:    { label: "Squat",    first: ["squat_1"],
+                loaded: ["squat_e2_goblet", "squat_alt_bulgarianw", "squat_alt_barbell"] },
     hinge:    { label: "Hinge",    first: ["hinge_1"],
                 loaded: ["hinge_e2_rdl", "hinge_e2_swing"] },
-    core:     { label: "Core",     first: ["core_1"], loaded: [] },
+    core:     { label: "Core",     first: ["core_1"], loaded: ["core_alt_plankweighted"] },
     shoulder: { label: "Shoulder", first: ["shoulder_1"], loaded: ["shoulder_e2_ohp"] },
     dip:      { label: "Dip",      first: ["dip_1", "dip_alt_chair"], loaded: [], optional: true },
 
@@ -296,7 +414,8 @@
     grip:     { label: "Grip",          coverage: true, trains: ["forearms"],
                 first: ["acc_grip_wring"], loaded: ["acc_grip_wristcurl", "acc_grip_revwristcurl"] },
     quad:     { label: "Quad",          coverage: true, trains: ["quads"],
-                first: ["acc_quad_wallsit"], loaded: ["acc_quad_dbsplit"] },
+                first: ["acc_quad_wallsit"],
+                loaded: ["acc_quad_dbsplit", "acc_quad_wallsitw", "acc_quad_stepupw"] },
     hamstring:{ label: "Hamstring",     coverage: true, trains: ["hamstrings"],
                 first: ["acc_hamstring_slidecurl"], loaded: ["acc_hamstring_slrdldb"] },
     calf:     { label: "Calf",          coverage: true, trains: ["calves"],
@@ -310,7 +429,11 @@
     antirot:  { label: "Anti-rotation", coverage: true, trains: ["obliques"],
                 first: ["acc_antirot_knees"], loaded: [] },
     backext:  { label: "Back extension",coverage: true, trains: ["lower_back"],
-                first: ["acc_backext_birddog"], loaded: ["acc_backext_goodmorning"] }
+                first: ["acc_backext_birddog"], loaded: ["acc_backext_goodmorning"] },
+    /* Conditioning trains no muscle (plan A5): it runs only on a pinned weekday,
+       so its prescription never competes with a muscle's weekly floor. */
+    conditioning: { label: "Conditioning", coverage: true, conditioning: true, trains: [],
+                first: ["cond_jacks"], loaded: ["cond_burpeevest"] }
   };
 
   /* --------------------------------------------------------------------------
@@ -336,6 +459,7 @@
     EXERCISES[id] = rec;
   }
   var BAR = ["pullupBar"], BENCH = ["bench"], DB = ["dumbbells"], BWT = [];
+  var NORDIC = ["nordicAnchor"];
   /* The tokens that replaced "pull-up bar" as a catch-all (F5), and the two
      any-of lists. Front levers hang from a bar or rings; an L-Sit needs
      something to press down on, a bench or parallettes. */
@@ -344,107 +468,241 @@
 
   /* ---- PUSH: wall → incline (counter, table, chair, step) → floor → bench ---- */
   x("push_1",        "push", "main", "reps", BWT,   ["push_incline"]);
-  x("push_incline",  "push", "main", "reps", BWT,   ["push_2"]);
+  x("push_incline",  "push", "main", "reps", BWT,   ["push_2"], ["push_alt_knee"]);
   x("push_2",        "push", "main", "reps", BWT,   ["push_3"]);
-  x("push_3",        "push", "main", "reps", BWT,   ["push_4"]);
-  x("push_4",        "push", "main", "reps", BENCH, [], ["push_5", "skill_planche_1"]);
-  x("push_5",        "push", "skill", "unilateral", BWT, ["push_6", "push_alt_onearm"]);
-  x("push_6",        "push", "skill", "reps", BWT,  []);
+  x("push_3",        "push", "main", "reps", BWT,   ["push_4"], ["push_alt_staggered"]);
+  x("push_4",        "push", "main", "reps", BENCH, [], ["push_5", "skill_planche_1", "skill_planche_band"]);
+  x("push_5",        "push", "skill", "unilateral", BWT, ["push_6", "push_alt_onearm", "push_alt_onearmassist"]);
+  x("push_6",        "push", "skill", "reps", BWT,  ["push_alt_pseudoweighted"]);
   x("push_alt_onearm",    "push", "skill", "unilateral", BWT, []);
   x("push_alt_scapula",   "push", "skill", "reps", BWT,   []);
   x("push_alt_wide",      "push", "skill", "reps", BWT,   []);
   x("push_alt_negative",  "push", "skill", "eccentric", BWT, []);
   x("push_alt_explosive", "push", "skill", "reps", BWT,   []);
   x("push_alt_tricep",    "push", "skill", "reps", BENCH, []);
-  x("push_e2_weighted", "push", "main", "loaded", DB, [], [], { loadMode: "total" });
+  /* Yellow Dude, Group A. Variants are their own ids, off the path: a main rung
+     offers one only where it is a progression from it. Knee push-up and its
+     knee-assisted press sit after Incline; the sideways moves (partial range,
+     parallettes, towel squeeze, ring crossover, fingertips) are offered by
+     nothing and are reached from Exercises, Swap or Train this in my slot. */
+  x("push_alt_knee",         "push", "skill", "reps", BWT, ["push_alt_kneeassist"]);
+  x("push_alt_kneeassist",   "push", "skill", "reps", BWT, []);
+  x("push_alt_partial",      "push", "skill", "reps", BWT, []);
+  x("push_alt_staggered",    "push", "skill", "unilateral", BWT, ["push_5"]);
+  x("push_alt_onearmassist", "push", "skill", "unilateral", BWT, ["push_alt_onearm"]);
+  x("push_alt_pseudoweighted", "push", "skill", "loaded", ["vest"], [], [], { loadMode: "total" });
+  x("push_alt_parallette",   "push", "skill", "reps", ["parallettes"], []);
+  x("push_alt_slider",       "push", "skill", "reps", BWT, []);
+  x("push_alt_ringcross",    "push", "skill", "reps", ["rings"], []);
+  x("push_alt_fingertip",    "push", "skill", "reps", BWT, []);
+  x("push_e2_weighted", "push", "main", "loaded", [["dumbbells", "vest"]], [], [], { loadMode: "total" });
   x("push_e2_dbpress",  "push", "main", "loaded", ["dumbbells", "bench"], [], [], { loadMode: "perHand" });
-  x("skill_planche_1", "push", "skill", "skill", BWT, ["skill_planche_2"]);
+  x("skill_planche_1", "push", "skill", "skill", BWT, ["skill_planche_2", "skill_planche_boxtuck"]);
   x("skill_planche_2", "push", "skill", "skill", BWT, ["skill_planche_3"]);
-  x("skill_planche_3", "push", "skill", "skill", BWT, ["skill_planche_4"]);
-  x("skill_planche_4", "push", "skill", "skill", BWT, ["skill_planche_5"]);
+  x("skill_planche_3", "push", "skill", "skill", BWT, ["skill_planche_4", "skill_planche_boxpushup"]);
+  x("skill_planche_4", "push", "skill", "skill", BWT, ["skill_planche_5", "skill_planche_pushup"]);
   x("skill_planche_5", "push", "skill", "skill", BWT, []);
+  /* The box-supported rungs and the band lean (Yellow Dude, Group A). */
+  x("skill_planche_band",    "push", "skill", "skill", BANDS, ["skill_planche_2"]);
+  x("skill_planche_boxtuck", "push", "skill", "skill", ["parallettes", "box"], ["skill_planche_3"]);
+  x("skill_planche_boxpushup", "push", "skill", "reps", ["parallettes", "box"], []);
+  x("skill_planche_pushup",  "push", "skill", "reps", BWT, []);
 
   /* ---- ROW: the horizontal pull, new in Stage 2 ---- */
-  x("pull_alt_tabledoor",  "row", "main", "reps", BWT, ["pull_alt_australian"]);
+  x("pull_alt_tabledoor",  "row", "main", "reps", BWT, ["pull_alt_australian"], ["pull_alt_bandrow"]);
   x("pull_alt_towel",      "row", "main", "reps", BWT, ["pull_alt_australian"]);
-  x("pull_alt_australian", "row", "main", "reps", [["lowBar", "rings"]], [], ["skill_frontlever_1"]);
+  x("pull_alt_australian", "row", "main", "reps", [["lowBar", "rings"]], [],
+    ["skill_frontlever_1", "pull_alt_australianfe", "pull_alt_archerrow", "skill_frontlever_band"]);
   x("pull_alt_row",  "row", "main", "loaded", DB, [], [], { loadMode: "perHand" });
   x("pull_e2_dbrow", "row", "main", "loaded", ["dumbbells", "bench"], [], [], { loadMode: "perHand", perSide: true });
-  x("skill_frontlever_1", "row", "skill", "skill", HANG, ["skill_frontlever_2"]);
-  x("skill_frontlever_2", "row", "skill", "skill", HANG, ["skill_frontlever_3"]);
+  /* Group B (Yellow Dude). A backpack or vest row from a heavy table: the loaded
+     row that follows the straight-leg table row, in the slot's loaded list. */
+  x("pull_alt_tableweighted", "row", "main", "loaded", ["vest"], [], [], { loadMode: "total" });
+  x("skill_frontlever_1", "row", "skill", "skill", HANG, ["skill_frontlever_2", "skill_frontlever_negative"]);
+  x("skill_frontlever_2", "row", "skill", "skill", HANG, ["skill_frontlever_3", "skill_frontlever_oneleg", "skill_frontlever_raise"]);
   x("skill_frontlever_3", "row", "skill", "skill", HANG, ["skill_frontlever_4"]);
   x("skill_frontlever_4", "row", "skill", "skill", HANG, []);
+  /* The rows and levers added in Group B. The feet-elevated and archer rows are
+     offered by the inverted row; the band row by the table row. The band lever
+     sits before the advanced tuck, and the negative, one-leg lever and raise are
+     appended after the existing steps, so no one's next step moves. */
+  x("pull_alt_australianfe", "row", "skill", "reps", [["lowBar", "rings"], "bench"], []);
+  x("pull_alt_archerrow",    "row", "skill", "unilateral", [["lowBar", "rings"]], []);
+  x("pull_alt_bandrow",      "row", "skill", "reps", BANDS, []);
+  x("skill_frontlever_band", "row", "skill", "skill", ["pullupBar", "bands"], ["skill_frontlever_2"]);
+  x("skill_frontlever_negative", "row", "skill", "eccentric", HANG, []);
+  x("skill_frontlever_oneleg",   "row", "skill", "skill", HANG, ["skill_frontlever_3"]);
+  x("skill_frontlever_raise",    "row", "skill", "reps", HANG, []);
 
   /* ---- PULL: vertical, needs a bar. Chin-up is a grip option, not a rung ---- */
   x("pull_1", "pull", "main", "hold", BAR, ["pull_2"]);
-  x("pull_2", "pull", "main", "reps", BAR, ["pull_3", "pull_alt_bandassist"]);
+  x("pull_2", "pull", "main", "reps", BAR, ["pull_3", "pull_alt_bandassist"], ["pull_alt_ringassist"]);
   x("pull_3", "pull", "main", "eccentric", BAR, ["pull_4"]);
   x("pull_alt_bandassist", "pull", "main", "reps", ["pullupBar", "bands"], ["pull_4"]);
-  x("pull_4", "pull", "main", "reps", BAR, [], ["pull_5", "pull_6"]);
+  x("pull_4", "pull", "main", "reps", BAR, [], ["pull_5", "pull_6", "pull_alt_c2b",
+    "skill_muscleup_explosive", "skill_backlever_skinthecat"]);
   x("pull_5", "pull", "skill", "reps", BAR, ["pull_6"]);
-  x("pull_6", "pull", "skill", "unilateral", BAR, []);
+  x("pull_6", "pull", "skill", "unilateral", BAR, ["pull_alt_onearm"]);
   x("pull_alt_passivehang", "pull", "skill", "hold", BAR, []);
+  /* Group B (Yellow Dude). Grip variants of the pull-up are offered by nothing:
+     a different grip is sideways, not harder. The chest-to-bar pull-up, the
+     high pull-up and skin the cat are offered by the pull-up; the one-arm
+     pull-up is the first step up from the archer pull-up, which used to end its
+     path. The muscle-up and the back lever are tracks of their own. */
+  x("pull_alt_ringassist", "pull", "skill", "reps", ["rings"], []);
+  x("pull_alt_neutral",    "pull", "skill", "reps", HANG, []);
+  x("pull_alt_wide",       "pull", "skill", "reps", BAR, []);
+  x("pull_alt_close",      "pull", "skill", "reps", BAR, []);
+  x("pull_alt_hollow",     "pull", "skill", "reps", BAR, []);
+  x("pull_alt_arched",     "pull", "skill", "reps", BAR, []);
+  x("pull_alt_towelgrip",  "pull", "skill", "reps", BAR, []);
+  x("pull_alt_c2b",        "pull", "skill", "reps", BAR, []);
+  x("pull_alt_onearm",     "pull", "skill", "unilateral", BAR, []);
+  // a vest, or a dumbbell or kettlebell on a dip belt, as Weighted Dip takes (card R19: "vest or dip belt")
+  x("pull_alt_weighted",   "pull", "main", "loaded", ["pullupBar", ["dumbbells", "kettlebells", "vest"]], [], [], { loadMode: "total" });
+  x("skill_muscleup_explosive", "pull", "skill", "reps", BAR, ["skill_muscleup_turnover"]);
+  x("skill_muscleup_turnover",  "pull", "skill", "reps", BAR, ["skill_muscleup_band"]);
+  x("skill_muscleup_band",      "pull", "skill", "reps", ["pullupBar", "bands"], ["skill_muscleup_full"]);
+  x("skill_muscleup_full",      "pull", "skill", "reps", BAR, []);
+  x("skill_backlever_skinthecat", "pull", "skill", "reps", HANG, ["skill_backlever_1"]);
+  x("skill_backlever_1",          "pull", "skill", "skill", HANG, ["skill_backlever_2", "skill_backlever_transition"]);
+  x("skill_backlever_transition", "pull", "skill", "reps", HANG, []);
+  x("skill_backlever_2",          "pull", "skill", "skill", HANG, ["skill_backlever_straddleneg"]);
+  x("skill_backlever_straddleneg","pull", "skill", "eccentric", HANG, ["skill_backlever_3"]);
+  x("skill_backlever_3",          "pull", "skill", "skill", HANG, ["skill_backlever_fullneg"]);
+  x("skill_backlever_fullneg",    "pull", "skill", "eccentric", HANG, ["skill_backlever_4"]);
+  x("skill_backlever_4",          "pull", "skill", "skill", HANG, []);
 
   /* ---- SQUAT: bodyweight → pause → split squat → rear foot raised ---- */
   x("squat_1",     "squat", "main", "reps", BWT, ["squat_2"]);
-  x("squat_2",     "squat", "main", "reps", BWT, ["squat_split"]);
+  x("squat_2",     "squat", "main", "reps", BWT, ["squat_split"], ["squat_alt_jump"]);
   x("squat_split", "squat", "main", "unilateral", BWT, ["squat_3"]);
-  x("squat_3",     "squat", "main", "unilateral", BENCH, [], ["squat_4", "squat_alt_assistedpistol"]);
+  x("squat_3",     "squat", "main", "unilateral", BENCH, [], ["squat_4", "squat_alt_assistedpistol",
+    "squat_alt_deficit", "squat_alt_boxpistol", "squat_alt_pistolneg"]);
   x("squat_4",     "squat", "skill", "unilateral", BWT, ["squat_5"]);
   x("squat_alt_assistedpistol", "squat", "skill", "unilateral", BWT, ["squat_5"]);
-  x("squat_5",     "squat", "skill", "unilateral", BWT, ["squat_6"]);
+  x("squat_5",     "squat", "skill", "unilateral", BWT, ["squat_6", "squat_alt_dragonassist"]);
   x("squat_6",     "squat", "skill", "loaded", [["dumbbells", "kettlebells"]], [], [], { loadMode: "total", perSide: true });
   x("squat_alt_narrow",  "squat", "skill", "reps", BWT, []);
   x("squat_alt_deep",    "squat", "skill", "reps", BWT, []);
-  x("squat_alt_cossack", "squat", "skill", "unilateral", BWT, []);
+  x("squat_alt_cossack", "squat", "skill", "unilateral", BWT, ["squat_alt_cossackw"]);
   x("squat_e2_goblet", "squat", "main", "loaded", [["kettlebells", "dumbbells"]], [], [], { loadMode: "total" });
+  /* Yellow Dude, Group C. Variants are their own ids, off the path. The jump
+     squat is offered by the bodyweight squat; the deficit split squat and the
+     two single-leg lowerings (box pistol, negative pistol) by the rear-foot-
+     raised split squat, which is where a pistol comes from. The dragon squat is
+     the one step up from the pistol, through its assisted form, and the
+     weighted Cossack squat is the first step up from the Cossack squat, which
+     used to end its path. The box squat is a sideways move, offered by
+     nothing. The bulgarian split squat and the barbell squat are loaded mains:
+     they sit beside the path, in SLOTS.squat.loaded. */
+  x("squat_alt_box",        "squat", "skill", "reps", BWT, []);
+  x("squat_alt_jump",       "squat", "skill", "reps", BWT, []);
+  x("squat_alt_bulgarianw", "squat", "main", "loaded", ["bench", "dumbbells"], [], [], { loadMode: "perHand", perSide: true });
+  x("squat_alt_deficit",    "squat", "skill", "unilateral", BENCH, []);
+  x("squat_alt_boxpistol",  "squat", "skill", "unilateral", BWT, ["squat_5"]);
+  x("squat_alt_pistolneg",  "squat", "skill", "eccentric", BWT, ["squat_5"]);
+  x("squat_alt_barbell",    "squat", "main", "loaded", ["barbell"], [], [], { loadMode: "total" });
+  x("squat_alt_cossackw",   "squat", "skill", "loaded", [["dumbbells", "kettlebells"]], [], [], { loadMode: "total", perSide: true });
+  x("squat_alt_dragonassist","squat", "skill", "unilateral", BWT, ["squat_alt_dragon"]);
+  x("squat_alt_dragon",     "squat", "skill", "unilateral", BWT, []);
 
   /* ---- HINGE: the Nordic branch is optional, never compulsory ---- */
   x("hinge_1", "hinge", "main", "reps", BWT, ["hinge_2"]);
   x("hinge_2", "hinge", "main", "reps", BENCH, ["hinge_3"]);
-  x("hinge_3", "hinge", "main", "unilateral", BENCH, [], ["hinge_4"]);
-  x("hinge_4", "hinge", "skill", "eccentric", BWT, ["hinge_5"]);
-  x("hinge_5", "hinge", "skill", "reps", BWT, ["hinge_6"]);
-  x("hinge_6", "hinge", "skill", "reps", BWT, []);
+  x("hinge_3", "hinge", "main", "unilateral", BENCH, [],
+    ["hinge_4", "hinge_alt_nordicband", "hinge_alt_nordicarm"]);
+  /* A Nordic curl can't be done without something holding the ankles, so all
+     five need the anchor (Yellow Dude, plan A1). Before v7 they needed nothing,
+     and the v7 migration turns the anchor on for anyone who already trains one. */
+  x("hinge_4", "hinge", "skill", "eccentric", NORDIC, ["hinge_5"]);
+  x("hinge_5", "hinge", "skill", "reps", NORDIC, ["hinge_6"]);
+  x("hinge_6", "hinge", "skill", "reps", NORDIC, []);
+  /* The two assisted ways in, both offered by the single-leg hip thrust and both
+     leading to the full curl. Band tension is the setup, heavy to light. */
+  x("hinge_alt_nordicband", "hinge", "skill", "reps", ["bands", "nordicAnchor"], ["hinge_5"]);
+  x("hinge_alt_nordicarm",  "hinge", "skill", "reps", NORDIC, ["hinge_5"]);
   x("hinge_e2_rdl",   "hinge", "main", "loaded", DB, [], [], { loadMode: "perHand" });
   x("hinge_e2_swing", "hinge", "main", "loaded", ["kettlebells"], [], [], { loadMode: "total" });
 
   /* ---- CORE ---- */
-  x("core_1", "core", "main", "hold", BWT, ["core_2"]);
-  x("core_2", "core", "main", "hold", BWT, ["core_3"]);
-  x("core_3", "core", "main", "hold", SEAT, [], ["core_4", "skill_lsit_1"]);
-  x("core_4", "core", "skill", "hold", SEAT, ["core_5"]);
+  x("core_1", "core", "main", "hold", BWT, ["core_2"], ["core_alt_onefoot"]);
+  x("core_2", "core", "main", "hold", BWT, ["core_3"],
+    ["core_alt_hollowrock", "core_alt_hangknee", "core_alt_abwheelknee"]);
+  x("core_3", "core", "main", "hold", SEAT, [], ["core_4", "skill_lsit_1", "core_alt_pikelift"]);
+  x("core_4", "core", "skill", "hold", SEAT, ["core_5", "core_alt_floorlsit"]);
   x("core_5", "core", "skill", "eccentric", BENCH, ["core_6"]);
   x("core_6", "core", "skill", "reps", BENCH, []);
   x("skill_lsit_1", "core", "skill", "skill", SEAT, ["skill_lsit_2"]);
   x("skill_lsit_2", "core", "skill", "skill", SEAT, ["skill_lsit_3"]);
   x("skill_lsit_3", "core", "skill", "skill", SEAT, ["skill_vsit"]);
   x("skill_vsit",   "core", "skill", "skill", SEAT, []);
+  /* Yellow Dude, Group C. The plank variants, the hanging raises, the ab wheel
+     and the floor L-sit. Everything is its own id, off the path; the sideways
+     moves (two-chair raise, lying raise, sit-up, crunch, bicycle, straight-leg
+     hold, flutter kicks) are offered by nothing. Flutter kicks are the one
+     timed hold here: continuous movement for seconds, not a still position. */
+  x("core_alt_onefoot",       "core", "skill", "hold", BWT, []);
+  x("core_alt_plankweighted", "core", "main", "hold", ["vest"], [], [], { loadMode: "total" });
+  x("core_alt_hollowrock",    "core", "skill", "reps", BWT, []);
+  x("core_alt_floorlsit",     "core", "skill", "hold", BWT, []);
+  x("core_alt_chairlegraise", "core", "skill", "reps", BWT, []);
+  x("core_alt_pikelift",      "core", "skill", "reps", BWT, []);
+  x("core_alt_hangknee",      "core", "skill", "reps", BAR, ["core_alt_hangleg"]);
+  x("core_alt_hangleg",       "core", "skill", "reps", BAR, ["core_alt_t2b"]);
+  x("core_alt_t2b",           "core", "skill", "reps", BAR, []);
+  x("core_alt_lyingleg",      "core", "skill", "reps", BWT, []);
+  x("core_alt_situp",         "core", "skill", "reps", BWT, []);
+  x("core_alt_crunch",        "core", "skill", "reps", BWT, []);
+  x("core_alt_bicycle",       "core", "skill", "reps", BWT, []);
+  x("core_alt_legshold",      "core", "skill", "hold", BWT, []);
+  x("core_alt_flutter",       "core", "skill", "hold", BWT, [], [], { timed: true });
+  x("core_alt_abwheelknee",   "core", "skill", "reps", ["abWheel"], ["core_alt_abwheelstand"]);
+  x("core_alt_abwheelstand",  "core", "skill", "reps", ["abWheel"], []);
 
   /* ---- SHOULDER ---- */
-  x("shoulder_1", "shoulder", "main", "reps", BWT, ["shoulder_2"]);
+  x("shoulder_1", "shoulder", "main", "reps", BWT, ["shoulder_2"], ["skill_handstand_pike"]);
   x("shoulder_2", "shoulder", "main", "reps", BENCH, [], ["shoulder_3", "skill_handstand_1"]);
   x("shoulder_3", "shoulder", "skill", "hold", BWT, ["shoulder_4"]);
   x("shoulder_4", "shoulder", "skill", "reps", BWT, ["shoulder_5"]);
   x("shoulder_5", "shoulder", "skill", "eccentric", BWT, ["shoulder_6"]);
   x("shoulder_6", "shoulder", "skill", "reps", BWT, []);
+  x("shoulder_alt_pikeneg", "shoulder", "skill", "eccentric", BWT, []);
   x("shoulder_e2_ohp", "shoulder", "main", "loaded", DB, [], [], { loadMode: "perHand" });
-  x("skill_handstand_1", "shoulder", "skill", "skill", BWT, ["skill_handstand_2"]);
-  x("skill_handstand_2", "shoulder", "skill", "skill", BWT, ["skill_handstand_3"]);
-  x("skill_handstand_3", "shoulder", "skill", "skill", BWT, ["skill_handstand_4"]);
-  x("skill_handstand_4", "shoulder", "skill", "skill", BWT, []);
+  x("skill_handstand_1", "shoulder", "skill", "skill", BWT, ["skill_handstand_2", "skill_handstand_wallwalk"]);
+  x("skill_handstand_2", "shoulder", "skill", "skill", BWT, ["skill_handstand_3", "skill_handstand_cartwheel"]);
+  x("skill_handstand_3", "shoulder", "skill", "skill", BWT, ["skill_handstand_4", "skill_handstand_toetap"]);
+  /* Freestanding sat at the end of its path; it now leads to three expert
+     holds, none of them compulsory (Yellow Dude, Group A). */
+  x("skill_handstand_4", "shoulder", "skill", "skill", BWT,
+    ["skill_handstand_parallette", "skill_handstand_bentarm", "skill_handstand_onearm"]);
+  /* The rungs before the wall (a pike hold, then feet-elevated), the wall walk
+     and the cartwheel exit, and the split-leg pair between wall and free. */
+  x("skill_handstand_pike",     "shoulder", "skill", "skill", BWT, ["skill_handstand_pikeelev"]);
+  x("skill_handstand_pikeelev", "shoulder", "skill", "skill", BENCH, ["skill_handstand_1"]);
+  x("skill_handstand_wallwalk", "shoulder", "skill", "reps", BWT, []);
+  x("skill_handstand_cartwheel","shoulder", "skill", "reps", BWT, []);
+  x("skill_handstand_toetap",   "shoulder", "skill", "unilateral", BWT, ["skill_handstand_split"]);
+  x("skill_handstand_split",    "shoulder", "skill", "skill", BWT, ["skill_handstand_4"]);
+  x("skill_handstand_parallette","shoulder", "skill", "skill", ["parallettes"], []);
+  x("skill_handstand_bentarm",  "shoulder", "skill", "skill", BWT, []);
+  x("skill_handstand_onearm",   "shoulder", "skill", "skill", BWT, []);
 
   /* ---- DIP (optional slot): bench or chair → two chairs or bar → parallel bars ---- */
   x("dip_1",           "dip", "main", "reps", BENCH, ["dip_alt_twochair", "dip_2"]);
   x("dip_alt_chair",   "dip", "main", "reps", BWT,   ["dip_alt_twochair", "dip_2"]);
-  x("dip_alt_twochair","dip", "main", "reps", BWT,   ["dip_3"]);
+  x("dip_alt_twochair","dip", "main", "reps", BWT,   ["dip_3"], ["dip_alt_negative", "dip_alt_support"]);
   x("dip_2",           "dip", "main", "reps", LOWBAR, ["dip_3"]);
-  x("dip_3",           "dip", "main", "reps", DIPBARS, [], ["dip_4"]);
+  x("dip_3",           "dip", "main", "reps", DIPBARS, [], ["dip_4", "dip_alt_ringsupport"]);
   x("dip_4", "dip", "skill", "reps", LOWBAR, ["dip_5"]);
   x("dip_5", "dip", "skill", "reps", ["rings"], ["dip_6"]);
   /* Weighted on the same bars as the dips before it: a weight alone isn't a
      place to dip. */
-  x("dip_6", "dip", "skill", "loaded", ["dipBars", ["dumbbells", "kettlebells"]], [], [], { loadMode: "total" });
+  x("dip_6", "dip", "skill", "loaded", ["dipBars", ["dumbbells", "kettlebells", "vest"]], [], [], { loadMode: "total" });
+  /* Yellow Dude, Group A: the lowering and the supports that come before it. */
+  x("dip_alt_negative",    "dip", "skill", "eccentric", [["dipBars", "lowBar"]], []);
+  x("dip_alt_support",     "dip", "skill", "hold", DIPBARS, ["dip_alt_negative"]);
+  x("dip_alt_ringsupport", "dip", "skill", "hold", ["rings"], ["dip_5"]);
 
   /* ---- COVERAGE, upper body (Stage 3 · step 3.1) ----
      Each path runs equipment-free first, and a rung you can't do is walked
@@ -453,7 +711,8 @@
      SLOTS[x].loaded. A slot's `trains` group is a primary on every member. */
   /* curl → biceps */
   x("acc_curl_doorframe", "curl", "main", "reps", BWT, ["acc_curl_invrow"]);
-  x("acc_curl_invrow",    "curl", "main", "reps", [["lowBar", "rings"]], ["acc_curl_band"]);
+  x("acc_curl_invrow",    "curl", "main", "reps", [["lowBar", "rings"]], ["acc_curl_band"],
+    ["acc_curl_pelican", "acc_curl_ring"]);
   x("acc_curl_band",      "curl", "main", "reps", BANDS, []);
   x("acc_curl_db",        "curl", "main", "loaded", DB, [], [], { loadMode: "perHand" });
   x("acc_curl_hammer",    "curl", "main", "loaded", DB, [], [], { loadMode: "perHand" });
@@ -464,7 +723,7 @@
   x("acc_lateral_leanaway", "lateral", "main", "loaded", DB, [], [], { loadMode: "perHand", perSide: true });
   /* reardelt → rear delts */
   x("acc_reardelt_tdraise",   "reardelt", "main", "reps", BWT, ["acc_reardelt_snowangel"]);
-  x("acc_reardelt_snowangel", "reardelt", "main", "reps", BWT, ["acc_reardelt_bandpull"]);
+  x("acc_reardelt_snowangel", "reardelt", "main", "reps", BWT, ["acc_reardelt_bandpull"], ["acc_reardelt_ringfacepull"]);
   x("acc_reardelt_bandpull",  "reardelt", "main", "reps", BANDS, ["acc_reardelt_facepull"]);
   x("acc_reardelt_facepull",  "reardelt", "main", "reps", BANDS, []);
   x("acc_reardelt_dbfly",     "reardelt", "main", "loaded", DB, [], [], { loadMode: "perHand" });
@@ -474,7 +733,7 @@
   x("acc_cuff_bander",    "cuff", "main", "reps", BANDS, []);
   x("acc_cuff_sidelying", "cuff", "main", "loaded", DB, [], [], { loadMode: "perHand", perSide: true });
   /* traps → traps */
-  x("acc_traps_pike",  "traps", "main", "reps", BWT, ["acc_traps_band"]);
+  x("acc_traps_pike",  "traps", "main", "reps", BWT, ["acc_traps_band"], ["acc_traps_proney"]);
   x("acc_traps_band",  "traps", "main", "reps", BANDS, []);
   x("acc_traps_shrug", "traps", "main", "loaded", [["dumbbells", "kettlebells"]], [], [], { loadMode: "perHand" });
   /* neck → neck */
@@ -483,8 +742,8 @@
   x("acc_neck_lyingraise","neck", "main", "reps", BWT, []);
   /* grip → forearms. The farmer hold is the first catalogue hold with a load:
      seconds at a weight. */
-  x("acc_grip_wring",       "grip", "main", "hold", BWT, ["acc_grip_towelhang"]);
-  x("acc_grip_towelhang",   "grip", "main", "hold", BAR, ["acc_grip_farmer"]);
+  x("acc_grip_wring",       "grip", "main", "hold", BWT, ["acc_grip_towelhang"], ["acc_grip_ricebucket"]);
+  x("acc_grip_towelhang",   "grip", "main", "hold", BAR, ["acc_grip_farmer"], ["acc_grip_falsegrip"]);
   x("acc_grip_farmer",      "grip", "main", "hold", [["dumbbells", "kettlebells"]], [], [], { loadMode: "perHand" });
   x("acc_grip_wristcurl",   "grip", "main", "loaded", DB, [], [], { loadMode: "perHand" });
   x("acc_grip_revwristcurl","grip", "main", "loaded", DB, [], [], { loadMode: "perHand" });
@@ -495,8 +754,8 @@
      dead bug, each offered by a main rung. The suitcase hold is the first hold
      you load by the side: seconds at a weight, one hand. */
   /* quad → quads */
-  x("acc_quad_wallsit", "quad", "main", "hold", BWT, ["acc_quad_revlunge"]);
-  x("acc_quad_revlunge","quad", "main", "unilateral", BWT, ["acc_quad_stepup"]);
+  x("acc_quad_wallsit", "quad", "main", "hold", BWT, ["acc_quad_revlunge"], ["acc_quad_wallsit1"]);
+  x("acc_quad_revlunge","quad", "main", "unilateral", BWT, ["acc_quad_stepup"], ["acc_quad_lunge"]);
   x("acc_quad_stepup",  "quad", "main", "unilateral", BWT, ["acc_quad_sissy"]);
   x("acc_quad_sissy",   "quad", "main", "reps", BWT, ["acc_quad_spanish"]);
   x("acc_quad_spanish", "quad", "main", "reps", BANDS, []);
@@ -508,7 +767,7 @@
   x("acc_hamstring_slrdl",      "hamstring", "skill", "unilateral", BWT, []);
   x("acc_hamstring_slrdldb",    "hamstring", "main", "loaded", DB, [], [], { loadMode: "total", perSide: true });
   /* calf → calves */
-  x("acc_calf_raise",    "calf", "main", "reps", BWT, ["acc_calf_single"], ["acc_calf_bentknee"]);
+  x("acc_calf_raise",    "calf", "main", "reps", BWT, ["acc_calf_single"], ["acc_calf_bentknee", "acc_calf_wallsit"]);
   x("acc_calf_single",   "calf", "main", "unilateral", BWT, []);
   x("acc_calf_bentknee", "calf", "skill", "reps", BWT, []);
   x("acc_calf_weighted", "calf", "main", "loaded", [["dumbbells", "kettlebells"]], [], [], { loadMode: "total", perSide: true });
@@ -528,16 +787,63 @@
   /* antirot → obliques. The dead bug is offered from the first rung because it
      asks nothing of the wrist or shoulder, which every side plank does. */
   x("acc_antirot_knees",     "antirot", "main", "hold", BWT, ["acc_antirot_sideplank"], ["acc_antirot_deadbug"]);
-  x("acc_antirot_sideplank", "antirot", "main", "hold", BWT, ["acc_antirot_leg"]);
+  x("acc_antirot_sideplank", "antirot", "main", "hold", BWT, ["acc_antirot_leg"], ["acc_antirot_hipraise"]);
   x("acc_antirot_leg",       "antirot", "main", "hold", BWT, ["acc_antirot_pallof", "acc_antirot_suitcase"]);
   x("acc_antirot_deadbug",   "antirot", "skill", "reps", BWT, []);
   x("acc_antirot_pallof",    "antirot", "main", "unilateral", BANDS, []);
   x("acc_antirot_suitcase",  "antirot", "main", "hold", [["dumbbells", "kettlebells"]], [], [], { loadMode: "total" });
   /* backext → lower back */
   x("acc_backext_birddog",     "backext", "main", "unilateral", BWT, ["acc_backext_prone"]);
-  x("acc_backext_prone",       "backext", "main", "reps", BWT, ["acc_backext_revhyper"]);
+  x("acc_backext_prone",       "backext", "main", "reps", BWT, ["acc_backext_revhyper"], ["acc_backext_superman"]);
   x("acc_backext_revhyper",    "backext", "main", "reps", BENCH, []);
   x("acc_backext_goodmorning", "backext", "main", "loaded", DB, [], [], { loadMode: "total" });
+
+  /* ---- COVERAGE and CONDITIONING (Yellow Dude, Group D) ----
+     The coverage additions are off the path (`branch: "skill"`, never kind
+     "skill"), each offered by a main rung of its slot, except the two loaded
+     mains, which sit beside the path in SLOTS.quad.loaded, and the floor calf
+     raise, which nothing offers. Each is `acc_<slot>_<slug>`; the slot's group
+     is primary on every one. The weighted wall sit is a loaded hold, like the
+     farmer hold: seconds at a weight. */
+  x("acc_curl_pelican",       "curl", "skill", "reps", ["rings"], []);
+  x("acc_curl_ring",          "curl", "skill", "reps", ["rings"], []);
+  x("acc_reardelt_ringfacepull", "reardelt", "skill", "reps", ["rings"], []);
+  x("acc_traps_proney",       "traps", "skill", "reps", BWT, []);
+  x("acc_grip_falsegrip",     "grip", "skill", "hold", ["rings"], []);
+  x("acc_grip_ricebucket",    "grip", "skill", "hold", BWT, [], [], { timed: true });
+  x("acc_backext_superman",   "backext", "skill", "hold", BWT, []);
+  x("acc_antirot_hipraise",   "antirot", "skill", "unilateral", BWT, []);
+  x("acc_quad_wallsit1",      "quad", "skill", "hold", BWT, []);
+  x("acc_quad_wallsitw",      "quad", "main", "hold", [["dumbbells", "kettlebells", "vest"]], [], [], { loadMode: "total" });
+  x("acc_quad_lunge",         "quad", "skill", "unilateral", BWT, []);
+  x("acc_quad_stepupw",       "quad", "main", "loaded", DB, [], [], { loadMode: "perHand", perSide: true });
+  x("acc_calf_floor",         "calf", "skill", "reps", BWT, []);
+  x("acc_calf_wallsit",       "calf", "skill", "reps", BWT, []);
+
+  /* ---- CONDITIONING: runs only when you pin it (plan A5, Decisions) ----
+     Two paths. Rhythm: jumping jacks → ropeless rope → rope → alternating feet
+     → boxer step → double-unders, every rung timed work (`timed: true`, a hold
+     in every rule, "for 30–60 s" on screen). A rung you can't do is walked
+     past (stepUp routes round it), so no rope still reaches the box and broad
+     jumps. Burpees: no-jump → burpee → tuck-jump, offered from the jacks. The
+     weighted rope is sideways from the rope, the box and broad jumps are
+     offered from the ropeless rope, and the vest burpee is the one loaded
+     main. ponytail: `cond_ropeweighted` needs only `jumpRope`, so the equipment
+     check can't tell a weighted rope from a plain one; one token per implement
+     is the upgrade, if it ever matters. */
+  x("cond_jacks",         "conditioning", "main", "hold", BWT, ["cond_ropeless"], ["cond_burpeenojump"], { timed: true });
+  x("cond_ropeless",      "conditioning", "main", "hold", BWT, ["cond_rope"], ["cond_boxjump", "cond_broadjump"], { timed: true });
+  x("cond_rope",          "conditioning", "main", "hold", ["jumpRope"], ["cond_ropealt"], ["cond_ropeweighted"], { timed: true });
+  x("cond_ropealt",       "conditioning", "main", "hold", ["jumpRope"], ["cond_ropeboxer"], [], { timed: true });
+  x("cond_ropeboxer",     "conditioning", "main", "hold", ["jumpRope"], ["cond_doubleunder"], [], { timed: true });
+  x("cond_doubleunder",   "conditioning", "main", "hold", ["jumpRope"], [], [], { timed: true });
+  x("cond_ropeweighted",  "conditioning", "skill", "hold", ["jumpRope"], [], [], { timed: true });
+  x("cond_burpeenojump",  "conditioning", "skill", "reps", BWT, ["cond_burpee"]);
+  x("cond_burpee",        "conditioning", "skill", "reps", BWT, ["cond_burpeetuck"]);
+  x("cond_burpeetuck",    "conditioning", "skill", "reps", BWT, []);
+  x("cond_burpeevest",    "conditioning", "main", "loaded", ["vest"], [], [], { loadMode: "total" });
+  x("cond_boxjump",       "conditioning", "skill", "reps", ["box"], []);
+  x("cond_broadjump",     "conditioning", "skill", "reps", BWT, []);
 
   /* --------------------------------------------------------------------------
      5) PAIN SUBSTITUTIONS
@@ -657,11 +963,25 @@
     push_alt_explosive: { wrist: 2, elbow: 2, shoulder: 1 },
     push_alt_onearm:    { wrist: 2, elbow: 2, shoulder: 2 },
     push_alt_tricep:    { wrist: 1, elbow: 2, shoulder: 1 },
+    push_alt_knee:         { wrist: 1, elbow: 1, shoulder: 1 },
+    push_alt_kneeassist:   { wrist: 2, elbow: 2, shoulder: 1 },
+    push_alt_partial:      { wrist: 2, elbow: 1, shoulder: 1 },
+    push_alt_staggered:    { wrist: 2, elbow: 2, shoulder: 1 },
+    push_alt_onearmassist: { wrist: 2, elbow: 2, shoulder: 2 },
+    push_alt_pseudoweighted: { wrist: 2, elbow: 2, shoulder: 2 },
+    push_alt_parallette:   { wrist: 1, elbow: 1, shoulder: 2 },
+    push_alt_slider:       { wrist: 2, elbow: 1, shoulder: 2 },
+    push_alt_ringcross:    { wrist: 1, elbow: 2, shoulder: 2 },
+    push_alt_fingertip:    { wrist: 2, elbow: 1, shoulder: 1 },
     skill_planche_1: { wrist: 2, elbow: 1, shoulder: 2 },
     skill_planche_2: { wrist: 2, elbow: 2, shoulder: 2 },
     skill_planche_3: { wrist: 2, elbow: 2, shoulder: 2 },
     skill_planche_4: { wrist: 2, elbow: 2, shoulder: 2 },
     skill_planche_5: { wrist: 2, elbow: 2, shoulder: 2 },
+    skill_planche_band:      { wrist: 2, elbow: 1, shoulder: 2 },
+    skill_planche_boxtuck:   { wrist: 2, elbow: 1, shoulder: 2 },
+    skill_planche_boxpushup: { wrist: 2, elbow: 2, shoulder: 2 },
+    skill_planche_pushup:    { wrist: 2, elbow: 2, shoulder: 2 },
     // pull and row
     pull_1:  { elbow: 1, shoulder: 2 },
     pull_2:  { elbow: 1, shoulder: 1 },
@@ -680,6 +1000,37 @@
     skill_frontlever_2: { elbow: 2, shoulder: 2 },
     skill_frontlever_3: { elbow: 2, shoulder: 2 },
     skill_frontlever_4: { elbow: 2, shoulder: 2 },
+    // Group B (Yellow Dude): rows, front-lever steps, pull-up variants, muscle-up, back lever
+    pull_alt_australianfe: { elbow: 2, shoulder: 1 },
+    pull_alt_archerrow:    { elbow: 2, shoulder: 2 },
+    pull_alt_tableweighted:{ elbow: 1, shoulder: 1, lowerBack: 1 },
+    pull_alt_bandrow:      { elbow: 1, shoulder: 1, lowerBack: 1 },
+    skill_frontlever_band:     { elbow: 1, shoulder: 2 },
+    skill_frontlever_negative: { elbow: 2, shoulder: 2 },
+    skill_frontlever_oneleg:   { elbow: 2, shoulder: 2 },
+    skill_frontlever_raise:    { elbow: 2, shoulder: 2 },
+    pull_alt_ringassist: { elbow: 1, shoulder: 1 },
+    pull_alt_neutral:    { elbow: 2, shoulder: 1 },
+    pull_alt_wide:       { elbow: 2, shoulder: 2 },
+    pull_alt_close:      { elbow: 2, shoulder: 1 },
+    pull_alt_hollow:     { elbow: 2, shoulder: 2 },
+    pull_alt_arched:     { elbow: 2, shoulder: 2, lowerBack: 1 },
+    pull_alt_towelgrip:  { elbow: 2, shoulder: 2 },
+    pull_alt_c2b:        { elbow: 2, shoulder: 2 },
+    pull_alt_onearm:     { elbow: 2, shoulder: 2 },
+    pull_alt_weighted:   { elbow: 2, shoulder: 2 },
+    skill_muscleup_explosive: { elbow: 2, shoulder: 2 },
+    skill_muscleup_turnover:  { wrist: 1, elbow: 2, shoulder: 2 },
+    skill_muscleup_band:      { wrist: 1, elbow: 2, shoulder: 2 },
+    skill_muscleup_full:      { wrist: 1, elbow: 2, shoulder: 2 },
+    skill_backlever_skinthecat:   { elbow: 1, shoulder: 2, neck: 1 },
+    skill_backlever_1:            { elbow: 1, shoulder: 2, neck: 1 },
+    skill_backlever_transition:   { elbow: 2, shoulder: 2, neck: 1 },
+    skill_backlever_2:            { elbow: 2, shoulder: 2, neck: 1 },
+    skill_backlever_straddleneg:  { elbow: 2, shoulder: 2, neck: 1 },
+    skill_backlever_3:            { elbow: 2, shoulder: 2, neck: 1 },
+    skill_backlever_fullneg:      { elbow: 2, shoulder: 2, neck: 1 },
+    skill_backlever_4:            { elbow: 2, shoulder: 2, neck: 1 },
     // squat
     squat_1: { hip: 1, knee: 1, ankle: 1 },
     squat_2: { hip: 1, knee: 2, ankle: 1 },
@@ -693,6 +1044,17 @@
     squat_alt_cossack: { hip: 2, knee: 1, ankle: 1 },
     squat_alt_assistedpistol: { hip: 1, knee: 2, ankle: 1 },
     squat_e2_goblet: { hip: 1, knee: 2, ankle: 1, lowerBack: 1 },
+    // Group C (Yellow Dude): scored at the start setup, like the rest
+    squat_alt_box:        { hip: 1, knee: 1 },
+    squat_alt_jump:       { hip: 1, knee: 2, ankle: 2 },
+    squat_alt_bulgarianw: { hip: 2, knee: 2, ankle: 1, lowerBack: 1 },
+    squat_alt_deficit:    { hip: 2, knee: 2, ankle: 2 },
+    squat_alt_boxpistol:  { hip: 1, knee: 2, ankle: 1 },
+    squat_alt_pistolneg:  { hip: 2, knee: 2, ankle: 2 },
+    squat_alt_barbell:    { hip: 1, knee: 2, ankle: 1, lowerBack: 2 },
+    squat_alt_cossackw:   { hip: 2, knee: 1, ankle: 1, lowerBack: 1 },
+    squat_alt_dragonassist: { hip: 2, knee: 2, ankle: 1 },
+    squat_alt_dragon:     { hip: 2, knee: 2, ankle: 2 },
     // hinge
     hinge_1: { hip: 1, lowerBack: 1 },
     hinge_2: { hip: 1, lowerBack: 1 },
@@ -700,6 +1062,8 @@
     hinge_4: { knee: 2 },
     hinge_5: { knee: 2 },
     hinge_6: { knee: 2 },
+    hinge_alt_nordicband: { knee: 2 },
+    hinge_alt_nordicarm:  { knee: 2 },
     hinge_e2_rdl:   { hip: 1, lowerBack: 2 },
     hinge_e2_swing: { hip: 2, lowerBack: 2, shoulder: 1 },
     // core
@@ -713,6 +1077,24 @@
     skill_lsit_2: { wrist: 2, elbow: 1, shoulder: 1, hip: 1 },
     skill_lsit_3: { wrist: 2, elbow: 1, shoulder: 2, hip: 1 },
     skill_vsit:   { wrist: 2, elbow: 1, shoulder: 2, hip: 2, lowerBack: 1 },
+    // Group C (Yellow Dude): plank variants, floor and two-chair work, hangs, wheel
+    core_alt_onefoot:       { shoulder: 1, hip: 1, lowerBack: 1 },
+    core_alt_plankweighted: { shoulder: 1, lowerBack: 2 },
+    core_alt_hollowrock:    { neck: 1, hip: 1, lowerBack: 1 },
+    core_alt_floorlsit:     { wrist: 2, elbow: 1, shoulder: 2, hip: 2 },
+    core_alt_chairlegraise: { wrist: 2, elbow: 1, shoulder: 1, hip: 1 },
+    core_alt_pikelift:      { wrist: 1, shoulder: 1, hip: 1 },
+    core_alt_hangknee:      { elbow: 1, shoulder: 2, hip: 1, lowerBack: 1 },
+    core_alt_hangleg:       { elbow: 1, shoulder: 2, hip: 2, lowerBack: 1 },
+    core_alt_t2b:           { elbow: 1, shoulder: 2, hip: 2, lowerBack: 1 },
+    core_alt_lyingleg:      { hip: 1, lowerBack: 1 },
+    core_alt_situp:         { neck: 1, hip: 1, lowerBack: 1 },
+    core_alt_crunch:        { neck: 1, lowerBack: 1 },
+    core_alt_bicycle:       { neck: 1, hip: 1, lowerBack: 1 },
+    core_alt_legshold:      { hip: 1, lowerBack: 1 },
+    core_alt_flutter:       { hip: 1, lowerBack: 1 },
+    core_alt_abwheelknee:   { wrist: 1, shoulder: 2, lowerBack: 2 },
+    core_alt_abwheelstand:  { wrist: 1, shoulder: 2, hip: 1, lowerBack: 2 },
     // shoulder
     shoulder_1: { wrist: 2, elbow: 1, shoulder: 2 },
     shoulder_2: { wrist: 2, elbow: 1, shoulder: 2 },
@@ -721,10 +1103,20 @@
     shoulder_5: { wrist: 2, elbow: 2, shoulder: 2, neck: 1 },
     shoulder_6: { wrist: 2, elbow: 2, shoulder: 2, neck: 1 },
     shoulder_e2_ohp: { wrist: 1, elbow: 1, shoulder: 2, lowerBack: 1 },
+    shoulder_alt_pikeneg: { wrist: 2, elbow: 2, shoulder: 2, neck: 1 },
     skill_handstand_1: { wrist: 2, shoulder: 2 },
     skill_handstand_2: { wrist: 2, shoulder: 2, lowerBack: 1 },
     skill_handstand_3: { wrist: 2, shoulder: 2, lowerBack: 1 },
     skill_handstand_4: { wrist: 2, shoulder: 2, lowerBack: 1 },
+    skill_handstand_pike:      { wrist: 2, shoulder: 2 },
+    skill_handstand_pikeelev:  { wrist: 2, shoulder: 2 },
+    skill_handstand_wallwalk:  { wrist: 2, shoulder: 2, lowerBack: 1 },
+    skill_handstand_cartwheel: { wrist: 2, shoulder: 2 },
+    skill_handstand_toetap:    { wrist: 2, shoulder: 2, lowerBack: 1 },
+    skill_handstand_split:     { wrist: 2, shoulder: 2, lowerBack: 1 },
+    skill_handstand_parallette:{ wrist: 1, shoulder: 2, lowerBack: 1 },
+    skill_handstand_bentarm:   { wrist: 2, elbow: 2, shoulder: 2, neck: 1 },
+    skill_handstand_onearm:    { wrist: 2, elbow: 1, shoulder: 2, lowerBack: 1 },
     // dip
     dip_1: { wrist: 1, elbow: 1, shoulder: 2 },
     dip_alt_chair:    { wrist: 1, elbow: 1, shoulder: 2 },
@@ -734,6 +1126,9 @@
     dip_4: { wrist: 1, elbow: 2, shoulder: 2 },
     dip_5: { wrist: 1, elbow: 2, shoulder: 2 },
     dip_6: { wrist: 1, elbow: 2, shoulder: 2 },
+    dip_alt_negative:    { wrist: 1, elbow: 2, shoulder: 2 },
+    dip_alt_support:     { wrist: 1, elbow: 1, shoulder: 2 },
+    dip_alt_ringsupport: { wrist: 1, elbow: 1, shoulder: 2 },
     // coverage, upper body (step 3.1). Scored at the start rung like the rest;
     // the neck is 2 across the slot so that "avoid neck" excludes all of it.
     acc_curl_doorframe: { elbow: 1, wrist: 1 },
@@ -802,7 +1197,37 @@
     acc_backext_birddog:     { wrist: 1, shoulder: 1, knee: 1, lowerBack: 1 },
     acc_backext_prone:       { neck: 1, lowerBack: 1 },
     acc_backext_revhyper:    { hip: 1, lowerBack: 2 },
-    acc_backext_goodmorning: { hip: 1, lowerBack: 2 }
+    acc_backext_goodmorning: { hip: 1, lowerBack: 2 },
+    // Group D (Yellow Dude): coverage additions and conditioning, scored at the
+    // start setup. "avoid knee" and "avoid ankle" leave the rice bucket, the rings
+    // and the hip raise; every rope and jump carries ankle 1–2 from the landings.
+    acc_curl_pelican:      { elbow: 2, shoulder: 2, wrist: 1 },
+    acc_curl_ring:         { elbow: 1, shoulder: 1, wrist: 1 },
+    acc_reardelt_ringfacepull: { shoulder: 1, neck: 1 },
+    acc_traps_proney:      { shoulder: 1, neck: 1, lowerBack: 1 },
+    acc_grip_falsegrip:    { wrist: 2, elbow: 1, shoulder: 2 },
+    acc_grip_ricebucket:   { wrist: 1, elbow: 1 },
+    acc_backext_superman:  { neck: 1, lowerBack: 2 },
+    acc_antirot_hipraise:  { shoulder: 2, hip: 1, lowerBack: 1 },
+    acc_quad_wallsit1:     { hip: 1, knee: 2, ankle: 1 },
+    acc_quad_wallsitw:     { hip: 1, knee: 2 },
+    acc_quad_lunge:        { hip: 1, knee: 2, ankle: 1 },
+    acc_quad_stepupw:      { hip: 1, knee: 2, ankle: 1, lowerBack: 1 },
+    acc_calf_floor:        { ankle: 1 },
+    acc_calf_wallsit:      { knee: 1, ankle: 1 },
+    cond_jacks:            { shoulder: 1, knee: 1, ankle: 1 },
+    cond_ropeless:         { knee: 1, ankle: 1 },
+    cond_rope:             { wrist: 1, knee: 1, ankle: 2 },
+    cond_ropealt:          { wrist: 1, knee: 1, ankle: 2 },
+    cond_ropeboxer:        { wrist: 1, knee: 1, ankle: 1 },
+    cond_doubleunder:      { wrist: 1, knee: 2, ankle: 2 },
+    cond_ropeweighted:     { wrist: 1, shoulder: 1, knee: 1, ankle: 2 },
+    cond_burpeenojump:     { wrist: 1, shoulder: 1, knee: 1, lowerBack: 1 },
+    cond_burpee:           { wrist: 2, shoulder: 1, knee: 2, ankle: 1, lowerBack: 1 },
+    cond_burpeetuck:       { wrist: 2, shoulder: 1, knee: 2, ankle: 2, lowerBack: 1 },
+    cond_burpeevest:       { wrist: 2, shoulder: 1, knee: 2, ankle: 2, lowerBack: 2 },
+    cond_boxjump:          { hip: 1, knee: 2, ankle: 2 },
+    cond_broadjump:        { hip: 1, knee: 2, ankle: 2, lowerBack: 1 }
   };
   var JOINTS = ["wrist", "elbow", "shoulder", "neck", "lowerBack", "hip", "knee", "ankle"];
 

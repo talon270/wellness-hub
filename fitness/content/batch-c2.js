@@ -14,7 +14,7 @@
   "use strict";
   var C = window.EXERCISE_CONTENT = window.EXERCISE_CONTENT || {};
   var B = window.EXERCISE_CONTENT_BATCHES = window.EXERCISE_CONTENT_BATCHES || {};
-  B.c2 = "complete";
+  B.c2 = "pending";
 
   /* ---- quad ---- */
 

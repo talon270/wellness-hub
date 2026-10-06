@@ -356,8 +356,8 @@ These are product choices, like everything in `training.data.js`. No existing ex
 **What to paste.** Use the same text in every build window, changing only the window and the step:
 
 ```
-You are window W4 of plans/PLAN-yellow-dude.md. Read that plan and
-plans/PROGRESS-yellow-dude.md in full, then do step 2.1 and nothing else,
+You are window W8 of plans/PLAN-yellow-dude.md. Read that plan and
+plans/PROGRESS-yellow-dude.md in full, then do step 3.1 and nothing else,
 following Part G's rules. Append your progress entry when you're done, then
 stop.
 ```

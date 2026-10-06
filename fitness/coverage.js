@@ -143,7 +143,7 @@
       if (!rx) return;
       var row = { slot: slot, group: g ? g.key : null, rx: rx, pinned: pinned, shortfall: g ? g.shortfall : 0,
                   reason: (pinned ? "Pinned for " + pin.days.map(function (d) { return WEEKDAY[d]; }).join(", ") +
-                           " — " : "") + (g ? sentence(g) : "conditioning, not counted against any one muscle"),
+                           " — " : "") + (g ? sentence(g) : "conditioning, not picked for any one muscle"),
                   _r: g ? ratio(g) : 0, _d: !g || g.daysSince == null ? Infinity : g.daysSince, _o: order };
       (pinned ? picks : rest).push(row);
     });

@@ -296,6 +296,106 @@
   m("skill_lsit_3", ["abs"], ["quads", "obliques"], ["triceps", "forearms"]);
   m("skill_vsit", ["abs"], ["quads", "obliques"], ["triceps", "forearms"]);
 
+  /* ---- Yellow Dude, Group A (plans/PLAN-yellow-dude.md): the new push, planche,
+     handstand and dip variants. Same tiers as the movements they sit beside;
+     bracing stays at the low tier. ---- */
+  m("push_alt_knee", ["chest", "triceps"], ["delts_front"], ["abs"]);
+  m("push_alt_kneeassist", ["chest", "triceps"], ["delts_front"], ["abs"]);
+  m("push_alt_partial", ["chest", "triceps"], ["delts_front"], ["abs"]);
+  m("push_alt_staggered", ["chest", "triceps"], ["delts_front"], ["abs", "obliques"]);
+  m("push_alt_onearmassist", ["chest", "triceps"], ["delts_front"], ["obliques", "abs"]);
+  m("push_alt_pseudoweighted", ["chest", "delts_front"], ["triceps"], ["abs"]);
+  m("push_alt_parallette", ["chest", "triceps"], ["delts_front"], ["abs"]);
+  m("push_alt_slider", ["chest"], ["triceps", "delts_front"], ["abs"]);
+  m("push_alt_ringcross", ["chest", "triceps"], ["delts_front"], ["abs", "obliques"]);
+  m("push_alt_fingertip", ["chest", "triceps"], ["delts_front"], ["abs", "forearms"]);
+  m("skill_planche_band", ["delts_front"], ["chest", "abs"], ["forearms"]);
+  m("skill_planche_boxtuck", ["delts_front", "abs"], ["chest"], ["forearms"]);
+  m("skill_planche_boxpushup", ["delts_front", "triceps"], ["chest", "abs"], ["forearms"]);
+  m("skill_planche_pushup", ["delts_front", "triceps"], ["chest", "abs"], ["forearms"]);
+  m("shoulder_alt_pikeneg", ["delts_front", "triceps"], ["delts_side"], ["abs", "traps"]);
+  m("skill_handstand_pike", ["delts_front"], ["delts_side", "triceps"], ["abs", "traps"]);
+  m("skill_handstand_pikeelev", ["delts_front"], ["delts_side", "triceps"], ["abs", "traps"]);
+  m("skill_handstand_wallwalk", ["delts_front", "abs"], ["triceps"], ["forearms", "traps"]);
+  m("skill_handstand_cartwheel", ["delts_front"], ["triceps", "obliques"], ["forearms", "abs"]);
+  m("skill_handstand_toetap", ["delts_front"], ["triceps", "abs"], ["forearms", "traps"]);
+  m("skill_handstand_split", ["delts_front"], ["triceps", "abs"], ["forearms", "traps"]);
+  m("skill_handstand_parallette", ["delts_front"], ["triceps", "abs"], ["forearms", "traps"]);
+  m("skill_handstand_bentarm", ["delts_front", "triceps"], ["delts_side"], ["abs", "forearms", "traps"]);
+  m("skill_handstand_onearm", ["delts_front"], ["triceps", "obliques"], ["abs", "forearms", "traps"]);
+  m("dip_alt_negative", ["triceps", "chest"], ["delts_front"], ["abs"]);
+  m("dip_alt_support", ["triceps"], ["chest", "delts_front"], ["abs", "traps"]);
+  m("dip_alt_ringsupport", ["triceps"], ["chest", "delts_front"], ["abs", "forearms"]);
+
+  /* ---- Yellow Dude, Group B: rows, front-lever steps, pull-up variants, the
+     muscle-up and the back lever. Same tiers as the exercises they sit beside;
+     bracing stays at the low tier. ---- */
+  m("pull_alt_australianfe", ["upper_back"], ["lats", "biceps", "delts_rear", "traps"], ["abs"]);
+  m("pull_alt_archerrow", ["upper_back", "lats"], ["biceps", "delts_rear", "traps"], ["obliques", "abs"]);
+  m("pull_alt_tableweighted", ["upper_back"], ["lats", "biceps", "delts_rear", "traps"], ["abs"]);
+  m("pull_alt_bandrow", ["upper_back", "lats"], ["biceps", "delts_rear", "traps"], ["lower_back"]);
+  m("skill_frontlever_band", ["lats", "abs"], ["upper_back"], ["forearms"]);
+  m("skill_frontlever_negative", ["lats", "abs"], ["upper_back"], ["forearms"]);
+  m("skill_frontlever_oneleg", ["lats", "abs"], ["upper_back", "glutes"], ["forearms"]);
+  m("skill_frontlever_raise", ["lats", "abs"], ["upper_back"], ["forearms"]);
+  m("pull_alt_ringassist", ["lats", "upper_back"], ["biceps", "forearms"], ["abs"]);
+  m("pull_alt_neutral", ["lats", "upper_back"], ["biceps", "forearms"], ["abs"]);
+  m("pull_alt_wide", ["lats", "upper_back"], ["biceps", "forearms"], ["abs"]);
+  m("pull_alt_close", ["lats", "biceps"], ["upper_back", "forearms"], ["abs"]);   /* narrow grip: the biceps lead, as in a chin-up */
+  m("pull_alt_hollow", ["lats", "upper_back"], ["biceps", "forearms", "abs"], []);
+  m("pull_alt_arched", ["lats", "upper_back"], ["biceps", "forearms"], ["lower_back"]);
+  m("pull_alt_towelgrip", ["lats", "forearms"], ["upper_back", "biceps"], ["abs"]);
+  m("pull_alt_c2b", ["lats", "upper_back"], ["biceps", "forearms"], ["abs"]);
+  m("pull_alt_onearm", ["lats", "upper_back"], ["biceps", "forearms"], ["abs", "obliques"]);
+  m("pull_alt_weighted", ["lats", "upper_back"], ["biceps", "forearms"], ["abs"]);
+  m("skill_muscleup_explosive", ["lats", "upper_back"], ["biceps", "forearms"], ["abs"]);
+  m("skill_muscleup_turnover", ["lats", "triceps"], ["upper_back", "chest", "biceps"], ["forearms", "abs"]);
+  m("skill_muscleup_band", ["lats", "triceps"], ["upper_back", "chest", "biceps"], ["forearms", "abs"]);
+  m("skill_muscleup_full", ["lats", "triceps"], ["upper_back", "chest", "biceps"], ["forearms", "abs"]);
+  m("skill_backlever_skinthecat", ["lats", "abs"], ["upper_back", "delts_front"], ["forearms"]);
+  m("skill_backlever_1", ["lats", "abs"], ["upper_back", "biceps"], ["forearms"]);
+  m("skill_backlever_transition", ["lats", "abs"], ["upper_back", "biceps"], ["forearms"]);
+  m("skill_backlever_2", ["lats", "abs"], ["upper_back", "biceps"], ["forearms"]);
+  m("skill_backlever_straddleneg", ["lats", "abs"], ["upper_back", "biceps", "glutes"], ["forearms"]);
+  m("skill_backlever_3", ["lats", "abs"], ["upper_back", "biceps", "glutes"], ["forearms"]);
+  m("skill_backlever_fullneg", ["lats", "abs"], ["upper_back", "biceps", "glutes"], ["forearms"]);
+  m("skill_backlever_4", ["lats", "abs"], ["upper_back", "biceps", "glutes"], ["forearms"]);
+
+  /* ---- Yellow Dude, Group C: squat, hinge and core variants. Bracing stays low
+     (a squat's abs and obliques at 0.15, as above). The crunch family lists the
+     obliques as secondary, not primary, though the catalogue names them: a
+     bicycle crunch is mostly a trunk curl with a twist, and a primary credit
+     would count every set toward the obliques' weekly floor. ---- */
+  m("squat_alt_box", ["quads", "glutes"], ["hamstrings"], ["abs"]);
+  m("squat_alt_jump", ["quads", "glutes"], ["calves", "hamstrings"], ["abs"]);
+  m("squat_alt_bulgarianw", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques", "forearms"]);
+  m("squat_alt_deficit", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques"]);
+  m("squat_alt_boxpistol", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);
+  m("squat_alt_pistolneg", ["quads", "glutes"], ["hamstrings"], ["abs", "obliques"]);
+  m("squat_alt_barbell", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "lower_back", "upper_back"]);
+  m("squat_alt_cossackw", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques", "forearms"]);
+  m("squat_alt_dragonassist", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques"]);
+  m("squat_alt_dragon", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques"]);
+  m("hinge_alt_nordicband", ["hamstrings"], ["glutes"], ["abs", "lower_back"]);
+  m("hinge_alt_nordicarm", ["hamstrings"], ["glutes"], ["abs", "lower_back"]);
+  m("core_alt_onefoot", ["abs"], ["obliques"], ["lower_back", "delts_front"]);
+  m("core_alt_plankweighted", ["abs"], ["obliques"], ["lower_back", "delts_front"]);
+  m("core_alt_hollowrock", ["abs"], ["obliques"], ["quads"]);
+  m("core_alt_floorlsit", ["abs"], ["obliques", "quads"], ["triceps", "forearms"]);
+  m("core_alt_chairlegraise", ["abs"], ["obliques", "quads"], ["triceps", "forearms"]);
+  m("core_alt_pikelift", ["abs"], ["quads", "obliques"], ["triceps"]);
+  m("core_alt_hangknee", ["abs"], ["obliques", "quads"], ["forearms", "lats"]);
+  m("core_alt_hangleg", ["abs"], ["obliques", "quads"], ["forearms", "lats"]);
+  m("core_alt_t2b", ["abs"], ["obliques", "quads"], ["forearms", "lats"]);
+  m("core_alt_lyingleg", ["abs"], ["obliques", "quads"], ["lower_back"]);
+  m("core_alt_situp", ["abs"], ["obliques", "quads"], []);
+  m("core_alt_crunch", ["abs"], ["obliques"], []);
+  m("core_alt_bicycle", ["abs"], ["obliques"], []);
+  m("core_alt_legshold", ["abs"], ["obliques"], ["quads"]);
+  m("core_alt_flutter", ["abs"], ["obliques", "quads"], ["lower_back"]);
+  m("core_alt_abwheelknee", ["abs"], ["lats", "delts_front"], ["lower_back", "triceps"]);
+  m("core_alt_abwheelstand", ["abs"], ["lats", "delts_front", "obliques"], ["lower_back", "triceps"]);
+
   /* ---- COVERAGE (Stage 3, plan D2): upper body, neck and grip ----
      Each slot tops up one group, so every exercise in it lists that group as a
      PRIMARY: the weekly floor counts performed sets where the group is primary,
@@ -386,6 +486,44 @@
   m("acc_backext_prone", ["lower_back"], ["glutes", "upper_back"], []);
   m("acc_backext_revhyper", ["lower_back"], ["glutes", "hamstrings"], ["abs"]);
   m("acc_backext_goodmorning", ["lower_back"], ["hamstrings", "glutes"], ["abs"]);
+
+  /* ---- Yellow Dude, Group D: coverage additions and conditioning ----
+     The coverage rows follow the same rule as above: the slot's group is a
+     PRIMARY on every member. Conditioning has no slot group, so its primaries
+     are what the card names first, and they count toward that group's weekly
+     floor like any direct set. That is the plan's rule ("its sets still count
+     for the muscles they train"), and it means a pinned conditioning day can
+     move a calf or quad shortfall: the jumps list the calves or quads as
+     primary, the burpees the quads. The chest is only secondary on a burpee,
+     because the card's burpee has no push-up. */
+  m("acc_curl_pelican", ["biceps"], ["forearms", "delts_rear", "lats"], ["abs"]);
+  m("acc_curl_ring", ["biceps"], ["forearms", "delts_rear"], ["abs"]);
+  m("acc_reardelt_ringfacepull", ["delts_rear"], ["upper_back", "rotator_cuff", "traps"], ["abs"]);
+  m("acc_traps_proney", ["traps"], ["delts_rear", "upper_back"], ["lower_back"]);
+  m("acc_grip_falsegrip", ["forearms"], ["lats", "biceps"], ["upper_back"]);
+  m("acc_grip_ricebucket", ["forearms"], [], []);
+  m("acc_backext_superman", ["lower_back"], ["glutes", "upper_back"], []);
+  m("acc_antirot_hipraise", ["obliques"], ["abs", "abductors"], []);
+  m("acc_quad_wallsit1", ["quads"], ["glutes"], ["abs", "obliques"]);
+  m("acc_quad_wallsitw", ["quads"], ["glutes"], ["abs"]);
+  m("acc_quad_lunge", ["quads", "glutes"], ["hamstrings", "adductors"], ["abs", "obliques"]);
+  m("acc_quad_stepupw", ["quads", "glutes"], ["hamstrings", "calves"], ["abs", "obliques", "forearms"]);
+  m("acc_calf_floor", ["calves"], [], ["abs"]);
+  m("acc_calf_wallsit", ["calves"], ["quads"], ["abs"]);       /* the sit is held isometrically while the heels rise */
+  /* conditioning */
+  m("cond_jacks", ["calves"], ["delts_side", "quads", "abductors", "adductors"], ["abs"]);
+  m("cond_ropeless", ["calves"], ["quads"], ["abs", "forearms"]);
+  m("cond_rope", ["calves"], ["quads", "forearms"], ["abs", "delts_side"]);
+  m("cond_ropealt", ["calves"], ["quads", "forearms"], ["abs", "delts_side"]);
+  m("cond_ropeboxer", ["calves"], ["quads", "forearms"], ["abs", "delts_side"]);
+  m("cond_doubleunder", ["calves"], ["quads", "forearms", "delts_side"], ["abs"]);
+  m("cond_ropeweighted", ["calves"], ["delts_side", "forearms", "quads"], ["abs"]);
+  m("cond_burpeenojump", ["quads"], ["glutes", "chest", "triceps", "delts_front", "abs"], ["obliques", "calves"]);
+  m("cond_burpee", ["quads"], ["glutes", "chest", "triceps", "delts_front", "abs"], ["obliques", "calves"]);
+  m("cond_burpeetuck", ["quads", "glutes"], ["calves", "chest", "triceps", "delts_front", "abs"], ["obliques"]);
+  m("cond_burpeevest", ["quads"], ["glutes", "chest", "triceps", "delts_front", "abs"], ["obliques", "calves"]);
+  m("cond_boxjump", ["quads", "glutes"], ["calves", "hamstrings"], ["abs"]);
+  m("cond_broadjump", ["quads", "glutes"], ["hamstrings", "calves"], ["abs", "lower_back"]);
 
   /* --------------------------------------------------------------------------
      5) EXPORT

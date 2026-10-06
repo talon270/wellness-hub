@@ -2206,7 +2206,9 @@ def k11(pw):
         s.tap('[data-pg-change="push"]')
         s.pg.wait_for_timeout(200)
         panel = '[data-pg-panel="push"]'
-        skills = s.pg.locator(panel + ' [data-pick^="skill_"]').count()
+        # a skill attempt is kind "skill"; the id prefix isn't one (the planche push-up is reps)
+        skills = s.pg.locator(panel + ' [data-pick]').evaluate_all(
+            "els => els.filter(e => TRAINING_DATA.EXERCISES[e.dataset.pick].kind === 'skill').length")
         groups = s.ev("() => [...document.querySelectorAll('[data-pg-panel=\"push\"] .field__label')].map(e => e.textContent.trim())")
         s.tap(panel + ' [data-pick="push_5"]')
         s.tap(panel + " [data-pk-use]")
@@ -3451,7 +3453,7 @@ def d3(pw):
         s.pg.wait_for_timeout(300)
         cleared = len(exercises_rows(s))
         checks = {
-            "the list holds every movement to begin with": total == 150,
+            "the list holds every movement to begin with": total == s.ev("() => Object.keys(TRAINING_DATA.EXERCISES).filter(id => EXERCISE_DB[id]).length"),
             "'knuckle' finds exactly the grip-capable ids": found == grip and len(grip) == 6,
             "Push-up's page has the knuckles section": "front two knuckles" in knuckle_block.lower() or "knuckle" in knuckle_block.lower(),
             "tapping Biceps selects it in the Muscle select": sel == "biceps",
@@ -3784,7 +3786,7 @@ def r4b(pw):
             "Back names the workout": "workout" in label.lower(),
             "Back lands on the workout": landed == ["today"] and resumed == 1,
             "the typed set is still there": kept == 7,
-            "the nav opens the list, not the old page": opened and rows == 150 and back_btns == 0,
+            "the nav opens the list, not the old page": opened and rows == s.ev("() => Object.keys(TRAINING_DATA.EXERCISES).filter(id => EXERCISE_DB[id]).length") and back_btns == 0,
         }
         bad = [k for k, ok in checks.items() if not ok]
         return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \

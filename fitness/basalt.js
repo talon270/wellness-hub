@@ -1232,7 +1232,7 @@
     { key: "abWheel",    label: "Ab wheel" },
     { key: "jumpRope",   label: "Jump rope" },
     { key: "box",        label: "Sturdy box" },
-    { key: "barbell",    label: "Barbell" },
+    { key: "barbell",    label: "Barbell and rack" },   // a back squat is unracked: the token means both
     { key: "nordicAnchor", label: "Nordic anchor" }   // one line, like the other tiles; the card says what it is
   ];
   var WEIGHT_IMPLEMENTS = [["dumbbells", "Dumbbells"], ["kettlebells", "Kettlebells"]];
@@ -1799,7 +1799,7 @@
     readiness:"Mastery: 8+ reps with a deep lean — gateway to full planche work.",
     injury:"Heavy wrist load; build gradually and stretch wrists between sets." });
 
-  def({ id:"push_e2_weighted", pattern:"push", name:"Weighted Push-up", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+  def({ id:"push_e2_weighted", pattern:"push", name:"Weighted Push-up", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells","vest"],
     cues:["Have a partner or yourself place a plate/dumbbell across the upper back.","Keep the same rigid plank line as a bodyweight push-up.","Lower under control; the load should not shift your form.","Press explosively while keeping the weight centred."],
     mistakes:["Letting the weight slide toward the neck or hips.","Reducing depth to handle the extra load."],
     readiness:"Progress the load ~2.5kg once you hit 12 clean reps at the current weight.",
@@ -1916,19 +1916,19 @@
     readiness:"Advance at 12 reps/leg with a level, controlled pelvis.",
     injury:"Prep for Nordic work — builds hamstring/glute resilience." });
 
-  def({ id:"hinge_4", pattern:"hinge", name:"Nordic Curl Negative", level:4, era:1, mode:"reps", unit:"reps", equipment:[],
+  def({ id:"hinge_4", pattern:"hinge", name:"Nordic Curl Negative", level:4, era:1, mode:"reps", unit:"reps", equipment:["nordicAnchor"],
     cues:["Kneel with ankles anchored (under a sofa/partner/loaded bar).","Keep hips extended and the body in one rigid line from knee to head.","Lower forward as slowly as possible, resisting with the hamstrings.","Catch with the hands and push back to the start."],
     mistakes:["Bending at the hips to cheat the lowering.","Dropping fast once the hamstrings start to give."],
     readiness:"Advance once you can resist smoothly past the halfway point for 5 reps.",
     injury:"Extremely demanding — start with a high catch point and few reps to protect the hamstrings." });
 
-  def({ id:"hinge_5", pattern:"hinge", name:"Nordic Curl", level:5, era:1, mode:"reps", unit:"reps", equipment:[],
+  def({ id:"hinge_5", pattern:"hinge", name:"Nordic Curl", level:5, era:1, mode:"reps", unit:"reps", equipment:["nordicAnchor"],
     cues:["Same setup; lower under full control through the whole range.","Pull yourself back up using only the hamstrings.","Maintain the rigid hip-to-head line throughout.","Minimise any push-off from the hands."],
     mistakes:["Folding at the hips on the way up.","Relying on the arms to do most of the concentric."],
     readiness:"Advance at 5 full reps with no hand assistance.",
     injury:"Never train Nordics to failure cold — warm the hamstrings thoroughly." });
 
-  def({ id:"hinge_6", pattern:"hinge", name:"Shaking Nordic", level:6, era:1, mode:"reps", unit:"reps", equipment:[],
+  def({ id:"hinge_6", pattern:"hinge", name:"Shaking Nordic", level:6, era:1, mode:"reps", unit:"reps", equipment:["nordicAnchor"],
     cues:["Perform full Nordic curls with deliberate mid-range pauses.","Hold positions where the hamstrings shake under maximal tension.","Keep the line rigid even as the muscles fatigue.","Control both phases — no bailing."],
     mistakes:["Avoiding the hardest mid-range by speeding through it.","Breaking the hip line when it gets heavy."],
     readiness:"Mastery: elite hamstring strength — the top of the hinge ladder.",
@@ -2057,7 +2057,7 @@
     readiness:"Advance at 8 controlled reps with a turned-out lockout.",
     injury:"The instability is the point — but back off if the shoulders feel unstable." });
 
-  def({ id:"dip_6", pattern:"dip", name:"Weighted Dip", level:6, era:1, mode:"reps", unit:"reps", equipment:["dipBars","dumbbells","kettlebells"],
+  def({ id:"dip_6", pattern:"dip", name:"Weighted Dip", level:6, era:1, mode:"reps", unit:"reps", equipment:["dipBars","dumbbells","kettlebells","vest"],
     cues:["Add load via a dip belt or a dumbbell held between the feet.","Keep the same strict parallel-bar mechanics.","Lower under full control with the added weight.","Press to a complete lockout each rep."],
     mistakes:["Reducing depth to manage the load.","Swinging the legs/weight for momentum."],
     readiness:"Mastery: progress load while keeping 6–8 strict reps.",
@@ -3820,7 +3820,7 @@
     { id: "parallettes", t: "Parallettes" }, { id: "dipBars", t: "Dip bars" },
     { id: "lowBar", t: "A waist-height bar" }, { id: "vest", t: "A weighted vest" },
     { id: "abWheel", t: "An ab wheel" }, { id: "jumpRope", t: "A jump rope" },
-    { id: "box", t: "A sturdy box or step" }, { id: "barbell", t: "A barbell" },
+    { id: "box", t: "A sturdy box or step" }, { id: "barbell", t: "A barbell and a squat rack" },
     { id: "nordicAnchor", t: "An ankle anchor for Nordic curls" }, { id: "nothing", t: "Just the floor" }
   ];
 
@@ -5102,7 +5102,7 @@
     kettlebells: "kettlebells", rings: "rings", bands: "resistance bands",
     parallettes: "parallettes", dipBars: "dip bars", lowBar: "waist-height bar",
     vest: "weighted vest", abWheel: "ab wheel", jumpRope: "jump rope", box: "sturdy box",
-    barbell: "barbell", nordicAnchor: "ankle anchor"
+    barbell: "barbell and rack", nordicAnchor: "ankle anchor"
   };
   window.EQUIP_LABEL_GLOBAL = EQUIP_LABEL;
   function openSwapPanel(i, w, showExcluded) {
@@ -5554,7 +5554,7 @@
   var EQCHECK_V5 = ["dipBars", "lowBar", "bands", "parallettes"];
   var EQCHECK_TOKENS = [["dipBars", "Dip bars"], ["lowBar", "A waist-height bar"], ["bands", "Resistance bands"], ["parallettes", "Parallettes"],
     ["vest", "A weighted vest"], ["abWheel", "An ab wheel"], ["jumpRope", "A jump rope"], ["box", "A sturdy box"],
-    ["barbell", "A barbell"], ["nordicAnchor", "An ankle anchor"]];
+    ["barbell", "A barbell and a squat rack"], ["nordicAnchor", "An ankle anchor"]];
   function eqCheckSeenKey(chk) { return chk.tokens ? "v7.equipmentCheckSeen" : "v5.equipmentCheckSeen"; }
   function equipCheckHtml(s) {
     var chk = s.training && s.training.equipmentCheck;
@@ -5574,7 +5574,7 @@
       '<div class="wh-advice__title">Check your equipment</div>' +
       '<p class="wh-advice__body" style="margin:var(--sp-2) 0">' +
         (list.indexOf("dipBars") >= 0 ? '"Pull-up bar" used to stand for four different things. They\'re separate now: dip bars, a waist-height bar (for rows and straight-bar dips), resistance bands and parallettes. ' : "") +
-        (list.indexOf("nordicAnchor") >= 0 ? 'Six more items can be listed now: a weighted vest, an ab wheel, a jump rope, a sturdy box or step, a barbell, and an ankle anchor — a strap, a partner or heavy furniture that holds your ankles for Nordic curls. ' : "") +
+        (list.indexOf("nordicAnchor") >= 0 ? 'Six more items can be listed now: a weighted vest, an ab wheel, a jump rope, a sturdy box or step, a barbell with a squat rack, and an ankle anchor — a strap, a partner or heavy furniture that holds your ankles for Nordic curls. ' : "") +
         'The app turned on what your own sessions show you have. Untick anything you don\'t, and tick what it couldn\'t know. Ticking saves at once.</p>' +
       '<div class="stack" style="gap:var(--sp-2);margin-bottom:var(--sp-3)">' + rows + '</div>' +
       '<button class="btn btn--ghost btn--sm" data-eqcheck-ok type="button">Looks right</button></div></div>';
@@ -8393,9 +8393,13 @@
     /* The week's count for the groups a slot tops up, and the weekday pins. */
     var covExtra = function (slot) {
       var on = (pins[slot] || {}).days || [];
-      return '<span class="faint text-xs" data-pg-cover style="display:block">' + TDATA.SLOTS[slot].trains.map(function (k) {
+      /* Conditioning tops up no muscle, so it has no weekly count to show: it
+         says when it runs instead (plan A5). */
+      return '<span class="faint text-xs" data-pg-cover style="display:block">' + (TDATA.SLOTS[slot].conditioning
+        ? 'Conditioning — runs only on the days you pin it'
+        : TDATA.SLOTS[slot].trains.map(function (k) {
           var g = covStatus[k]; return esc(g.label) + ': ' + g.direct + ' of ' + g.floor + ' direct sets this week';
-        }).join('; ') + '</span>' +
+        }).join('; ')) + '</span>' +
         '<span class="pg-pins" role="group" aria-label="Pin ' + esc(TDATA.SLOTS[slot].label) + ' to weekdays">' +
           '<span class="faint text-xs">Pin to</span> ' + WEEK_DAYS.map(function (d) {
             var is = on.indexOf(d[0]) >= 0;
@@ -8412,7 +8416,8 @@
         : none ? ui.cap(none) : TDATA.SLOTS[slot].none || "Needs equipment you don't have";
       /* The status line, unless it only repeats the name ("Needs equipment you
          don't have" twice). */
-      var status = cov && !stored ? (rx ? "not started — the first finisher or accessory session that picks it starts it"
+      var status = cov && !stored ? (rx ? (TDATA.SLOTS[slot].conditioning ? "not started — it starts the first time a session runs on a day you pinned it"
+          : "not started — the first finisher or accessory session that picks it starts it")
         : "never picked while nothing here is allowed") : ui.slotStatus(slot);
       var setup = rx ? ui.setupText(rx) : "";
       var toggle = optional
@@ -9556,7 +9561,1257 @@
       cues:["Hold one dumbbell upright against your chest with both hands, feet shoulder-width apart and knees slightly bent.", "Push your hips back and let your torso tip forward with a flat back, until you feel the backs of your thighs stretch.", "Keep the dumbbell against your chest and your gaze a little ahead of your feet.", "Drive the hips forward to stand tall, squeezing your glutes at the top."],
       mistakes:["Rounding the back to reach lower.", "Bending the knees so much that it becomes a squat."],
       readiness:"Add weight only when every set reaches the top of the range on two different days.",
-      injury:"Keep the dumbbell light until the movement is smooth, and stop the lowering before the back rounds." }
+      injury:"Keep the dumbbell light until the movement is smooth, and stop the lowering before the back rounds." },
+
+    /* ---- Yellow Dude, Group A: push, planche, handstand and dip (plans/PLAN-yellow-dude.md) ---- */
+    push_alt_knee: { id:"push_alt_knee", pattern:"push", name:"Knee Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Kneel with your hands just wider than your shoulders, then walk your knees back until your body is one line from knees to head.",
+        "Squeeze your glutes and brace your stomach so the hips stay in that line.",
+        "Bend your elbows to lower your chest toward the floor, elbows about 45 degrees from your sides.",
+        "Press the floor away until your arms are straight, without letting the hips pike up."
+      ],
+      mistakes:["Folding at the hips so the line from knees to head breaks.", "Dropping onto the knees at the bottom instead of lowering under control."],
+      readiness:"A step between the incline push-up and the floor push-up — own the incline first, then move on once the body stays in one line for every rep.",
+      injury:"Pad the knees with a mat or folded towel, and ease off if the wrists ache." },
+
+    push_alt_kneeassist: { id:"push_alt_kneeassist", pattern:"push", name:"Knee-Assisted Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Start in a full plank on your toes, hands just wider than your shoulders.",
+        "Lower your whole body in one line over about three seconds, until your chest nears the floor.",
+        "Settle your knees onto the floor while your hands stay planted, then press up from the knees.",
+        "Return to the toes plank and repeat — the lowering is the work, and the knees only help the press."
+      ],
+      mistakes:["Crashing down at the bottom instead of lowering under control.", "Shuffling the hands when the knees go down."],
+      readiness:"Use it when knee push-ups are easy and you want the lowering of a full push-up before the full press.",
+      injury:"A long lowering loads the elbows and wrists; stop if either turns sharp." },
+
+    push_alt_partial: { id:"push_alt_partial", pattern:"push", name:"Partial-Range Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Set up in a plank with a visible depth marker under your chest, such as a folded towel or a book.",
+        "Lower until your chest touches the marker, keeping the body in one rigid line.",
+        "Press back up to straight arms, using the same depth on every rep.",
+        "Make the range a little deeper only once the current depth feels easy."
+      ],
+      mistakes:["Changing depth from rep to rep, so no two reps compare.", "Bouncing off the marker instead of touching it and pressing."],
+      readiness:"Use it to build toward a full push-up when the full range isn't there yet — deepen the range before adding reps.",
+      injury:"Stay inside a range that feels strong at the shoulders and elbows; the range should grow, never be forced." },
+
+    push_alt_staggered: { id:"push_alt_staggered", pattern:"push", name:"Staggered-Hand Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Set one hand under your chest and the other a hand's length ahead, so the two sides share the load unevenly.",
+        "Keep your hips and shoulders level and facing the floor, without twisting toward the forward hand.",
+        "Lower your chest between the hands, then press up evenly.",
+        "Do the same number of reps with each hand forward."
+      ],
+      mistakes:["Setting the hands so far apart that the body twists.", "Doing all the reps with a favourite hand forward."],
+      readiness:"A bridge toward one-arm work — use it once standard push-ups are solid and you want one arm to do more.",
+      injury:"The forward-loaded shoulder takes more strain; shorten the stagger if it pinches." },
+
+    push_alt_onearmassist: { id:"push_alt_onearmassist", pattern:"push", name:"Assisted One-Arm Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Take a wide foot stance and put your working hand under your chest, with the other hand resting on a low support beside your torso.",
+        "Keep your hips and shoulders square — the free side should not turn you open.",
+        "Lower under control on the working arm, using the helper hand only as a light prop.",
+        "Press up through the working arm and let the helper hand do less as you get stronger."
+      ],
+      mistakes:["Pressing mostly through the helper hand so the working arm does little.", "Twisting the torso open to get up."],
+      readiness:"A step toward the one-arm push-up — use it after staggered push-ups feel strong, and reduce the help gradually.",
+      injury:"A heavy single-shoulder load; keep the helper hand on its support until the working arm controls the whole lowering." },
+
+    push_alt_pseudoweighted: { id:"push_alt_pseudoweighted", pattern:"push", name:"Weighted Pseudo Planche Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["vest"],
+      cues:[
+        "Wear a snug vest, or a packed backpack worn high on the back, so the load sits close to your torso.",
+        "Set your hands beside your hips with the fingers turned out, and lean your shoulders well ahead of them — the same lean as your unweighted pseudo planche push-up.",
+        "Lower with the elbows tight to your ribs, then press up while holding that lean.",
+        "Fix the lean first and add load in small steps, changing one thing at a time."
+      ],
+      mistakes:["Adding lean and load in the same session.", "Arching the lower back to push up."],
+      readiness:"Only once the unweighted pseudo planche push-up is controlled on every rep — then add the smallest load you can.",
+      injury:"High load on the wrists, elbows and the front of the shoulder; stop on any sharp pain." },
+
+    push_alt_parallette: { id:"push_alt_parallette", pattern:"push", name:"Parallette Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["parallettes"],
+      cues:[
+        "Set the parallettes shoulder-width apart on level, non-slip ground and grip the handles with your wrists straight.",
+        "Brace in a plank and lower between the handles, elbows about 45 degrees from your sides.",
+        "Stop where your shoulders still feel in control, then press up without letting the handles rock.",
+        "Grip firmly, but don't clamp so hard that the shoulders shrug up."
+      ],
+      mistakes:["Setting up on handles that wobble or sit unevenly.", "Going deeper than your shoulders control just because the handles allow it."],
+      readiness:"A variation that is as much about the wrists as the chest — fine once standard push-ups are comfortable.",
+      injury:"The handles keep the wrists straight, but the extra depth stretches the front of the shoulder; stay inside your range." },
+
+    push_alt_slider: { id:"push_alt_slider", pattern:"push", name:"Towel Squeeze Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "On a smooth floor, set a towel or slider under each hand and take a push-up plank.",
+        "Lower your chest while keeping the hands from sliding apart — think of drawing them toward each other.",
+        "Press back up and let the hands return to shoulder width under control.",
+        "Keep the body straight and the ribs from sagging."
+      ],
+      mistakes:["Letting the hands slide out and the chest collapse.", "Using a floor so slick or so grippy that the two sides don't slide evenly."],
+      readiness:"An advanced chest variation — use it when floor push-ups are controlled and you want the chest squeezing inward.",
+      injury:"A sudden slide can wrench the shoulder; keep the slide short and controlled." },
+
+    push_alt_ringcross: { id:"push_alt_ringcross", pattern:"push", name:"Ring Crossover Press", level:null, era:1, mode:"reps", unit:"reps", equipment:["rings"],
+      cues:[
+        "Set the rings at equal height and take a ring push-up plank, with most of your weight still on your feet.",
+        "Lower with control, then press up and reach one ring across your body toward the other side, only as far as you can keep it steady.",
+        "Bring it back and cross the other side next, with both rings controlled the whole time.",
+        "Keep the hips square — the reach comes from the shoulder, not from twisting the body."
+      ],
+      mistakes:["Letting the rings fly apart or swing as you cross.", "Twisting the hips to make the reach."],
+      readiness:"Advanced — start from a steady ring push-up with no crossover, keeping your feet carrying most of the load.",
+      injury:"Unstable rings load the shoulders from awkward angles; keep the crossing small." },
+
+    push_alt_fingertip: { id:"push_alt_fingertip", pattern:"push", name:"Fingertip Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Start against a wall or a high support with your fingers spread and the weight on the finger pads.",
+        "Spread your load across all your fingers, not just the thumbs and index fingers.",
+        "Lower with control, keeping the fingers from collapsing flat, and press back up.",
+        "Move to a lower surface only when the finger joints feel comfortable at the current one."
+      ],
+      mistakes:["Letting the finger joints cave in at the bottom.", "Jumping straight to the floor with your full bodyweight."],
+      readiness:"Expert grip work — it asks a lot of the finger joints and tendons, so lower the surface slowly over weeks.",
+      injury:"Stop if the finger joints or tendons ache; they adapt more slowly than muscle." },
+
+    skill_planche_band: { id:"skill_planche_band", pattern:"skill", name:"Band-Assisted Planche Lean", level:null, era:1, mode:"hold", unit:"sec", equipment:["bands"],
+      cues:[
+        "Secure an intact band to a solid anchor so it takes part of your weight as you lean.",
+        "Take a straight-arm plank on the floor or on parallettes, with the band supporting you.",
+        "Lean your shoulders forward past your hands, elbows locked, pushing the floor away.",
+        "Lean only as far as you can hold with the elbows straight, and put your feet down before the band slackens."
+      ],
+      mistakes:["Bending the elbows to reach a deeper lean.", "Letting the band recoil suddenly when you come out."],
+      readiness:"Use it when the plank feels easy and you want a deeper lean than the floor allows.",
+      injury:"Heavy wrist loading — build the lean a little at a time, and check the band for wear before every session." },
+
+    skill_planche_boxtuck: { id:"skill_planche_boxtuck", pattern:"skill", name:"Box-Supported Tuck Planche", level:null, era:1, mode:"hold", unit:"sec", equipment:["parallettes", "box"],
+      cues:[
+        "Set the parallettes in front of a sturdy box so your feet can rest on it behind you.",
+        "Support yourself on straight arms with your hands fixed, and let the feet rest lightly on the box.",
+        "Lean forward and tuck your knees toward your chest, taking as little weight on the box as you can.",
+        "Keep the elbows locked and push the floor away."
+      ],
+      mistakes:["Pushing hard off the box with the feet so the arms do little.", "Using a box that slides or tips."],
+      readiness:"A bridge to the free tuck planche — use it when the lean is steady and you want to feel the tuck with some help.",
+      injury:"Check that the box and parallettes are stable, and stop on wrist or elbow pain." },
+
+    skill_planche_boxpushup: { id:"skill_planche_boxpushup", pattern:"skill", name:"Box-Supported Straddle Planche Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["parallettes", "box"],
+      cues:[
+        "Set the parallettes in front of a stable box and rest your feet lightly on it in a straddle.",
+        "Lean forward over your hands with the elbows straight and take most of the weight on your arms.",
+        "Bend the elbows to a depth you can reverse, then press back up.",
+        "Reduce the box support before you increase the depth."
+      ],
+      mistakes:["Letting the box slide, or pushing off it with the feet.", "Elbows flaring or collapsing during the descent."],
+      readiness:"Expert — only after a steady straddle planche support and a controlled bent-arm descent in easier versions.",
+      injury:"Very high wrist, elbow and shoulder load; stop on any sharp pain, and never train it tired." },
+
+    skill_planche_pushup: { id:"skill_planche_pushup", pattern:"skill", name:"Planche Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "From a full planche, with your body parallel to the floor and your shoulders well ahead of your hands, bend the elbows.",
+        "Lower in one rigid line, without letting the hips rise to make the press easier.",
+        "Reverse the descent without kicking or dropping into the bottom.",
+        "Press back to a straight-arm planche."
+      ],
+      mistakes:["Dropping into the bottom instead of lowering under control.", "Hips rising to ease the press."],
+      readiness:"Expert — only after a stable full planche and controlled pseudo planche push-ups; coaching is advised.",
+      injury:"Elite load on the wrists, elbows and shoulders; never train it cold or fatigued." },
+
+    shoulder_alt_pikeneg: { id:"shoulder_alt_pikeneg", pattern:"shoulder", name:"Negative Pike Push-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Set up in a pike with your hips high and your hands on the floor shoulder-width apart, head between your arms.",
+        "Bend the elbows and lower your head slowly toward the floor over about four seconds.",
+        "Keep the floor ahead of your hands clear for your head, and stop before you lose control.",
+        "Reset to the top by pressing up or walking your feet back, and repeat the slow lowering."
+      ],
+      mistakes:["Dropping onto the head instead of lowering under control.", "Elbows flaring and the shoulders losing position."],
+      readiness:"A bridge to the pike push-up — start with a shallow range and deepen it as control improves.",
+      injury:"Keep the landing area clear and the range shallow at first; stop if your neck or wrists complain." },
+
+    skill_handstand_pike: { id:"skill_handstand_pike", pattern:"skill", name:"Pike Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Set your hands shoulder-width apart and walk your feet in until your hips are high and your body makes an upside-down V.",
+        "Press your hands into the floor and push your shoulders tall, away from your ears.",
+        "Stack your hips toward being over your shoulders, without forcing the back to round.",
+        "Breathe steadily and keep the chest from sagging."
+      ],
+      mistakes:["Shrugging into the neck.", "Letting the trunk sag so the hips drop."],
+      readiness:"The first rung toward a handstand — hold a steady, shoulder-stacked pike before putting your feet up on something.",
+      injury:"Heavy on the wrists; shift the weight back toward your feet if they complain." },
+
+    skill_handstand_pikeelev: { id:"skill_handstand_pikeelev", pattern:"skill", name:"Feet-Elevated Pike Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:["bench"],
+      cues:[
+        "Put your feet on a stable low platform such as a bench, with your hands on the floor so your hips rise above your shoulders.",
+        "Press through your hands and push your shoulders tall, hips stacked over them.",
+        "Keep the feet planted on the platform and the platform steady.",
+        "Hold the position without letting the shoulders collapse."
+      ],
+      mistakes:["A platform that shifts under your feet.", "Collapsing through the shoulders as the load builds."],
+      readiness:"Move on from the floor pike hold when it is steady and you want more load — the wall walk comes next.",
+      injury:"More weight on the wrists and shoulders than the floor pike; come down if either feels unstable." },
+
+    skill_handstand_wallwalk: { id:"skill_handstand_wallwalk", pattern:"skill", name:"Wall Walk", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Start in a plank on the floor with your feet at the base of a wall.",
+        "Walk your feet up the wall while your hands walk toward it, in small steps.",
+        "Keep your arms straight and your core braced, stopping where you still feel in control.",
+        "Walk back down the same way, knowing which side you'd step out to."
+      ],
+      mistakes:["Walking too close to the wall before you're ready.", "Holding your breath on the way up."],
+      readiness:"Use it once a strong plank and the elevated pike hold are steady — it leads toward the chest-to-wall handstand.",
+      injury:"The walk back down loads the wrists and shoulders heavily; stay in a range you can reverse." },
+
+    skill_handstand_cartwheel: { id:"skill_handstand_cartwheel", pattern:"skill", name:"Cartwheel Exit Drill", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Practise on open floor with a clear lane to one side, starting at low height.",
+        "From a low or wall-supported handstand position, turn your body sideways toward the open space.",
+        "Place one foot down at a time and come out like a cartwheel.",
+        "Never aim to roll into a wall — the exit goes sideways."
+      ],
+      mistakes:["Trying to roll toward the wall.", "Crossing the legs without turning the body."],
+      readiness:"Learn the exit before you balance away from the wall — low height and open floor first.",
+      injury:"Keep the floor clear of objects, and use a non-slip floor or a mat that doesn't slide." },
+
+    skill_handstand_toetap: { id:"skill_handstand_toetap", pattern:"skill", name:"Split-Leg Wall Toe Tap", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Hold a stable chest-to-wall handstand with your toes against the wall.",
+        "Lift one toe lightly off the wall while your shoulders stay stacked over your hands.",
+        "Tap it back and switch sides.",
+        "Keep the hips square and don't kick away from the wall."
+      ],
+      mistakes:["Kicking away from the wall.", "Twisting the pelvis as the leg lifts."],
+      readiness:"The step between the chest-to-wall hold and a split-leg hold — start only when the wall hold is steady and a small release is controlled.",
+      injury:"Know a safe exit first, and step down if the wrists tire." },
+
+    skill_handstand_split: { id:"skill_handstand_split", pattern:"skill", name:"Split-Leg Handstand Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Go up to a handstand with one leg near the wall for control and the other held forward.",
+        "Keep your shoulders tall and push the floor away.",
+        "Hold the legs in a gentle split rather than scissoring them.",
+        "Plan your exit before you go, and look at the floor between your hands."
+      ],
+      mistakes:["Scissoring the legs wildly.", "Looking far ahead of your hands."],
+      readiness:"A partial free balance — start only once the wall handstand is steady and you have a safe exit.",
+      injury:"Practise on a non-slip surface with clear space to the side." },
+
+    skill_handstand_parallette: { id:"skill_handstand_parallette", pattern:"skill", name:"Parallette Handstand", level:null, era:1, mode:"hold", unit:"sec", equipment:["parallettes"],
+      cues:[
+        "Set the parallettes on non-slip ground with plenty of space on both sides.",
+        "Grip the handles evenly and go up to a handstand with your shoulders stacked over them.",
+        "Keep the handles still and balance through your fingers and grip.",
+        "Don't grip so hard that your shoulders collapse."
+      ],
+      mistakes:["Handles rocking from an uneven setup.", "Over-gripping while the shoulder line collapses."],
+      readiness:"Expert — only after a steady freestanding handstand on the floor and a safe exit from raised handles.",
+      injury:"A fall from raised handles is higher; choose a stable floor and know your exit." },
+
+    skill_handstand_bentarm: { id:"skill_handstand_bentarm", pattern:"skill", name:"Bent-Arm Handstand Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Go up to a stable handstand on a padded surface, with a wall or a spotter available.",
+        "Bend your elbows slowly through a controlled range, keeping your head clear of the floor.",
+        "Keep your shoulders active and push the floor away rather than sinking into it.",
+        "Press back up before you tire."
+      ],
+      mistakes:["Dropping onto the head.", "Elbows flaring out of control."],
+      readiness:"Advanced — start from a strong handstand and controlled pike push-ups, and train with a coach where you can.",
+      injury:"The head and neck are at risk if control goes; train on a padded surface and keep the range small." },
+
+    skill_handstand_onearm: { id:"skill_handstand_onearm", pattern:"skill", name:"One-Arm Handstand", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "From a steady freestanding handstand, shift your weight gradually over the supporting hand.",
+        "Keep the free shoulder up and don't let it drop.",
+        "Know your cartwheel exit before you go.",
+        "Work with a coach or a spotter where you can."
+      ],
+      mistakes:["Dropping the free shoulder.", "Twisting out of control."],
+      readiness:"The far end of the handstand path, with no fixed standard — individual practice only.",
+      injury:"Very high single-wrist and shoulder load; keep sessions short and always know the exit." },
+
+    dip_alt_negative: { id:"dip_alt_negative", pattern:"dip", name:"Dip Negative", level:null, era:1, mode:"reps", unit:"reps", equipment:["dipBars", "lowBar"],
+      cues:[
+        "Start in a straight-arm support on dip bars or a straight bar, stepping or jumping up to get there.",
+        "Lower yourself slowly over about four seconds, to a depth you can control.",
+        "Keep your shoulders from shrugging and your elbows pointing back.",
+        "Step down or reset on a step rather than dropping."
+      ],
+      mistakes:["Jumping into an unstable support.", "Losing control and dropping at the bottom."],
+      readiness:"Use it when dips are close but you can't yet press back up — build the slow lowering first.",
+      injury:"The bottom of a dip stretches the front of the shoulder; stay above the depth where it pinches." },
+
+    dip_alt_support: { id:"dip_alt_support", pattern:"dip", name:"Parallel Bar Support Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:["dipBars"],
+      cues:[
+        "Take a straight-arm support on parallel bars with your hands beside your hips, feet off the floor or lightly on it.",
+        "Press down into the bars so your shoulders stay away from your ears.",
+        "Lock your elbows without collapsing into them, and keep your body still.",
+        "Use bars low enough that you can step down safely."
+      ],
+      mistakes:["Shrugging up into your ears.", "Hanging on the joints at the end of their range."],
+      readiness:"The first rung for the arms in dips — hold steady before lowering into them.",
+      injury:"The wrists take the load; stop if they or the shoulders ache." },
+
+    dip_alt_ringsupport: { id:"dip_alt_ringsupport", pattern:"dip", name:"Ring Support Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:["rings"],
+      cues:[
+        "Set the rings at equal height, with safe access to the floor or a step.",
+        "Take a straight-arm support with your hands beside your hips and the rings close to your body.",
+        "Press down and keep the rings from drifting apart or rotating.",
+        "Don't force your hands outward — let them turn out only as far as is comfortable."
+      ],
+      mistakes:["Letting the rings drift apart.", "Forcing the hands to turn out."],
+      readiness:"A harder support than bars because the rings move — hold bars steadily first.",
+      injury:"Unstable rings load the shoulders and elbows from awkward angles; step down if control goes." },
+
+    /* ---- Yellow Dude, Group B: rows, front-lever steps, pull-up variants, muscle-up and back lever (plans/PLAN-yellow-dude.md) ---- */
+
+    pull_alt_australianfe: { id:"pull_alt_australianfe", pattern:"pull", name:"Feet-Elevated Inverted Row", level:null, era:1, mode:"reps", unit:"reps", equipment:["lowBar", "rings", "bench"],
+      cues:[
+        "Set a bar or rings at about hip height and rest your heels on a bench or other platform that can't slide.",
+        "Take the bar overhand at shoulder width and brace until your body is one line from heels to head.",
+        "Pull your chest to the bar by driving the elbows back, without letting the hips fold.",
+        "Lower to straight arms under control, and keep the feet planted on the platform."
+      ],
+      mistakes:["Folding at the hips so the body line breaks.", "Feet sliding off the platform as you pull."],
+      readiness:"A harder row than the floor-footed one — own a strict inverted row first, then raise the feet.",
+      injury:"Back and shoulder strain rise with the height of the feet; use a lower platform if the lower back or shoulder complains." },
+
+    pull_alt_archerrow: { id:"pull_alt_archerrow", pattern:"pull", name:"Archer Row", level:null, era:1, mode:"reps", unit:"reps", equipment:["lowBar", "rings"],
+      cues:[
+        "Set up for an inverted row on a low bar or rings, with room to move sideways.",
+        "Shift your weight toward one hand as you pull and let the other arm straighten out to the side as a helper.",
+        "Keep your hips square and your body in one line, with the working elbow driving back.",
+        "Lower under control, return to centre, and do the same number of reps to each side."
+      ],
+      mistakes:["Twisting the hips toward the working side.", "Yanking through the working elbow instead of pulling smoothly."],
+      readiness:"Own the inverted row first, then practise shifting your weight toward one hand before you let the other arm straighten.",
+      injury:"One arm takes most of your weight; stop on sharp shoulder or elbow pain, and keep the helper arm bent if you need more help." },
+
+    pull_alt_tableweighted: { id:"pull_alt_tableweighted", pattern:"pull", name:"Weighted Table Row", level:null, era:2, mode:"reps", unit:"reps", equipment:["vest"],
+      cues:[
+        "Use a heavy, stable table, and fix a vest or a packed backpack high on your back so it can't slide.",
+        "Lie under the table edge, grip it at shoulder width and hold your body straight from heels to head.",
+        "Pull your chest to the table edge, driving the elbows back.",
+        "Lower to straight arms with the load still, and stop if the table shifts."
+      ],
+      mistakes:["The bag sliding toward your neck or hips.", "A table that creeps across the floor while you pull."],
+      readiness:"Add load only once the unweighted table row with a straight body is smooth on every rep, and then add the smallest step.",
+      injury:"The table has to hold your body plus the load; check it before every set and stop if it moves." },
+
+    pull_alt_bandrow: { id:"pull_alt_bandrow", pattern:"pull", name:"Band Bent-Over Row", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands"],
+      cues:[
+        "Stand on the middle of an intact band with both feet and take an end in each hand.",
+        "Hinge at the hips until your torso leans forward, with a flat back and soft knees.",
+        "Pull your hands toward your ribs, driving the elbows back, while your torso stays still.",
+        "Lower slowly until your arms are straight and the band is still taut."
+      ],
+      mistakes:["Rounding the back to get the band moving.", "The band slipping out from under the feet — reset before the next rep."],
+      readiness:"Pick a band that lets the torso stay still for every rep; step to a stronger band at the same range, not a longer pull.",
+      injury:"Check the band for nicks before each session, and stop if the lower back aches from the forward lean." },
+
+    skill_frontlever_band: { id:"skill_frontlever_band", pattern:"skill", name:"Band-Assisted Front Lever", level:null, era:1, mode:"hold", unit:"sec", equipment:["pullupBar", "bands"],
+      cues:[
+        "Fix an intact band to the bar or an anchor so it can take your weight at the waist, and check both before you hang.",
+        "Hang with straight arms, pull your shoulder blades down, and lift your body toward horizontal with the band under your hips.",
+        "Lengthen your body past a tuck, only as far as you can keep the elbows straight.",
+        "Hold a level body, then lower out before the line breaks."
+      ],
+      mistakes:["Bending the elbows to pull into position.", "Bouncing off the band instead of holding the position."],
+      readiness:"Hold a tuck front lever with straight arms first — the band is there to let you try a longer lever, not to cover a bent-arm pull.",
+      injury:"A taut band can slide or fail; inspect it and the anchor before every set, and keep the landing area clear." },
+
+    skill_frontlever_negative: { id:"skill_frontlever_negative", pattern:"skill", name:"Front Lever Negative", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar", "rings"],
+      cues:[
+        "Start from a secure inverted position under a rated bar or rings, with your body above the bar and in line with it.",
+        "Lower toward horizontal slowly, keeping the arms straight and the shoulder blades pulled down.",
+        "Stop where the line would break, then return to a hang and reset.",
+        "Use a shorter lever, such as a tuck, if you can't control the whole descent."
+      ],
+      mistakes:["Dropping through the hardest part of the range instead of controlling it.", "Arching the lower back to slow the fall."],
+      readiness:"Use it when you can hold a front lever progression and want to build toward a longer lever by lowering slowly.",
+      injury:"Straight-arm lowering is hard on the shoulders and elbow tendons; stop on pain, and don't try a lever longer than you can control." },
+
+    skill_frontlever_oneleg: { id:"skill_frontlever_oneleg", pattern:"skill", name:"One-Leg Front Lever", level:null, era:1, mode:"hold", unit:"sec", equipment:["pullupBar", "rings"],
+      cues:[
+        "Take an advanced tuck front lever with straight arms and level hips.",
+        "Extend one leg straight out while the other stays tucked, without letting the hips twist.",
+        "Hold the line, then tuck again and swap the leg that extends.",
+        "Keep your shoulder blades down and your body horizontal."
+      ],
+      mistakes:["Twisting the hips as the leg goes out.", "The extended leg dropping below the line of the body."],
+      readiness:"A bridge between the advanced tuck and the straddle — own the advanced tuck, with slow one-leg extensions, before you hold this.",
+      injury:"Each extension makes the lever longer; stop on shoulder, elbow or wrist pain, and go back to a shorter lever." },
+
+    skill_frontlever_raise: { id:"skill_frontlever_raise", pattern:"skill", name:"Front Lever Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar", "rings"],
+      cues:[
+        "Start from an active hang with your shoulder blades pulled down, under a rated bar or rings.",
+        "Lift your body toward horizontal in a tuck or advanced tuck, with straight arms and no kick.",
+        "Pause with a level body, then lower back to the hang with control.",
+        "Keep the arms straight, and don't swing into the first rep."
+      ],
+      mistakes:["Swinging into the raise to get started.", "Bending the elbows to help the lift."],
+      readiness:"Dynamic work for the lever — use it once you can hold a tuck or advanced tuck for the skill standard.",
+      injury:"Stop when the shoulders shrug up or the elbows start to bend; a shorter lever beats a ragged one." },
+
+    pull_alt_ringassist: { id:"pull_alt_ringassist", pattern:"pull", name:"Feet-Assisted Ring Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["rings"],
+      cues:[
+        "Hang the rings low enough that your feet can rest on the floor or a firm support, and hold them with a steady grip.",
+        "Pull yourself up with the feet taking only as much weight as you need, keeping the rings level and quiet.",
+        "Lower to straight arms in control, with the same amount of help on every rep.",
+        "Use less foot help as you get stronger, rather than adding reps."
+      ],
+      mistakes:["Changing how much the feet help from rep to rep.", "Letting the rings twist or drift apart."],
+      readiness:"A bridge between scapular pulls and full pull-ups — use it to practise the pulling path with some help.",
+      injury:"Rings load the wrists and shoulders from changing angles; stop on pain, and check the straps and anchor before you start." },
+
+    pull_alt_neutral: { id:"pull_alt_neutral", pattern:"pull", name:"Neutral-Grip Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar", "rings"],
+      cues:[
+        "Take parallel handles, or rings held at the same height, with your palms facing each other.",
+        "Start from a straight-arm hang with your shoulder blades pulled down.",
+        "Pull until your chin passes the handles, keeping your palms facing and your body still.",
+        "Lower under control to straight arms."
+      ],
+      mistakes:["Swinging to get over the handles.", "Letting the grip slip as you tire."],
+      readiness:"A grip change, not a harder step — fine once you have a strict pull-up and want a friendlier angle at the shoulder and wrist.",
+      injury:"Stop on elbow, shoulder or wrist pain; a neutral grip is often more comfortable, but it isn't automatically pain-free." },
+
+    pull_alt_wide: { id:"pull_alt_wide", pattern:"pull", name:"Wide-Grip Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Take the bar wider than your shoulders, but only as wide as your shoulders tolerate.",
+        "Hang from straight arms with your shoulder blades pulled down.",
+        "Pull until your chin clears the bar, with the elbows driving down and out.",
+        "Lower slowly to a full hang."
+      ],
+      mistakes:["Going wider than the shoulders tolerate.", "Cutting the range short at the top or the bottom."],
+      readiness:"Strict pull-ups first — the wide grip makes the same pull harder, so choose a width you can repeat.",
+      injury:"A wide grip stresses the shoulders more; narrow it at the first pinch." },
+
+    pull_alt_close: { id:"pull_alt_close", pattern:"pull", name:"Close-Grip Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Take the bar with your hands closer than shoulder width, at a spacing where the wrists stay straight.",
+        "Hang with straight arms and your shoulder blades pulled down.",
+        "Pull your chin over the bar with the trunk steady and the elbows close to your body.",
+        "Lower to a full hang under control."
+      ],
+      mistakes:["Forcing the wrists inward to get the hands close.", "Swinging to start the first rep."],
+      readiness:"Strict pull-ups first — the narrow grip puts more work on the arms, so pick a spacing the wrists accept.",
+      injury:"Stop on wrist or elbow pain, and widen the grip a little if the wrists complain." },
+
+    pull_alt_hollow: { id:"pull_alt_hollow", pattern:"pull", name:"Hollow-Body Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Hang from the bar and set a hollow shape: ribs down, glutes squeezed, legs together and slightly forward.",
+        "Pull with the whole body moving as one unit and the hollow shape intact.",
+        "Bring your chin over the bar without kicking.",
+        "Lower to a full hang and reset the hollow before the next rep."
+      ],
+      mistakes:["Kicking the legs to get up.", "Losing the ribs-down position and arching."],
+      readiness:"A pull-up with the trunk held in a fixed shape — you need a strict pull-up and a steady hollow hold before you combine them.",
+      injury:"Stop on shoulder or elbow pain; if the hollow shape tires you before the pull does, practise each on its own." },
+
+    pull_alt_arched: { id:"pull_alt_arched", pattern:"pull", name:"Arched-Back Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Hang from the bar with a firm grip and your shoulder blades pulled down.",
+        "Pull while letting the upper back extend a little, leading with your chest toward the bar.",
+        "Aim your chest at the bar rather than your chin, with the elbows driving down and back.",
+        "Lower in control to a full hang."
+      ],
+      mistakes:["Arching from the lower back instead of the upper back.", "Jerking the shoulders back to gain height."],
+      readiness:"A way to pull higher, ahead of the chest-to-bar pull-up — use it after strict pull-ups, with the extension coming from the upper back.",
+      injury:"Too much arch loads the lower back; stop if the lower back is doing the work." },
+
+    pull_alt_towelgrip: { id:"pull_alt_towelgrip", pattern:"pull", name:"Towel-Grip Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Drape two strong towels of equal length over a fixed bar and take one in each fist.",
+        "Pull your shoulder blades down and keep the towels hanging evenly.",
+        "Pull until your hands are near your chest, without swinging.",
+        "Lower before your grip fades, and step down rather than letting go."
+      ],
+      mistakes:["The towels slipping through the fists.", "Hanging on after the grip has gone."],
+      readiness:"A grip challenge on top of a strict pull-up — use it once towel hangs and pull-ups are both comfortable.",
+      injury:"The grip demand loads the elbows; stop on elbow pain, and check the towels aren't frayed." },
+
+    pull_alt_c2b: { id:"pull_alt_c2b", pattern:"pull", name:"Chest-to-Bar Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Hang from a bar high enough that your chest and head clear it, with a firm grip.",
+        "Pull your chest, not your chin, toward the bar, driving the elbows down and back.",
+        "Touch or come close to the bar with your chest each rep, without craning the neck.",
+        "Lower in control to a full hang, and keep each rep strict rather than kipping."
+      ],
+      mistakes:["Craning the neck up toward the bar.", "Letting the body swing into a kip."],
+      readiness:"A higher pull for people with strict pull-ups — you should be able to get your chin over the bar with control and lower slowly first.",
+      injury:"The higher pull loads the shoulders more; stop on pain, and make sure the bar structure doesn't block your chest or head." },
+
+    pull_alt_onearm: { id:"pull_alt_onearm", pattern:"pull", name:"One-Arm Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Set up a step and a form of help you can reduce over time — the free hand on the bar, a band, or a hand on your wrist.",
+        "Hang from the working arm with that shoulder blade pulled down and your body from twisting.",
+        "Pull until your chin passes the bar, limiting how much your trunk rotates.",
+        "Lower slowly under control, and reduce the help as you get stronger."
+      ],
+      mistakes:["Dropping onto the working elbow at the bottom.", "Jerking out of the hang to start the pull."],
+      readiness:"Expert work — it follows a long build of archer pull-ups and slow one-arm lowering, and it isn't a step to rush.",
+      injury:"The working elbow and shoulder take your whole bodyweight; stop on pain, and keep the help until you can control the lowering." },
+
+    pull_alt_weighted: { id:"pull_alt_weighted", pattern:"pull", name:"Weighted Pull-up", level:null, era:2, mode:"reps", unit:"reps", equipment:["pullupBar", "dumbbells", "kettlebells", "vest"],
+      cues:[
+        "Wear a snug vest or belt so the load is fixed and can't swing.",
+        "Hang from straight arms and pull your shoulder blades down before you pull.",
+        "Pull until your chin passes the bar, then lower fully, keeping the same range you use without load.",
+        "Add load in small steps, and end the set before the range shrinks."
+      ],
+      mistakes:["Letting the weight swing under you.", "Shortening the range as the load goes up."],
+      readiness:"Strict pull-ups at full range come first — add load only once the plain version is clean on every rep.",
+      injury:"The bar has to hold your weight plus the load; stop on elbow or shoulder pain." },
+
+    skill_muscleup_explosive: { id:"skill_muscleup_explosive", pattern:"skill", name:"High Pull-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Hang from a high bar with clear space above and in front of it, so you can pull past it.",
+        "Pull fast from a straight-arm hang while you're fresh, aiming to bring your lower chest toward the bar.",
+        "Lower under control instead of dropping.",
+        "End the set when the pull slows or the swing starts."
+      ],
+      mistakes:["Repeating high pulls while tired, so the speed fades.", "Letting the body swing out of control."],
+      readiness:"Strict pull-ups first — this is speed work, so it goes early in a session, in short sets.",
+      injury:"Fast pulling loads the elbows and shoulders; stop on pain, and don't chase height once the pull slows." },
+
+    skill_muscleup_turnover: { id:"skill_muscleup_turnover", pattern:"skill", name:"Bar Turnover Drill", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Use a bar you can reach with your feet on the floor or a step, so the drill is partly assisted.",
+        "From a deep pull, bring your chest over the bar slowly and let your wrists rotate over it.",
+        "Settle in a supported position at the top, with your chest over the bar and your arms straight.",
+        "Move through the turnover at a speed you control, not as a jump."
+      ],
+      mistakes:["Slamming the wrists over the bar.", "Jumping through a range you aren't ready for."],
+      readiness:"Needs a strong high pull and a stable straight-bar dip — practise the turnover with help before doing it free.",
+      injury:"The wrists, elbows and shoulders are loaded as you rotate over the bar; stop on pain, or when the turn gets out of control." },
+
+    skill_muscleup_band: { id:"skill_muscleup_band", pattern:"skill", name:"Band-Assisted Muscle-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar", "bands"],
+      cues:[
+        "Fix an intact band so it supports you through the turnover, and check it before you hang.",
+        "Pull high, bring your chest over the bar, and press into support.",
+        "Make the pull and the turnover one smooth movement rather than two jerks.",
+        "Lower down in control, and let the band assist but never do the turnover for you."
+      ],
+      mistakes:["The band's rebound doing the transition for you.", "One shoulder turning over before the other."],
+      readiness:"Needs a strong high pull and a bar dip — a lighter band over time is the progression, not more reps.",
+      injury:"Check the band for wear before every set; stop on wrist, elbow or shoulder pain." },
+
+    skill_muscleup_full: { id:"skill_muscleup_full", pattern:"skill", name:"Muscle-up", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Use a fixed, bodyweight-rated high bar with plenty of room above it and a safe landing below.",
+        "Pull high and fast, leading with your chest toward the bar.",
+        "Turn over smoothly and press to a straight-arm support on the bar.",
+        "Lower with control and reset between reps, rather than kipping."
+      ],
+      mistakes:["A chicken-wing turnover, with one arm trailing.", "Kipping to get through the sticking point."],
+      readiness:"Expert work — you need a high pull to the lower chest, a controlled turnover and a straight-bar dip before the full movement.",
+      injury:"The shoulders, elbows and wrists take heavy load; stop on pain, and step down from the bar if you lose control at the top." },
+
+    skill_backlever_skinthecat: { id:"skill_backlever_skinthecat", pattern:"skill", name:"Skin the Cat", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar", "rings"],
+      cues:[
+        "Hang from a rated bar or rings over a padded landing, with a spotter for the first attempts.",
+        "Tuck your knees and rotate backward slowly, letting your legs pass between your arms.",
+        "Go only as far as your shoulders allow comfortably, then come back the same way.",
+        "Keep the movement slow enough that you can stop at any point."
+      ],
+      mistakes:["Dropping into the stretch at the bottom.", "Twisting while you're upside down."],
+      readiness:"Practise a passive hang and gentle shoulder mobility first — the shoulders need to be comfortable in a deep stretch, and you need a way back.",
+      injury:"Forcing the shoulders into extension is the main risk; use a smaller range, and stop on shoulder, elbow or neck pain." },
+
+    skill_backlever_1: { id:"skill_backlever_1", pattern:"skill", name:"Tuck Back Lever", level:null, era:1, mode:"hold", unit:"sec", equipment:["pullupBar", "rings"],
+      cues:[
+        "Get into a tucked, inverted position under a rated bar or rings, with a padded landing below.",
+        "Rotate until your body faces the floor, with your hips level with your shoulders and your knees tucked.",
+        "Keep your elbows straight and your shoulders from sinking.",
+        "Hold, then come down or reverse out with control."
+      ],
+      mistakes:["Over-extending the shoulders into the stretch.", "Letting the hips drop below the shoulders."],
+      readiness:"Be comfortable with skin the cat, including a controlled way back out — the tuck back lever starts there.",
+      injury:"Stop on shoulder, elbow or neck pain, and use a smaller range if the front of the shoulder feels stretched." },
+
+    skill_backlever_transition: { id:"skill_backlever_transition", pattern:"skill", name:"Tuck-to-Straddle Transition", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar", "rings"],
+      cues:[
+        "Take a tuck back lever with straight arms and a padded landing below.",
+        "Open your legs slowly, one stage at a time, toward a straddle.",
+        "Keep your hips from twisting as the legs separate.",
+        "Close back to the tuck at the same speed, and rest before the next rep."
+      ],
+      mistakes:["Flinging the legs open.", "The shoulder position drifting as the legs move."],
+      readiness:"A stable tuck back lever and slow leg opening come first.",
+      injury:"A longer lever loads the shoulders more; stop when control goes, or on shoulder pain." },
+
+    skill_backlever_2: { id:"skill_backlever_2", pattern:"skill", name:"Advanced Tuck Back Lever", level:null, era:1, mode:"hold", unit:"sec", equipment:["pullupBar", "rings"],
+      cues:[
+        "Start from a stable tuck back lever and open the knees away from your chest a little at a time.",
+        "Keep your body line near horizontal, with the hips level with the shoulders.",
+        "Hold your elbows straight.",
+        "Return to the tuck before the hips begin to drop."
+      ],
+      mistakes:["Arching the lower back to hold the line.", "Bending the elbows."],
+      readiness:"Hold the tuck back lever with ease, and make sure the shoulders tolerate a longer lever before you open it further.",
+      injury:"Stop on shoulder, elbow or neck pain; the longer lever stretches the front of the shoulder more." },
+
+    skill_backlever_straddleneg: { id:"skill_backlever_straddleneg", pattern:"skill", name:"Straddle Back Lever Negative", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar", "rings"],
+      cues:[
+        "Start from a secure inverted position and open your legs in a wide, even straddle.",
+        "Lower slowly toward horizontal with your elbows straight.",
+        "Keep the legs equally apart and the hips level.",
+        "Stop where you lose control, and exit safely."
+      ],
+      mistakes:["Free-falling through the lowering.", "Letting the shoulders extend further than is comfortable."],
+      readiness:"Needs a stable advanced tuck back lever and a controlled straddle lowering from a shorter lever.",
+      injury:"A slow lowering loads the shoulders heavily; stop on pain, and keep a padded landing below." },
+
+    skill_backlever_3: { id:"skill_backlever_3", pattern:"skill", name:"Straddle Back Lever", level:null, era:1, mode:"hold", unit:"sec", equipment:["pullupBar", "rings"],
+      cues:[
+        "Take a wide, even straddle from a controlled straddle lowering.",
+        "Keep your hips and trunk level and your arms straight.",
+        "Stop your chest and hips from dropping.",
+        "Leave by closing the legs back into a tuck."
+      ],
+      mistakes:["Legs spread unevenly.", "The chest or hips sinking."],
+      readiness:"A controlled straddle negative first, with a steady straight-arm shoulder position.",
+      injury:"Stop on shoulder, elbow or neck pain; don't force the shoulders further back than they go comfortably." },
+
+    skill_backlever_fullneg: { id:"skill_backlever_fullneg", pattern:"skill", name:"Full Back Lever Negative", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar", "rings"],
+      cues:[
+        "Start from a secure inverted position with your legs together.",
+        "Lower slowly with straight elbows and the legs together.",
+        "Keep your body in one even line, without arching.",
+        "Stop and exit when control fades."
+      ],
+      mistakes:["Dropping too fast.", "Arching through the back."],
+      readiness:"A stable straddle back lever first, then control of the full-length lowering.",
+      injury:"A full-length lowering is very demanding on the shoulders; stop on pain, and keep a padded landing below." },
+
+    skill_backlever_4: { id:"skill_backlever_4", pattern:"skill", name:"Full Back Lever", level:null, era:1, mode:"hold", unit:"sec", equipment:["pullupBar", "rings"],
+      cues:[
+        "Take a controlled full-length lever with your legs together.",
+        "Keep your body level and your arms straight.",
+        "Plan a deliberate exit before you start.",
+        "Hold only as long as the line stays."
+      ],
+      mistakes:["Over-stretching the shoulders.", "Letting the hips drop."],
+      readiness:"A controlled full negative and a stable straight-arm straddle hold come first.",
+      injury:"Stop on shoulder, elbow or neck pain; the full lever is the longest and hardest on the shoulders." },
+
+    /* ---- Yellow Dude, Group C: squat, hinge and core variants. Era II for the
+       three loaded mains (a barbell, a weighted vest, dumbbells on a bench), as
+       the existing `_e2_` rows are. ---- */
+    squat_alt_box: { id:"squat_alt_box", pattern:"squat", name:"Box Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Set a stable box or sturdy chair behind you, at a height you can sit onto and rise from with control.",
+        "Stand about shoulder-width apart and sit your hips back and down until you touch the box.",
+        "Touch it lightly with your torso braced instead of dropping onto it.",
+        "Stand by pressing through your whole foot, without rocking back first."
+      ],
+      mistakes:["Dropping onto the box and bouncing off it.", "Rocking back to build momentum before you stand."],
+      readiness:"Use it when a free squat is still wobbly at the bottom; a lower box, and then the squat itself, is the next step.",
+      injury:"The box must not slide. Pick a height your knees and hips tolerate and go higher if they complain." },
+
+    squat_alt_jump: { id:"squat_alt_jump", pattern:"squat", name:"Jump Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Clear the space above and around you and stand on a non-slip floor.",
+        "Squat down to a depth you control, then jump straight up by driving through the floor.",
+        "Land softly on the whole foot with your hips back and your knees tracking over your toes.",
+        "Reset between reps instead of chaining them whenever your landings get loud."
+      ],
+      mistakes:["Landing stiff-legged.", "Letting the knees cave inward on the landing."],
+      readiness:"A controlled bodyweight squat and a quiet landing from small hops come first; end the set when the landings get worse.",
+      injury:"Jumping loads the knees, ankles and Achilles. If any of them hurts, stop jumping and do a plain squat instead." },
+
+    squat_alt_bulgarianw: { id:"squat_alt_bulgarianw", pattern:"squat", name:"Weighted Bulgarian Split Squat", level:null, era:2, mode:"reps", unit:"reps", equipment:["bench", "dumbbells"],
+      cues:[
+        "Rest the top of your back foot on a bench behind you and hold a dumbbell in each hand at your sides.",
+        "Step the front foot far enough forward that the shin stays near vertical at the bottom.",
+        "Lower under control until the back knee is just above the floor, with the dumbbells hanging clear of the bench.",
+        "Drive through the whole front foot to stand, keeping the weights level and still."
+      ],
+      mistakes:["Adding weight while the front foot is still wobbling.", "Cutting the depth short once the weights get heavy."],
+      readiness:"Be steady on the unweighted Bulgarian split squat first, then add the smallest step in weight at the same depth.",
+      injury:"Fix the bench so it can't slide and keep the dumbbells out of its way. Stop and shorten the range if the knee, hip or back complains." },
+
+    squat_alt_deficit: { id:"squat_alt_deficit", pattern:"squat", name:"Deficit Bulgarian Split Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:["bench"],
+      cues:[
+        "Put the top of your back foot on a bench and your front foot on a low, solid riser so it sits a little above the floor.",
+        "Lower slowly through the extra depth, keeping the whole front foot pressed into the riser.",
+        "Stay upright and let the front knee travel over the toes at an angle you can control.",
+        "Stand by driving through the front foot, and step off the riser to reset between sets."
+      ],
+      mistakes:["Stacking unstable risers to chase more depth.", "Letting the front heel lift at the bottom."],
+      readiness:"Own the Bulgarian split squat first, then deepen the range a little at a time before you think about load.",
+      injury:"A riser that tips is a fall, so use a solid one. Shorten the range, or lower the riser, if the knee or hip complains." },
+
+    squat_alt_boxpistol: { id:"squat_alt_boxpistol", pattern:"squat", name:"Box Pistol Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Stand with a stable box or bench behind your hips, one foot on the floor and the other leg held out in front.",
+        "Sit down onto the box on one leg, slowly, with your weight over the middle of the foot.",
+        "Touch the box gently instead of dropping onto it, then stand up on the same leg.",
+        "Start with a high box and lower it a little at a time as your control improves."
+      ],
+      mistakes:["Falling onto the box at the bottom.", "Swinging the free leg or rocking to get up."],
+      readiness:"Be comfortable with an assisted pistol squat and a controlled sit onto the box before you go lower.",
+      injury:"Single-leg squats twist the knee if the foot or hip drifts. Stop at knee, hip or ankle pain, and go back to a higher box or more support." },
+
+    squat_alt_pistolneg: { id:"squat_alt_pistolneg", pattern:"squat", name:"Negative Pistol Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Stand on one leg beside a rail or a box you can use to reset, with the other leg held out in front.",
+        "Lower slowly on that leg, with the heel flat and the knee tracking over the toes.",
+        "Use the rail, the box or your free foot to get back up, not the working leg.",
+        "Stop the descent where your control ends instead of dropping through the last part."
+      ],
+      mistakes:["Dropping through the bottom of the squat.", "Forcing a depth that hurts."],
+      readiness:"An assisted pistol squat first, and a one-leg lowering you can slow down on purpose.",
+      injury:"Warm the ankles and knees. Stop at knee, hip or ankle pain, or if the knee twists under you, and keep a rail or box in reach." },
+
+    squat_alt_barbell: { id:"squat_alt_barbell", pattern:"squat", name:"Barbell Back Squat", level:null, era:2, mode:"reps", unit:"reps", equipment:["barbell"],
+      cues:[
+        "Set the rack safeties just below your lowest squat, and load the bar evenly with the collars on.",
+        "Brace before you unrack, then walk the bar out with short steps and a settled stance.",
+        "Brace again, sit down and back, and keep the bar over the middle of your foot.",
+        "Stand by driving through the floor, and re-rack only when the bar is clearly touching the rack."
+      ],
+      mistakes:["Losing the brace at the bottom.", "Squatting without safeties or a spotter."],
+      readiness:"Squat well with no load first, and have the rack and the bar set up with someone who has used them before you add weight.",
+      injury:"A loaded bar is the heaviest thing in this app. Use the safeties, and stop at knee, hip or back pain." },
+
+    squat_alt_cossackw: { id:"squat_alt_cossackw", pattern:"squat", name:"Weighted Cossack Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:["dumbbells", "kettlebells"],
+      cues:[
+        "Hold one dumbbell or kettlebell against your chest with both hands and take a wide stance, toes turned slightly out.",
+        "Shift onto one leg and squat down over it while the other leg stays long.",
+        "Keep the weight close to you so it doesn't pull your chest forward.",
+        "Push back to the middle and shift to the other side, with a clear space to put the weight down."
+      ],
+      mistakes:["Letting the weight drag your torso forward.", "Forcing more depth than the hip can give."],
+      readiness:"Be smooth on the unweighted Cossack squat first, then add the smallest step in weight at the same depth.",
+      injury:"Stop at groin, knee or hip pain. Shorten the range instead of forcing the hip." },
+
+    squat_alt_dragonassist: { id:"squat_alt_dragonassist", pattern:"squat", name:"Assisted Dragon Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Stand on one leg next to a fixed rail or post you can hold with one hand.",
+        "Sit down on the standing leg and sweep the other leg behind it, slowly, so you can practise the path.",
+        "Let the rail take some of your weight, and note how much help you used.",
+        "Keep the standing knee over its toes instead of letting it turn inward."
+      ],
+      mistakes:["Twisting the planted knee as the other leg passes behind.", "Letting the support slip, or hanging on it."],
+      readiness:"A controlled pistol or split squat first, and a leg path you can run slowly with a hand on the support.",
+      injury:"The planted knee turns under load here. Stop at knee, hip or ankle pain, and shrink the range instead of forcing it." },
+
+    squat_alt_dragon: { id:"squat_alt_dragon", pattern:"squat", name:"Dragon Squat", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Stand on one leg in open space with a support within reach.",
+        "Sit down on the standing leg while the other leg sweeps behind it.",
+        "Keep the working knee over its toes and control the depth.",
+        "Stand back up without hopping or swinging the free leg."
+      ],
+      mistakes:["Forcing the knee to twist.", "Losing balance because the free leg swung."],
+      readiness:"A strong assisted dragon squat, with steady balance and knee control, comes first.",
+      injury:"An expert move that rotates the knee and hip under load. Stop at any knee, hip or ankle pain, and never force the rotation." },
+
+    hinge_alt_nordicband: { id:"hinge_alt_nordicband", pattern:"hinge", name:"Band-Assisted Nordic Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:["bands", "nordicAnchor"],
+      cues:[
+        "Pad your knees, fix your ankles under a secure anchor, and attach a band in front of you so it takes part of your weight.",
+        "Keep your body in one line from knees to head and lower forward with your hamstrings holding you back.",
+        "Let the band slow the descent, and use the same band and the same setup on every rep.",
+        "Catch yourself with your hands if you need to, and push back up."
+      ],
+      mistakes:["The band recoiling you upward faster than you can control.", "Changing the assistance from one rep to the next."],
+      readiness:"Hold a controlled Nordic lowering with steady knees first, and start with a heavier band.",
+      injury:"Inspect the ankle anchor and the band's anchor before each set. Stop at a pulling feeling in a hamstring, or at knee pain." },
+
+    hinge_alt_nordicarm: { id:"hinge_alt_nordicarm", pattern:"hinge", name:"Arm-Assisted Nordic Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:["nordicAnchor"],
+      cues:[
+        "Pad your knees, fix your ankles under a secure anchor, and leave clear floor in front of your hands.",
+        "Lower forward in one line from knees to head, holding back with your hamstrings.",
+        "Catch the floor softly and use your hands only as much as you need.",
+        "Push back to the start and ask your hands for a little less each time."
+      ],
+      mistakes:["Collapsing onto the hands.", "Letting the return become a push-up with the hamstrings idle."],
+      readiness:"A controlled Nordic lowering where your hands catch you comes first, then use them less.",
+      injury:"Inspect the ankle anchor before each set. Stop at a pulling feeling in a hamstring, or at knee pain." },
+
+    core_alt_onefoot: { id:"core_alt_onefoot", pattern:"core", name:"Single-Foot Plank", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Take a standard plank with your hands or forearms under your shoulders.",
+        "Lift one foot a few centimetres off the floor, no higher.",
+        "Keep your hips level so the pelvis doesn't rotate toward the lifted side.",
+        "Swap feet between sets so both sides get the same work."
+      ],
+      mistakes:["Rotating the pelvis open as the foot lifts.", "Raising the leg high, which arches the lower back."],
+      readiness:"A steady standard plank first, with your hips still when you shift.",
+      injury:"Stop at low-back pain or neck strain, and go back to the plain plank." },
+
+    core_alt_plankweighted: { id:"core_alt_plankweighted", pattern:"core", name:"Weighted Plank", level:null, era:2, mode:"hold", unit:"sec", equipment:["vest"],
+      cues:[
+        "Fit a weighted vest snugly so it can't shift as you move.",
+        "Brace your trunk first, then take your plank position.",
+        "Keep your pelvis level and your ribs down so the lower back doesn't sag.",
+        "Come down before the form goes, not after."
+      ],
+      mistakes:["A loose load sliding across your back.", "Letting the lower back arch under the weight."],
+      readiness:"A solid standard plank first, then a small secured load; add the smallest step in weight.",
+      injury:"Stop at low-back pain or neck strain, take the weight off, and go back to the plain plank." },
+
+    core_alt_hollowrock: { id:"core_alt_hollowrock", pattern:"core", name:"Hollow Body Rock", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Lie on your back in a hollow hold: lower back flat, arms overhead, legs straight and low.",
+        "Rock forward and back as one rigid shape, keeping the brace.",
+        "Keep your head and neck relaxed instead of snapping them with each rock.",
+        "Use a firm, lightly padded floor with room behind you."
+      ],
+      mistakes:["Kicking the legs independently of the trunk.", "Snapping the neck on every rock."],
+      readiness:"A steady hollow body hold first, and rocking only once the shape stays together.",
+      injury:"Stop at low-back pain or neck strain, and go back to the hollow body hold." },
+
+    core_alt_floorlsit: { id:"core_alt_floorlsit", pattern:"core", name:"Floor L-Sit", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Sit on a flat floor with your legs straight and your fingers pointing forward beside your hips.",
+        "Press the floor down hard and straighten your elbows.",
+        "Lift your thighs actively to get your heels off the floor.",
+        "Lower under control; a short clean hold is better than a long one with dragging heels."
+      ],
+      mistakes:["Dragging the heels along the floor.", "Forcing the wrists past a comfortable bend."],
+      readiness:"A steady L-sit on parallettes or a bench comes first, with enough hip compression to lift from the floor.",
+      injury:"Stop at wrist or shoulder pain, or pinching at the front of the hip. Bend the knees, or lift in a smaller range." },
+
+    core_alt_chairlegraise: { id:"core_alt_chairlegraise", pattern:"core", name:"Two-Chair Leg Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Set two heavy, non-slip chairs at the same height, a little wider than your hips, with room for your legs to travel.",
+        "Press down through locked arms with your hands on the seats.",
+        "Raise your legs without swinging, with the knees bent at first.",
+        "Lower under control and keep your torso still."
+      ],
+      mistakes:["Bending the elbows as the legs rise.", "Swinging the legs for momentum."],
+      readiness:"A steady support on two chairs and a controlled knee raise come first.",
+      injury:"Check that the chairs can't slide or tip before you take your weight. Stop at wrist or shoulder pain, or pinching at the hip." },
+
+    core_alt_pikelift: { id:"core_alt_pikelift", pattern:"core", name:"Seated Pike Leg Lift", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Sit tall on the floor with your legs straight and your hands beside your thighs, on the floor or on blocks.",
+        "Lift one leg, keeping it straight, without leaning far back.",
+        "Lower it without bouncing the heel, then lift the other leg.",
+        "Alternate legs, and bend the knee if the lift won't stay clean."
+      ],
+      mistakes:["Rounding your back to fake height.", "Bouncing the heel off the floor."],
+      readiness:"Sit tall with your legs out and lift one actively, then ask for the same control with both legs together.",
+      injury:"Stop at wrist or shoulder pain, or pinching at the front of the hip, and bend the knee." },
+
+    core_alt_hangknee: { id:"core_alt_hangknee", pattern:"core", name:"Hanging Knee Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Hang from a fixed bar with a step nearby for getting down.",
+        "Tilt your pelvis gently and raise your knees toward your chest.",
+        "Lift without kicking, so the body doesn't swing.",
+        "Lower the knees under control before the next rep."
+      ],
+      mistakes:["Kipping through the reps.", "Letting go because the grip gave out before the abs did."],
+      readiness:"A comfortable hang first, and the ability to raise your knees without swinging.",
+      injury:"Stop at shoulder or wrist pain, a failing grip, or low-back pain, and do a floor leg raise instead." },
+
+    core_alt_hangleg: { id:"core_alt_hangleg", pattern:"core", name:"Hanging Straight-Leg Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Hang from a fixed bar with clear space in front of your legs.",
+        "Lift straight legs as high as you can control, without swinging.",
+        "Keep your shoulders from shrugging up toward your ears.",
+        "Lower slowly and let the swing settle before the next rep."
+      ],
+      mistakes:["Throwing the legs up with momentum.", "Passively shrugging into the shoulders."],
+      readiness:"Steady hanging knee raises come first.",
+      injury:"Stop at shoulder or wrist pain, a failing grip, or low-back pain, and do a floor leg raise instead." },
+
+    core_alt_t2b: { id:"core_alt_t2b", pattern:"core", name:"Toes-to-Bar", level:null, era:1, mode:"reps", unit:"reps", equipment:["pullupBar"],
+      cues:[
+        "Hang from a high bar with clear space in front of and behind your legs.",
+        "Compress your hips and lift straight legs until your toes reach the bar.",
+        "Lower under control instead of dropping.",
+        "Keep it strict: no deliberate kip."
+      ],
+      mistakes:["Kipping by accident as the legs drop.", "Yanking on the shoulders to pull the feet up."],
+      readiness:"A stable hanging straight-leg raise comes first, with enough flexibility to reach the bar.",
+      injury:"Stop at shoulder or wrist pain, a failing grip, or low-back pain, and use a controlled floor variation." },
+
+    core_alt_lyingleg: { id:"core_alt_lyingleg", pattern:"core", name:"Lying Leg Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Lie on your back on a firm floor with your arms by your sides or your hands under your hips.",
+        "Press your lower back toward the floor and raise your legs.",
+        "Lower them slowly, only as far as your lower back stays down.",
+        "Bend your knees to shorten the lever whenever the back lifts."
+      ],
+      mistakes:["Letting the lower back lift off the floor on the way down.", "Swinging the legs up with momentum."],
+      readiness:"You can lie flat and lower your legs without the trunk shifting.",
+      injury:"Stop at low-back pain or neck strain, and bend the knees." },
+
+    core_alt_situp: { id:"core_alt_situp", pattern:"core", name:"Sit-up", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Lie on your back with your knees bent and your feet flat, with no one holding them down.",
+        "Curl up smoothly to sitting, with your arms crossed or your hands lightly by your ears.",
+        "Keep your neck relaxed and don't pull on your head.",
+        "Lower with the same control, without bouncing off the floor."
+      ],
+      mistakes:["Pulling on the head or neck.", "Bouncing off the floor to get started."],
+      readiness:"You can curl your trunk up from the floor without neck strain; if not, use a crunch.",
+      injury:"Stop at neck or back pain, avoid pulling on your head, and choose a shorter range." },
+
+    core_alt_crunch: { id:"core_alt_crunch", pattern:"core", name:"Crunch", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Lie on your back with your knees bent and your hands lightly by your ears or across your chest.",
+        "Lift just your head, neck and shoulders, breathing out as you curl.",
+        "Keep your neck long and don't pull on it with your hands.",
+        "Lower slowly without letting your head drop."
+      ],
+      mistakes:["Pulling the head forward with the hands.", "Turning the crunch into a full sit-up."],
+      readiness:"You can curl your upper trunk gently without pulling on your neck.",
+      injury:"Stop at neck or back pain, avoid pulling on your head, and choose a shorter range." },
+
+    core_alt_bicycle: { id:"core_alt_bicycle", pattern:"core", name:"Bicycle Crunch", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Lie on your back with your hands lightly by your ears and your knees raised.",
+        "Curl up and turn your chest toward the opposite knee as it comes in.",
+        "Extend the other leg and switch sides slowly.",
+        "Keep your neck long and your elbows wide, not dragged toward the knee."
+      ],
+      mistakes:["Yanking an elbow toward the knee.", "Pedalling fast with no trunk rotation."],
+      readiness:"A controlled crunch first, and comfortable turning your trunk with the hips still.",
+      injury:"Stop at neck or back pain, avoid pulling on your head, and slow down." },
+
+    core_alt_legshold: { id:"core_alt_legshold", pattern:"core", name:"Straight-Leg Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Lie on your back with your legs straight and raised to an angle you can hold with your lower back comfortable.",
+        "Brace your trunk so the lower back stays where it started.",
+        "Breathe through the hold instead of tensing your neck.",
+        "Lower legs are harder, so note the angle you used and keep it the same."
+      ],
+      mistakes:["Letting the lower back arch as the legs tire.", "Tensing the neck."],
+      readiness:"Hold your legs straight and raised with a comfortable back first, then lower them a little at a time.",
+      injury:"Stop at low-back pain or neck strain, and bend the knees or raise the legs." },
+
+    core_alt_flutter: { id:"core_alt_flutter", pattern:"core", name:"Flutter Kicks", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Lie on your back with your legs straight and raised just off the floor, with your hands under your hips if it helps.",
+        "Kick the legs up and down in small, alternating beats.",
+        "Keep the trunk still and your lower back where it started.",
+        "Note how high you hold the legs and keep it the same from set to set."
+      ],
+      mistakes:["Making large swinging kicks.", "Letting the lower back arch as the legs tire."],
+      readiness:"A controlled straight-leg hold comes first, with the lower back still as the legs alternate.",
+      injury:"Stop at low-back pain or neck strain, and raise the legs or bend the knees." },
+
+    core_alt_abwheelknee: { id:"core_alt_abwheelknee", pattern:"core", name:"Kneeling Ab Wheel Rollout", level:null, era:1, mode:"reps", unit:"reps", equipment:["abWheel"],
+      cues:[
+        "Kneel on a pad with the wheel on a non-slip floor under your shoulders.",
+        "Brace your trunk before you roll and keep your ribs and hips in line.",
+        "Roll out only as far as your back stays flat; a wall in front can set the limit.",
+        "Pull back with your trunk, not by pushing your hips back."
+      ],
+      mistakes:["Rolling out further than you can pull back from.", "Sagging through the lower back."],
+      readiness:"A steady plank first, and a short rollout where the back doesn't sag.",
+      injury:"The wheel loads the wrists and shoulders as well. Stop at low-back, wrist or shoulder pain, and shorten the roll." },
+
+    core_alt_abwheelstand: { id:"core_alt_abwheelstand", pattern:"core", name:"Standing Ab Wheel Rollout", level:null, era:1, mode:"reps", unit:"reps", equipment:["abWheel"],
+      cues:[
+        "Stand with the wheel on a non-slip floor in front of your feet and a clear path ahead.",
+        "Brace, and keep your ribs and pelvis connected as you roll.",
+        "Stop short of where the brace goes; a mark on the floor or a wall can set the limit.",
+        "Pull back with your trunk and stand up without a sudden arch."
+      ],
+      mistakes:["Suddenly arching the lower back.", "The wheel slipping on a slick floor."],
+      readiness:"Strong kneeling rollouts with full trunk control come first; lengthen the roll only as control holds.",
+      injury:"Stop at low-back, wrist or shoulder pain, and shorten the roll." },
+
+    /* ---- Yellow Dude, Group D: coverage additions and conditioning ---- */
+    acc_curl_pelican: { id:"acc_curl_pelican", pattern:"accessory", name:"Ring Pelican Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:["rings"],
+      cues:[
+        "Set the rings low and walk your feet forward until the angle is one you can control.",
+        "Start with the arms long and the shoulders pulled back, not hanging loose.",
+        "Bend the elbows to bring the hands toward you, with the upper arms doing little.",
+        "Let the arms straighten slowly, and stop the lowering short of the point where the shoulders are forced back."
+      ],
+      mistakes:["Forcing the shoulders back at the bottom of every rep.", "Dropping fast into a straight arm, which loads the biceps tendon suddenly."],
+      readiness:"A comfortable ring row and an easy ring curl first; flatten the angle only when the range stays smooth on two different days.",
+      injury:"This loads the biceps tendon and the front of the shoulder at a long length. Stop at pain there or in the elbow, and raise the rings before trying again." },
+
+    acc_curl_ring: { id:"acc_curl_ring", pattern:"accessory", name:"Ring Biceps Curl", level:null, era:1, mode:"reps", unit:"reps", equipment:["rings"],
+      cues:[
+        "Set the rings at about chest height and lean back with the body in one line.",
+        "Hold the rings with your palms facing you and your arms straight out in front.",
+        "Curl the rings toward your forehead, keeping the upper arms where they are.",
+        "Lower until the arms are straight again, and walk your feet closer to make it easier or farther to make it harder."
+      ],
+      mistakes:["Driving with the hips instead of the arms.", "Letting the elbows wander wide or drop as you curl."],
+      readiness:"A controlled ring row first; make it harder by moving your feet forward once every set reaches the top of the range on two different days.",
+      injury:"Stop at pain in the elbow or the front of the shoulder. Stand more upright to take load off the arms." },
+
+    acc_reardelt_ringfacepull: { id:"acc_reardelt_ringfacepull", pattern:"accessory", name:"Ring Face Pull", level:null, era:1, mode:"reps", unit:"reps", equipment:["rings"],
+      cues:[
+        "Set the rings at about face height and lean back with the body straight.",
+        "Pull the rings toward your face, with the elbows high and wide.",
+        "Finish with the hands beside your ears and the shoulder blades pulled back and down.",
+        "Return slowly until the arms are straight. Walk your feet closer to make it easier."
+      ],
+      mistakes:["Poking the chin forward to meet the rings.", "Flaring the ribs and arching the lower back."],
+      readiness:"A controlled ring row and comfortable high elbows first; make it harder by stepping your feet forward once every set tops the range on two different days.",
+      injury:"Stop at pain in the shoulder or the neck. Shorten the range, or stand more upright, if the shoulder pinches." },
+
+    acc_traps_proney: { id:"acc_traps_proney", pattern:"accessory", name:"Prone Y Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Lie face down on the floor with your arms reaching overhead in a Y and your forehead just off the floor.",
+        "Turn your thumbs up and lift both arms a few centimetres, leading with the shoulder blades.",
+        "Keep your neck long and your ribs on the floor.",
+        "Pause at the top, then lower slowly."
+      ],
+      mistakes:["Shrugging the shoulders up toward the ears.", "Lifting the arms by arching the lower back."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Lift only as high as the arms move smoothly, and drop the range if the neck or the shoulder pinches. Stop at persistent pain." },
+
+    acc_grip_falsegrip: { id:"acc_grip_falsegrip", pattern:"accessory", name:"False-Grip Ring Hang", level:null, era:1, mode:"hold", unit:"sec", equipment:["rings"],
+      cues:[
+        "Set the rings low enough to keep your feet on the floor at first.",
+        "Put the heel of the palm over the ring so the wrist sits on top of it, not under it.",
+        "Take your weight onto your hands slowly, with the shoulders drawn down.",
+        "Put your feet back on the floor before the grip gives."
+      ],
+      mistakes:["Taking the full bodyweight at once.", "Pinching the skin of the palm between the ring and the hand."],
+      readiness:"A comfortable ring hang, with the wrists used to gradual load, first. Lengthen the hang once it is steady for the full time on two different days.",
+      injury:"Stop at pain or numbness in the hand, wrist, elbow or shoulder, and keep your feet on the floor to take weight off. Build the time slowly." },
+
+    acc_grip_ricebucket: { id:"acc_grip_ricebucket", pattern:"accessory", name:"Rice Bucket Hand Drill", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Fill a bucket with clean, dry rice, sit beside it and put one hand in up to the wrist.",
+        "Open the fingers wide against the rice, then close them into a fist.",
+        "Mix in turning the wrist, spreading the fingers and squeezing, one motion after another.",
+        "Keep the movements gentle and steady for the set's time, then swap hands."
+      ],
+      mistakes:["Pushing through wrist pain.", "Doing a lot of it every day."],
+      readiness:"Ready to move on when the hands stay comfortable for the full time on two different days.",
+      injury:"Stop at pain, numbness or skin irritation in the hand or the wrist. Keep the rice clean and dry, and cut the time if the hands are sore the next day." },
+
+    acc_backext_superman: { id:"acc_backext_superman", pattern:"accessory", name:"Superman Hold", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Lie face down on a mat with your arms reaching ahead and your legs straight.",
+        "Lift your arms and legs only a little off the floor.",
+        "Keep your gaze down and your neck in line with your spine.",
+        "Breathe normally for the set's time, then lower."
+      ],
+      mistakes:["Arching the back as high as it will go.", "Holding the breath."],
+      readiness:"Ready to move on when the hold is steady for the full time on two different days.",
+      injury:"A small lift is enough. Stop at back pain or any pain that travels down a leg, and go back to the prone back extension." },
+
+    acc_antirot_hipraise: { id:"acc_antirot_hipraise", pattern:"accessory", name:"Side Plank Hip Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Get into a side plank on your forearm, elbow under your shoulder, with your padded elbow on the floor.",
+        "Lower the hip toward the floor without resting on it.",
+        "Raise the hips back up by squeezing the side of your trunk.",
+        "Keep the shoulder stacked and the body facing forward. Finish one side, then switch."
+      ],
+      mistakes:["Twisting the chest toward the floor or the ceiling.", "Dropping onto the elbow at the bottom."],
+      readiness:"A steady side plank first. Ready to move on when every set reaches the top of the range on both sides on two different days.",
+      injury:"Stop at pain in the supporting shoulder, the elbow or the back. Shorten the range, or go back to the side plank held still." },
+
+    acc_quad_wallsit1: { id:"acc_quad_wallsit1", pattern:"accessory", name:"Single-Leg Wall Sit", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Set up in a two-leg wall sit with your back flat on the wall and your feet on a non-slip floor.",
+        "Shift your weight onto one leg, then lift the other foot a short way off the floor.",
+        "Keep your hips level and the knee over the ankle.",
+        "Hold for the set's time, put the foot down before the leg gives, and repeat on the other side."
+      ],
+      mistakes:["Letting the pelvis drop on the lifted side.", "Letting the supporting foot slip."],
+      readiness:"A steady two-leg wall sit and a brief one-leg balance first. Ready to move on when the hold is steady for the full time on both sides on two different days.",
+      injury:"Stop at knee pain, or if you feel dizzy or the foot slips. Sit higher for a shallower angle, which is still the same exercise." },
+
+    acc_quad_wallsitw: { id:"acc_quad_wallsitw", pattern:"accessory", name:"Weighted Wall Sit", level:null, era:2, mode:"hold", unit:"sec", equipment:["dumbbells", "kettlebells", "vest"],
+      cues:[
+        "Put on a fitted vest, or hold a weight against your thighs so it can't slide.",
+        "Slide down the wall until your thighs are near parallel, with the knees over the ankles.",
+        "Press your back into the wall and keep the knee angle the same from set to set.",
+        "Hold for the set's time, then slide up slowly."
+      ],
+      mistakes:["Holding a loose weight that slides or swings.", "Holding the breath."],
+      readiness:"Add weight only when every set reaches the full time on two different days.",
+      injury:"Choose a load that is secure. Stop at knee pain, or if you feel dizzy or the feet slip, and sit higher for a shallower angle." },
+
+    acc_quad_lunge: { id:"acc_quad_lunge", pattern:"accessory", name:"Forward Lunge", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Stand tall with your feet hip-width apart, with a wall or a rail within reach if you need it.",
+        "Step forward a long stride and land with the whole foot flat.",
+        "Lower until the back knee hovers just above the floor, with the torso upright.",
+        "Push back off the front foot to stand. Finish one leg, then switch."
+      ],
+      mistakes:["Over-striding, so the front knee pushes far past the toes.", "Letting the front foot wobble or the heel lift."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"The forward step loads the front knee more than a step back. Shorten the stride and the depth if the knee complains, or go back to the reverse lunge." },
+
+    acc_quad_stepupw: { id:"acc_quad_stepupw", pattern:"accessory", name:"Weighted Step-Up", level:null, era:2, mode:"reps", unit:"reps", equipment:["dumbbells"],
+      cues:[
+        "Hold a dumbbell in each hand at your sides and stand facing a fixed step that is about knee height or lower.",
+        "Place the whole foot on the step and drive through it to stand tall.",
+        "Keep your torso upright and the knee over the toes, not caving in.",
+        "Lower under control to the floor. Finish one leg, then switch."
+      ],
+      mistakes:["Pushing off the trailing foot instead of the one on the step.", "Dropping from the top without control."],
+      readiness:"Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Use a step that cannot slide, and a height you can control. Stop at knee, hip or back pain, and start with light weights." },
+
+    acc_calf_floor: { id:"acc_calf_floor", pattern:"accessory", name:"Floor Calf Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Stand on a firm level floor with your feet hip-width apart, a fingertip on a wall for balance.",
+        "Rise up through the balls of your feet as high as you can.",
+        "Pause for a beat at the top.",
+        "Lower slowly, taking about two seconds."
+      ],
+      mistakes:["Rolling the ankles outward as you rise.", "Bouncing off the floor instead of lowering under control."],
+      readiness:"Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"There is no step, so the range is short and kind to the heel. Stop at pain in the Achilles tendon, the heel or the ankle." },
+
+    acc_calf_wallsit: { id:"acc_calf_wallsit", pattern:"accessory", name:"Wall-Sit Calf Raise", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Sit in a wall sit with your back flat on the wall and the knees over your ankles, on a non-slip floor.",
+        "Keep that knee angle fixed while you raise both heels together.",
+        "Pause at the top, then lower the heels slowly.",
+        "Slide up the wall when you finish."
+      ],
+      mistakes:["Letting the feet slide or the knee angle change as you rise.", "Raising one heel higher than the other."],
+      readiness:"A steady wall sit and a controlled calf raise first. Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Stop at knee pain, or if you feel dizzy or the feet slip. Sit higher for a shallower angle." },
+
+    cond_jacks: { id:"cond_jacks", pattern:"accessory", name:"Jumping Jack", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Stand tall with your feet together and your arms by your sides, on a flat non-slip floor.",
+        "Hop your feet out wide as your arms swing overhead.",
+        "Hop them back together as your arms return to your sides.",
+        "Land softly through the whole foot and keep a pace you can hold for the full time."
+      ],
+      mistakes:["Landing stiff-legged.", "Raising the arms far enough to pinch the shoulder."],
+      readiness:"Ready to move on when the full time is easy at a steady pace on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. Stop at sharp joint pain, and if a shoulder or leg complains, step out the feet and shorten the arm swing." },
+
+    cond_ropeless: { id:"cond_ropeless", pattern:"accessory", name:"Ropeless Jump Rope", level:null, era:1, mode:"hold", unit:"sec", equipment:[],
+      cues:[
+        "Stand on a flat non-slip floor with a hand at each side, as if holding the rope handles.",
+        "Hop on the balls of your feet, low, with a small circle of the wrists as if turning the rope.",
+        "Keep the rhythm even and land softly.",
+        "Work up to a faster pace only once the rhythm is steady."
+      ],
+      mistakes:["Landing stiff-legged.", "Speeding up before the rhythm is steady."],
+      readiness:"Ready to move on when the full time is steady at an even pace on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the calf or the foot hurts, march in place instead of hopping." },
+
+    cond_rope: { id:"cond_rope", pattern:"accessory", name:"Jump Rope", level:null, era:1, mode:"hold", unit:"sec", equipment:["jumpRope"],
+      cues:[
+        "Size the rope so the handles reach your armpits when you stand on its middle.",
+        "Turn it mainly from the wrists, with the elbows by your ribs.",
+        "Hop just high enough for the rope to pass, and land softly on the balls of your feet.",
+        "Keep the rhythm even for the set's time."
+      ],
+      mistakes:["Jumping much higher than the rope needs.", "Landing stiff-legged."],
+      readiness:"Ready to move on when the full time stays smooth, without the rope catching, on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the calf, the Achilles or the foot hurts, march in place and cut the impact." },
+
+    cond_ropealt: { id:"cond_ropealt", pattern:"accessory", name:"Alternating-Foot Jump Rope", level:null, era:1, mode:"hold", unit:"sec", equipment:["jumpRope"],
+      cues:[
+        "Start with the basic jump until the rhythm is steady.",
+        "Step over the rope with one foot at a time, as if running on the spot.",
+        "Keep the steps small and the arms close to the body.",
+        "Hold an even beat for the set's time."
+      ],
+      mistakes:["Bounding high on each step.", "Letting the arms drift wide."],
+      readiness:"The basic jump first. Ready to move on when the full time stays smooth on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the calf or the foot hurts, march without hopping." },
+
+    cond_ropeboxer: { id:"cond_ropeboxer", pattern:"accessory", name:"Boxer-Step Jump Rope", level:null, era:1, mode:"hold", unit:"sec", equipment:["jumpRope"],
+      cues:[
+        "Start from the basic jump with a steady rhythm.",
+        "Shift your weight from one foot to the other, letting each foot take a turn, with one landing for each turn of the rope.",
+        "Stay low and relaxed through the shoulders.",
+        "Keep an even beat for the set's time."
+      ],
+      mistakes:["Jumping wide from side to side.", "Crossing the feet by accident."],
+      readiness:"The basic jump and an easy weight shift first. Ready to move on when the full time stays smooth on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the calf or the ankle hurts, lower the hop or march." },
+
+    cond_doubleunder: { id:"cond_doubleunder", pattern:"accessory", name:"Double-Under Jump Rope", level:null, era:1, mode:"hold", unit:"sec", equipment:["jumpRope"],
+      cues:[
+        "Start from steady single jumps with a rope that clears the floor cleanly.",
+        "Jump just high enough for the rope to pass twice under your feet.",
+        "Spin the rope with the wrists and keep the arms close, not flailing.",
+        "Land softly with the knees bending. Stop the set when the rhythm breaks down."
+      ],
+      mistakes:["Jumping with the knees locked.", "Whipping the arms wide to make the rope faster."],
+      readiness:"Steady single jumps with a controlled landing first. Ready to move on when the full time stays clean on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the Achilles or the calf hurts, go back to single jumps." },
+
+    cond_ropeweighted: { id:"cond_ropeweighted", pattern:"accessory", name:"Weighted Jump Rope", level:null, era:1, mode:"hold", unit:"sec", equipment:["jumpRope"],
+      cues:[
+        "Use a weighted rope with handles that suit your hands, and size it like a normal rope.",
+        "Turn it from the wrists and keep the shoulders relaxed.",
+        "Hop low and land softly on the balls of your feet.",
+        "Keep an even beat for the set's time."
+      ],
+      mistakes:["Using a heavy rope with poor form.", "Whipping the rope with the shoulders."],
+      readiness:"A comfortable basic jump with a plain rope first. Ready to move on when the full time stays smooth on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the shoulder, the wrist or the calf hurts, go back to the plain rope or march." },
+
+    cond_burpeenojump: { id:"cond_burpeenojump", pattern:"accessory", name:"No-Jump Burpee", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Stand on a flat floor with room to step back.",
+        "Squat and put your hands on the floor, then step one foot back at a time into a plank.",
+        "Keep the trunk braced so the hips don't sag, then step the feet back in.",
+        "Stand up without jumping."
+      ],
+      mistakes:["Letting the hips drop in the plank.", "Rushing the stand-up."],
+      readiness:"A step-back plank and an easy get-up from the floor first. Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the wrists or the knees complain, put your hands on something higher or squat shallower." },
+
+    cond_burpee: { id:"cond_burpee", pattern:"accessory", name:"Burpee", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Squat down and put your hands on the floor in front of you.",
+        "Step or jump your feet back into a plank, with the trunk braced.",
+        "Bring the feet back in under your hips.",
+        "Stand, with a small hop at the top if it feels good."
+      ],
+      mistakes:["Sagging through the middle in the plank.", "Landing hard on stiff legs."],
+      readiness:"A solid squat, plank and get-up from the floor first. Ready to move on when every set reaches the top of the range on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the wrist, the shoulder or the knee hurts, step back instead of jumping, or go back to the no-jump burpee." },
+
+    cond_burpeetuck: { id:"cond_burpeetuck", pattern:"accessory", name:"Tuck-Jump Burpee", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Do a full burpee with the trunk braced, then stand.",
+        "Jump straight up and pull the knees toward the chest.",
+        "Open the legs before you land and land softly with the knees in line with the toes.",
+        "Reset on the ground before the next rep."
+      ],
+      mistakes:["Tucking by folding the torso forward.", "Landing hard."],
+      readiness:"A controlled burpee and soft tuck-jump landings first. Stop the set when the landings get heavy.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the knee, the ankle or the Achilles hurts, drop the tuck jump." },
+
+    cond_burpeevest: { id:"cond_burpeevest", pattern:"accessory", name:"Weighted Vest Burpee", level:null, era:2, mode:"reps", unit:"reps", equipment:["vest"],
+      cues:[
+        "Fit the vest snugly so it doesn't bounce or shift.",
+        "Squat, put your hands down and step or jump back into a braced plank.",
+        "Bring the feet in, and stand tall.",
+        "Slow down when the trunk starts to give out."
+      ],
+      mistakes:["Wearing a loose vest that shifts.", "Collapsing through the trunk as you tire."],
+      readiness:"A controlled plain burpee before adding a light, secure vest. Add weight only when every set reaches the top of the range on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the wrist, the back or the knee hurts, take the vest off or go back to the no-jump burpee." },
+
+    cond_boxjump: { id:"cond_boxjump", pattern:"accessory", name:"Box Jump", level:null, era:1, mode:"reps", unit:"reps", equipment:["box"],
+      cues:[
+        "Set a stable box that cannot slide, below the height you can jump, with space to land and step down.",
+        "Swing the arms and jump, landing softly with the whole foot on the box.",
+        "Stand tall on top, then step down rather than jump down.",
+        "Reset before the next jump."
+      ],
+      mistakes:["Choosing a box higher than you can land on.", "Jumping down to go again."],
+      readiness:"A squat jump with a soft landing at a low height first. Raise the box only when the landings stay quiet on two different days.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the knee, the ankle or the Achilles hurts, use a step-up instead." },
+
+    cond_broadjump: { id:"cond_broadjump", pattern:"accessory", name:"Broad Jump", level:null, era:1, mode:"reps", unit:"reps", equipment:[],
+      cues:[
+        "Stand on a flat non-slip surface with clear ground ahead.",
+        "Swing your arms back, then forward as you jump out and up.",
+        "Land with the knees and hips bending together and the feet under you.",
+        "Walk back and reset before the next jump."
+      ],
+      mistakes:["Reaching the feet out in front on landing.", "Landing with straight legs."],
+      readiness:"A squat jump and a controlled forward landing first. Stop the set when the landings get loud.",
+      injury:"Stop at chest pain, faintness, or breathlessness that is out of the ordinary. If the knee, the ankle or the Achilles hurts, use a low step-up instead." }
   };
 
   /* Append to the global DB (created in Part 2). */

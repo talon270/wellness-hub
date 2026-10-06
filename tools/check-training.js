@@ -381,7 +381,14 @@ check("K5", () => {
      parent. */
   const r = readyOn("push_4", rxOf("push_4"), { equipment: ALL });
   const into = (r.optionSteps || []).map((s) => `${s.kind}:${s.rx.exerciseId}`).join(", ");
-  const back = fallOn("push_5", rxOf("push_5"), { equipment: ALL });
+  /* Declining on Archer follows the trained one of its two predecessors, and
+     Decline is the one you came from. With no Decline session in the history
+     the tie goes to Staggered-Hand (it names Archer in `next`, Decline only
+     offers it), so the case seeds the Decline session a real user has. */
+  const rxA = rxOf("push_5");
+  const back = T.recommend([sess("2026-09-10", "push_4", [12, 12, 12], { rx: rxOf("push_4") }),
+    sess("2026-09-20", "push_5", [12, 12, 12], { rx: rxA }), sess("2026-09-22", "push_5", [10, 10, 9], { rx: rxA }),
+    sess("2026-09-24", "push_5", [8, 7, 7], { rx: rxA })], rxA, { equipment: ALL });
   return [into === "option:push_5" && back.action === "reduce" && id(back.step) === "push_4",
           `options ${r.options.join(", ")} → steps [${into}]; Archer declining: ${ready(back)}, ${stepOf(back)}`];
 });

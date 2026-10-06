@@ -14,7 +14,7 @@
   "use strict";
   var C = window.EXERCISE_CONTENT = window.EXERCISE_CONTENT || {};
   var B = window.EXERCISE_CONTENT_BATCHES = window.EXERCISE_CONTENT_BATCHES || {};
-  B.a = "complete";
+  B.a = "pending";
 
   C.push_2 = {
     summary: "A horizontal press from the floor that trains your chest and triceps while your whole body holds one rigid line.",

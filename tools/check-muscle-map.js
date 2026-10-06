@@ -205,7 +205,12 @@ else {
   Object.keys(FLOORS).filter((k) => !groupKeys.has(k)).forEach((k) => bad.push(`${k}: a floor for a group that doesn't exist`));
   for (const [key, sl] of coverSlots) {
     const trains = sl.trains || [];
-    if (!trains.length) bad.push(`slot ${key}: coverage slot with no \`trains\``);
+    /* A conditioning slot tops up no muscle (plan A5): it is pinned-only, so it
+       has no group to be primary for. It must say so with `trains: []`, and its
+       members are still mapped to the muscles they work (check 5 below). */
+    if (sl.conditioning) {
+      if (trains.length) bad.push(`slot ${key}: conditioning slots train no group, but trains is [${trains}]`);
+    } else if (!trains.length) bad.push(`slot ${key}: coverage slot with no \`trains\``);
     trains.forEach((g) => { if (!groupKeys.has(g)) bad.push(`slot ${key}: trains unknown group "${g}"`); });
     const members = Object.entries(TD.EXERCISES).filter(([, e]) => e.slot === key).map(([id]) => id);
     for (const id of members)

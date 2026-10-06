@@ -15,7 +15,7 @@
   "use strict";
   var C = window.EXERCISE_CONTENT = window.EXERCISE_CONTENT || {};
   var B = window.EXERCISE_CONTENT_BATCHES = window.EXERCISE_CONTENT_BATCHES || {};
-  B.c1 = "complete";
+  B.c1 = "pending";
 
   /* ---- curl · biceps ---- */
 

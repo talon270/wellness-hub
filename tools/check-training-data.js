@@ -142,7 +142,10 @@ section("slots");
     });
     s.loaded.forEach((id) => {
       const e = EX[id];
-      if (!e || e.slot !== key || e.kind !== "loaded" || e.branch !== "main") { fail(`${key}: loaded "${id}" is not a main loaded exercise of the slot`); broken = true; }
+      /* A loaded hold (a weighted plank, a weighted wall sit) is a hold you carry a load on, so
+         it lists here too; the loaded-but-unlisted check below still means kind "loaded". */
+      const carries = e && (e.kind === "loaded" || (e.kind === "hold" && e.loadMode));
+      if (!e || e.slot !== key || !carries || e.branch !== "main") { fail(`${key}: loaded "${id}" is not a main loaded exercise of the slot`); broken = true; }
     });
     const stray = Object.keys(EX).filter((id) =>
       EX[id].slot === key && EX[id].branch === "main" && !reach.has(id) && !s.loaded.includes(id));
@@ -236,7 +239,7 @@ section("setups");
   const bad = [];
   for (const [id, s] of Object.entries(TD.SETUPS)) {
     if (!EX[id]) bad.push(`${id}: no such exercise`);
-    if (!["surface", "bodyAngle", "band", "lean"].includes(s.key)) bad.push(`${id}: setup key "${s.key}"`);
+    if (!["surface", "bodyAngle", "band", "lean", "box"].includes(s.key)) bad.push(`${id}: setup key "${s.key}"`);
     if (s.values.length < 2) bad.push(`${id}: a setup needs at least two values`);
     if (new Set(s.values.map((v) => v.id)).size !== s.values.length) bad.push(`${id}: duplicate setup ids`);
   }
@@ -296,7 +299,7 @@ section("equipment tokens");
   const C5 = {
     pull_alt_bandassist: ["pullupBar", "bands"],
     dip_2: ["lowBar"], dip_4: ["lowBar"], dip_3: ["dipBars"],
-    dip_6: ["dipBars", ["dumbbells", "kettlebells"]],
+    dip_6: ["dipBars", ["dumbbells", "kettlebells", "vest"]],   // a vest too (Yellow Dude, W7)
     pull_alt_australian: [["lowBar", "rings"]],
     skill_frontlever_1: [["pullupBar", "rings"]], skill_frontlever_2: [["pullupBar", "rings"]],
     skill_frontlever_3: [["pullupBar", "rings"]], skill_frontlever_4: [["pullupBar", "rings"]],
@@ -395,17 +398,20 @@ section("coverage slots");
 {
   /* Plan D2's table, counted: how many exercises each coverage slot holds. The
      first seven are step 3.1, the other eight step 3.2, so all fifteen must
-     exist now and the 64 total is checked. */
+     exist now and the total is checked. Yellow Dude's Group D (step 2.4) added
+     14 to eight of them: curl 5→7, reardelt 5→6, traps 3→4, grip 5→7, quad
+     6→10, calf 4→6, antirot 6→7, backext 4→5, so the 64 is now 78. The
+     conditioning slot is counted on its own, after this loop. */
   const PLAN_D2 = {
-    curl: 5, lateral: 4, reardelt: 5, cuff: 4, traps: 3, neck: 3, grip: 5,
-    quad: 6, hamstring: 5, calf: 4, shin: 2, adductor: 4, abductor: 4, antirot: 6, backext: 4
+    curl: 7, lateral: 4, reardelt: 6, cuff: 4, traps: 4, neck: 3, grip: 7,
+    quad: 10, hamstring: 5, calf: 6, shin: 2, adductor: 4, abductor: 4, antirot: 7, backext: 5
   };
   const STEP_3_1 = ["curl", "lateral", "reardelt", "cuff", "traps", "neck", "grip"];
   const STEP_3_2 = ["quad", "hamstring", "calf", "shin", "adductor", "abductor", "antirot", "backext"];
   const MUST_EXIST = STEP_3_1.concat(STEP_3_2);
   const LIGHT = ["cuff", "neck", "shin"];              // 12–20 reps, the rest 10–15
   const bad = [];
-  const covSlots = Object.entries(SLOTS).filter(([, s]) => s.coverage).map(([k]) => k);
+  const covSlots = Object.entries(SLOTS).filter(([, s]) => s.coverage && !s.conditioning).map(([k]) => k);
   const present = covSlots.filter((k) => k in PLAN_D2);
   MUST_EXIST.filter((k) => !covSlots.includes(k)).forEach((k) => bad.push(`coverage slot "${k}" (step ${STEP_3_1.includes(k) ? "3.1" : "3.2"}) doesn't exist`));
   covSlots.filter((k) => !(k in PLAN_D2)).forEach((k) => bad.push(`coverage slot "${k}" is not in plan D2`));
@@ -457,9 +463,50 @@ section("coverage slots");
       if (!/dizz/i.test(inj) || !/tingl/i.test(inj) || !/jerk/i.test(inj)) bad.push(`${id}: the neck injury line must mention jerking, dizziness and tingling`);
       if (TD.JOINT_STRESS[id].neck !== 2) bad.push(`${id}: neck stress must be 2 so "avoid neck" excludes the slot`);
     }
-  if (total !== 64) bad.push(`${total} coverage exercises, plan D2 says 64`);
+  if (total !== 78) bad.push(`${total} coverage exercises, plan D2 plus Group D says 78`);
   bad.forEach(fail);
   if (!bad.length) ok(`${present.length} coverage slots, ${total} exercises, each at the plan's count`);
+}
+
+/* -- 12. the conditioning slot (Yellow Dude, plan A5 and Group D) ------------ */
+section("conditioning slot");
+{
+  /* The one coverage slot with no muscle: pinned-only, `trains: []`, 13 exercises
+     named cond_<slug>. Everything that makes the other coverage slots safe still
+     applies, apart from "the slot's group is primary", which has no group. */
+  const bad = [];
+  const sl = SLOTS.conditioning;
+  if (!sl) bad.push("SLOTS.conditioning doesn't exist");
+  else {
+    if (!sl.coverage || !sl.conditioning) bad.push("conditioning must be flagged coverage: true and conditioning: true");
+    if (!Array.isArray(sl.trains) || sl.trains.length) bad.push("conditioning trains no group: trains must be []");
+    if (JSON.stringify(sl.first) !== JSON.stringify(["cond_jacks"])) bad.push(`first is ${JSON.stringify(sl.first)}, plan says ["cond_jacks"]`);
+    if (JSON.stringify(sl.loaded) !== JSON.stringify(["cond_burpeevest"])) bad.push(`loaded is ${JSON.stringify(sl.loaded)}, plan says ["cond_burpeevest"]`);
+    const ids = Object.keys(EX).filter((id) => EX[id].slot === "conditioning");
+    if (ids.length !== 13) bad.push(`${ids.length} conditioning exercises, plan says 13`);
+    for (const id of ids) {
+      const d = DB[id] || {};
+      if (!id.startsWith("cond_")) bad.push(`${id}: conditioning ids are cond_<slug>`);
+      if (d.pattern !== "accessory") bad.push(`${id}: DB pattern "${d.pattern}", plan says accessory`);
+      if (!((d.cues || []).length >= 3 && d.cues.length <= 5)) bad.push(`${id}: ${(d.cues || []).length} cues (3–5)`);
+      if (!((d.mistakes || []).length >= 1 && d.mistakes.length <= 2)) bad.push(`${id}: ${(d.mistakes || []).length} mistakes (1–2)`);
+      if (!d.readiness || !d.injury) bad.push(`${id}: missing readiness or injury`);
+      if (EX[id].kind === "skill") bad.push(`${id}: a skill-kind move can't be a conditioning exercise`);
+      // every set of rope, jacks and the like is continuous movement: a hold that says so
+      if (EX[id].kind === "hold" && !EX[id].timed) bad.push(`${id}: a conditioning hold is continuous movement and must be timed`);
+    }
+    // the catalogue's cards all carry the same red-flag line: every conditioning page names it
+    for (const id of ids)
+      if (!/chest pain/i.test((DB[id] || {}).injury || "") || !/faint/i.test((DB[id] || {}).injury || ""))
+        bad.push(`${id}: the injury line must name chest pain and faintness`);
+    // the first rung needs nothing, so the slot starts for anyone
+    if (flat(EX.cond_jacks.equipment).length) bad.push("cond_jacks is the first rung and must need no equipment");
+    // a pinned-only slot can't be a muscle's coverage: no member may be listed in another slot's path
+    if (Object.values(EX).some((e) => e.slot !== "conditioning" && [].concat(e.next, e.offer).some((n) => EX[n] && EX[n].slot === "conditioning")))
+      bad.push("an exercise outside the conditioning slot leads into it");
+  }
+  bad.forEach(fail);
+  if (!bad.length) ok("conditioning: trains no group, pinned-only, 13 cond_ exercises each with the red-flag line, rope sets timed");
 }
 
 console.log(failed ? "\nFAILED\n" : "\nOK\n");
