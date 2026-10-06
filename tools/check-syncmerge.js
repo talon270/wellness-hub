@@ -10,9 +10,12 @@
      · K10  v5's exclusions, grip and limitations: the newer stamp wins
      · K10b v5's weights you own: per implement, whole, local wins
      · V6   v6's coverage pins by stamp, per slot; mini-sessions union by id
+     · Y5   v7's six equipment keys merge field-wise like the nine; a v6
+            device takes them, and version 7
 
    plans/PLAN-workout-progression.md, Part E; K10, K10b and V6 are
-   plans/PLAN-fitness-control-and-coverage.md, Part F. The browser cases (S1-S5, S8-S21,
+   plans/PLAN-fitness-control-and-coverage.md, Part F; Y5 is
+   plans/PLAN-yellow-dude.md, step 1.2. The browser cases (S1-S5, S8-S21,
    T11-T12) live in tools/check-workout.py. T13's other half — the Stage 1
    device opening the merged save read-only — is S9's mechanism there.
 
@@ -322,6 +325,40 @@ test("V6", "Pins by stamp, slot by slot; mini-sessions union by id", (M) => {
   return { ok: !bad.length, measured: (bad.length ? "failed: " + bad.join("; ") + " | " : "") +
     "A pins: " + show(onA.training.pins) + "; B pins: " + show(onB.training.pins) + "; tie keeps [" + tie +
     "]; sessions A " + ids(onA.sessions) + " (minis " + minis(onA) + ")" };
+});
+
+/* v7 (plans/PLAN-yellow-dude.md, step 1.2) adds six keys to `equipment`,
+   which mergeFields already merges key by key with local winning. A v6
+   device has none of the six, so it takes the v7 device's, and the higher
+   version, which its build opens read-only. A v7 device keeps its own
+   fifteen. Between two v7 devices the six behave exactly like the nine. */
+test("Y5", "v7's six equipment keys merge like the nine; a v6 device takes them and version 7", (M) => {
+  const NINE = { pullupBar: true, dumbbells: true, bench: true, kettlebells: false, rings: false, nothing: false,
+                 bands: false, parallettes: false, dipBars: true, lowBar: false };
+  const SIX = { vest: false, abWheel: true, jumpRope: false, box: false, barbell: false, nordicAnchor: true };
+  const A = payload({ version: 7, equipment: Object.assign({}, NINE, SIX) });
+  const B = payload({ version: 6, equipment: Object.assign({}, NINE, { dumbbells: false, rings: true }) });
+  const before = JSON.stringify([A, B]);
+  const onA = M.mergePayload(B, A).ironframe;   // A pulls B's file
+  const onB = M.mergePayload(A, B).ironframe;   // B pulls A's file
+  const C = payload({ version: 7, equipment: Object.assign({}, NINE, SIX, { vest: true, nordicAnchor: false }) });
+  const onC = M.mergePayload(A, C).ironframe.equipment, onA2 = M.mergePayload(C, A).ironframe.equipment;
+  const pick = (eq, keys) => keys.map((k) => k + ":" + eq[k]).join(" ");
+  const six = Object.keys(SIX);
+  const checks = {
+    "A keeps all fifteen of its own": same(onA.equipment, A.ironframe.equipment),
+    "B keeps its own nine": Object.keys(NINE).every((k) => onB.equipment[k] === B.ironframe.equipment[k]),
+    "B takes A's six": six.every((k) => onB.equipment[k] === SIX[k]),
+    "both end on version 7": onA.version === 7 && onB.version === 7,
+    "two v7 devices: local wins each of the six": onC.vest === true && onC.nordicAnchor === false &&
+      onA2.vest === false && onA2.nordicAnchor === true,
+    "inputs unchanged": JSON.stringify([A, B]) === before
+  };
+  const bad = Object.keys(checks).filter((k) => !checks[k]);
+  return { ok: !bad.length, measured: (bad.length ? "failed: " + bad.join("; ") + " | " : "") +
+    "B after: " + pick(onB.equipment, ["dumbbells", "rings"].concat(six)) + ", v" + onB.version +
+    "; A after: " + pick(onA.equipment, ["dumbbells", "rings", "abWheel", "nordicAnchor"]) + ", v" + onA.version +
+    "; v7 pair, each local: vest " + onC.vest + "/" + onA2.vest + ", anchor " + onC.nordicAnchor + "/" + onA2.nordicAnchor };
 });
 
 function main() {

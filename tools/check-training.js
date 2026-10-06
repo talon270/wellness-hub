@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Checks fitness/training.js — the step-up / repeat / reduce rules — against
- * plan Part C2 and cases T1–T10.
+ * plan Part C2 and cases T1–T10, and the rules plans/PLAN-yellow-dude.md
+ * adds to training.data.js (Y1–Y3).
  *
  *   node tools/check-training.js
  *   TRAINING_JS=/path/to/other/training.js node tools/check-training.js
@@ -46,9 +47,11 @@ function sess(day, exId, values, o = {}) {
 const rxOf = (exId, o = {}) => T.startOf(exId, o);
 const TOP = [12, 12, 12];
 const ALL = { pullupBar: true, dumbbells: true, bench: true, kettlebells: true, rings: true,
-              bands: true, parallettes: true, dipBars: true, lowBar: true };
+              bands: true, parallettes: true, dipBars: true, lowBar: true,
+              vest: true, abWheel: true, jumpRope: true, box: true, barbell: true, nordicAnchor: true };
 const NO_BAR = { pullupBar: false, dumbbells: true, bench: true, kettlebells: true, rings: false,
-                 bands: false, parallettes: false, dipBars: false, lowBar: false };
+                 bands: false, parallettes: false, dipBars: false, lowBar: false,
+                 vest: false, abWheel: false, jumpRope: false, box: false, barbell: false, nordicAnchor: false };
 
 /* -- runner --------------------------------------------------------------- */
 let failed = 0;
@@ -454,6 +457,47 @@ check("K-hold", () => {
     delete sandbox.window.TRAINING_DATA.EXERCISES.test_loadedhold;
     delete sandbox.window.TRAINING_DATA.HOLD_RANGES.test_loadedhold;
   }
+});
+
+/* -- Yellow Dude Stage 1 (plans/PLAN-yellow-dude.md, step 1.1) -------------
+   The catalogue's records arrive in Stage 2, so these run on synthetic
+   entries and remove them after, like K-hold. */
+const TDX = sandbox.window.TRAINING_DATA;
+check("Y1-rep-range", () => {
+  /* An exercise's own range beats goal and coverage ranges, for reps and
+     unilateral only: an eccentric keeps 3–6. */
+  const RR = TDX.REP_RANGES = TDX.REP_RANGES || {};
+  RR.pull_4 = [1, 5]; RR.acc_curl_doorframe = [1, 5]; RR.pull_3 = [1, 5];
+  try {
+    const r = (id, goal) => { const x = TDX.rangeFor(id, goal); return x.lo + "–" + x.hi; };
+    const seen = [r("pull_4", "strength"), r("pull_4", "size"), r("pull_4"), r("acc_curl_doorframe", "both"), r("pull_3")];
+    const rx = rxOf("pull_4", { goal: "size" });
+    return [seen.join() === "1–5,1–5,1–5,1–5,3–6" && rx.range.join() === "1,5",
+            `pull_4 strength/size/none ${seen.slice(0, 3).join(" / ")}, coverage curl ${seen[3]}, eccentric pull_3 ${seen[4]}; startOf ${rx.range.join("–")}`];
+  } finally { delete RR.pull_4; delete RR.acc_curl_doorframe; delete RR.pull_3; }
+});
+check("Y2-timed", () => {
+  /* A timed hold is a hold to every rule; rangeFor only adds the flag. */
+  TDX.EXERCISES.core_1.timed = true;
+  try {
+    const t = TDX.rangeFor("core_1"), u = TDX.rangeFor("core_2"), rx = rxOf("core_1");
+    return [t.timed === true && t.kind === "hold" && t.lo === 30 && t.hi === 60 && !("timed" in u) &&
+            rx.unit === "sec" && rx.range.join() === "30,60",
+            `core_1 timed ${t.timed}, ${t.kind} ${t.lo}–${t.hi}; core_2 timed ${"timed" in u ? u.timed : "absent"}; startOf ${rx.range.join("–")} ${rx.unit}`];
+  } finally { delete TDX.EXERCISES.core_1.timed; }
+});
+check("Y3-vest-barbell", () => {
+  /* A vest steps 2.5 kg and a barbell 5 kg, each the only implement listed. */
+  const add = (id, tok) => { TDX.EXERCISES[id] = { slot: "push", branch: "main", kind: "loaded",
+    equipment: [tok], next: [], offer: [], loadMode: "total" }; };
+  add("test_vest", "vest"); add("test_barbell", "barbell");
+  try {
+    const step = (id, tok) => T.recommend([sess("2026-09-24", id, TOP, { loadKg: 10 }), sess("2026-09-27", id, TOP, { loadKg: 10 })],
+                                          rxOf(id, { loadKg: 10 }), { equipment: { [tok]: true } });
+    const v = step("test_vest", "vest"), b = step("test_barbell", "barbell");
+    return [v.action === "ready" && loadOf(v) === 12.5 && b.action === "ready" && loadOf(b) === 15,
+            `vest 10 kg: ${ready(v)} → ${loadOf(v)} kg; barbell 10 kg: ${ready(b)} → ${loadOf(b)} kg`];
+  } finally { delete TDX.EXERCISES.test_vest; delete TDX.EXERCISES.test_barbell; }
 });
 
 console.log(`\n${failed ? failed + " failed" : "all passed"}`);

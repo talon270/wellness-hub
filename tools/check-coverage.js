@@ -31,7 +31,8 @@ const plain = (x) => JSON.parse(JSON.stringify(x));   // out of the vm's realm
 /* -- fixtures ------------------------------------------------------------ */
 const TODAY = "2026-10-07";                            // a Wednesday
 const ALL = { pullupBar: true, dumbbells: true, bench: true, kettlebells: true, rings: true,
-              bands: true, parallettes: true, dipBars: true, lowBar: true };
+              bands: true, parallettes: true, dipBars: true, lowBar: true,
+              vest: true, abWheel: true, jumpRope: true, box: true, barbell: true, nordicAnchor: true };
 let seq = 1;
 /* A session on `day` holding [exerciseId, values, extra] entries. */
 function sess(day, entries) {
@@ -182,6 +183,26 @@ check("V2i-days-since", () => {
   const s = plain(C.pick(sessions, TODAY, { rxFor: rxFor(), n: 15 })).map((x) => x.slot);
   return [s.indexOf("lateral") < s.indexOf("curl") && s.indexOf("curl") === 14,
           `lateral at ${s.indexOf("lateral")}, curl at ${s.indexOf("curl")} of ${s.length}`];
+});
+
+/* -- Y4: a conditioning slot runs only when pinned (plans/PLAN-yellow-dude.md
+   A5). The real slot arrives with its exercises in Stage 2, so this injects a
+   synthetic one and removes it after. It trains no group, so no shortfall can
+   pick it; pinned for today, it is picked with group null. */
+check("Y4-conditioning", () => {
+  SLOTS.test_cond = { label: "Test conditioning", coverage: true, conditioning: true, trains: [],
+                      first: ["push_1"], loaded: [] };
+  try {
+    const loose = plain(C.pick([], TODAY, { rxFor: rxFor(), n: 20 }));
+    const pinned = plain(C.pick([], TODAY, { rxFor: rxFor(), n: 20, pins: { test_cond: { days: [3] } } }));
+    const other = plain(C.pick([], TODAY, { rxFor: rxFor(), n: 20, pins: { test_cond: { days: [1] } } }));
+    const row = pinned.filter((p) => p.slot === "test_cond")[0];
+    return [!loose.some((p) => p.slot === "test_cond") && !other.some((p) => p.slot === "test_cond") &&
+            !!row && row.group === null && row.pinned && pinned[0].slot === "test_cond" && /^Pinned for Wed — /.test(row.reason),
+            `unpinned: ${loose.some((p) => p.slot === "test_cond") ? "picked" : "not picked"}; pinned Mon: ` +
+            `${other.some((p) => p.slot === "test_cond") ? "picked" : "not picked"}; pinned Wed: ` +
+            (row ? `picked first=${pinned[0].slot === "test_cond"}, group ${row.group}, "${row.reason}"` : "not picked")];
+  } finally { delete SLOTS.test_cond; }
 });
 
 console.log(failed ? `${failed} FAILED` : "all passed");

@@ -56,6 +56,9 @@
     reps: "Reps", loaded: "Loaded", unilateral: "One side at a time",
     eccentric: "Lowering (eccentric)", hold: "Timed hold", skill: "Skill attempt"
   };
+  /* A timed record is continuous movement, never a "hold" (plan 1.3). The filter
+     keeps one "Timed hold" entry, because every rule treats the two alike. */
+  function kindLabel(e) { return e.kind === "hold" && e.timed ? "Timed work" : KIND_LABEL[e.kind] || e.kind; }
   var WHERE_LABEL = { start: "Starting rung", path: "On the path", branch: "Branch or optional" };
   var JOINT_LABEL = {
     wrist: "wrist", elbow: "elbow", shoulder: "shoulder", neck: "neck",
@@ -223,7 +226,7 @@
      ---------------------------------------------------------------------- */
   function rowHtml(r) {
     var id = r.id, e = EX[id];
-    var bits = [slotLabel(e.slot), KIND_LABEL[e.kind] || e.kind, WHERE_LABEL[whereOf(id)].toLowerCase()];
+    var bits = [slotLabel(e.slot), kindLabel(e), WHERE_LABEL[whereOf(id)].toLowerCase()];
     var tags = "";
     if (r.tier) tags += '<span class="badge badge--primary">' + esc(r.tier) + '</span>';
     if (r.current) tags += '<span class="badge badge--success">in your program</span>';
@@ -385,7 +388,10 @@
         block("Cues", listItems(db.cues, "ul")) + '</div>';
     }
     var v = c.variations || {};
-    var out = '<p class="dx-summary">' + esc(c.summary) + '</p>' +
+    /* "Before you start" is a self-check written down: text, never a gate. It
+       leads the page, and prints nothing when a guide has no prereq. */
+    var out = (c.prereq && c.prereq.length ? block("Before you start", listItems(c.prereq, "ul")) : "") +
+      '<p class="dx-summary">' + esc(c.summary) + '</p>' +
       block("Set up", listItems(c.setup, "ol")) +
       block("One rep", listItems(c.steps, "ol")) +
       '<div class="dx-two">' +
@@ -446,7 +452,8 @@
 
   function rxLine(rx) {
     var unit = rx.unit === "sec" ? " s" : " reps";
-    var bits = [rx.sets + " × " + (rx.range[0] != null ? rx.range[0] + "–" : "") + rx.range[1] + unit];
+    var range = (rx.range[0] != null ? rx.range[0] + "–" : "") + rx.range[1] + unit;
+    var bits = [rx.timed || (EX[rx.exerciseId] || {}).timed ? rx.sets + " sets for " + range : rx.sets + " × " + range];
     var st = rx.setup || {};
     if (st.loadMode) bits.push(st.loadKg != null ? st.loadKg + " kg " + (st.loadMode === "perHand" ? "per hand" : "total") : "load not set yet");
     if (st.grip === "knuckles") bits.push("knuckles");
@@ -500,7 +507,7 @@
     var pr = (s.prs || []).filter(function (p) { return p.exerciseId === id; })[0];
     /* The record is the most reps (or seconds) in one set and stores no load,
        so on a loaded movement the line says so rather than imply a weight. */
-    if (pr) out += '<p class="muted text-sm">Best: ' + esc(pr.value + (pr.kind === "hold" ? " s hold" : " reps")) +
+    if (pr) out += '<p class="muted text-sm">Best: ' + esc(pr.value + (pr.kind === "hold" ? (e.timed ? " s, longest set" : " s hold") : " reps")) +
       (pr.dateISO ? ' (' + esc(fmtDay(String(pr.dateISO).slice(0, 10))) + ')' : '') +
       (e.loadMode ? ', at any weight: the record counts reps, not load' : '') + '.</p>';
     return out;
@@ -558,7 +565,7 @@
       ? '<button type="button" class="btn btn--ghost btn--sm" data-dx-back>← Back to ' + esc(meta ? meta.label : "where you were") + '</button>'
       : '<button type="button" class="btn btn--ghost btn--sm" data-dx-back>← All exercises</button>';
     var st = standing(s, id);
-    var tags = [slotLabel(e.slot), KIND_LABEL[e.kind] || e.kind, WHERE_LABEL[whereOf(id)]]
+    var tags = [slotLabel(e.slot), kindLabel(e), WHERE_LABEL[whereOf(id)]]
       .map(function (t) { return '<span class="badge badge--secondary">' + esc(t) + '</span>'; }).join(" ");
     if (st.excl === "excluded") tags += ' <span class="badge badge--warn">excluded</span>';
     var msg = V.msg ? '<p class="dx-msg dx-msg--' + V.msg.kind + '" role="status">' + esc(V.msg.text) + '</p>' : "";

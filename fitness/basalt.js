@@ -45,7 +45,7 @@
     }
   ];
   var UI_KEY        = "ironframe.ui";        // tiny, non-schema UI prefs
-  var SCHEMA_VERSION = 6;                    // v2: prefs.sessionLength · v3: repaired progression targets · v4: training prescriptions · v5: equipment split, weights, exclusions, limitations, grip · v6: coverage slots, the finisher, pins, mini-sessions
+  var SCHEMA_VERSION = 7;                    // v2: prefs.sessionLength · v3: repaired progression targets · v4: training prescriptions · v5: equipment split, weights, exclusions, limitations, grip · v6: coverage slots, the finisher, pins, mini-sessions · v7: six more equipment items, the Nordic anchor inferred
 
   /* ----------------------------------------------------------------------
      STATIC PROGRAM DATA — Level 1–6 progressions per movement pattern.
@@ -132,8 +132,10 @@
         hydrationTargetL: 3.2
       },
 
-      /* — Equipment (pre-checks per spec) — the last four (v5) split what
-         "pull-up bar" and "bench" used to stand for (training.data.js) — */
+      /* — Equipment (pre-checks per spec) — bands to lowBar (v5) split what
+         "pull-up bar" and "bench" used to stand for, and vest to
+         nordicAnchor (v7) came with the Yellow Dude catalogue
+         (training.data.js, EQUIPMENT) — */
       equipment: {
         pullupBar: false,
         dumbbells: true,
@@ -144,7 +146,13 @@
         bands: false,
         parallettes: false,
         dipBars: false,
-        lowBar: false
+        lowBar: false,
+        vest: false,
+        abWheel: false,
+        jumpRope: false,
+        box: false,
+        barbell: false,
+        nordicAnchor: false
       },
 
       /* — The weights you own (v5, plan C5), per implement: { mode:
@@ -259,6 +267,9 @@
                      The Equipment check card (step 2.5) reads it; dismissing
                      the card belongs in ironframe.ui, per device, like v4's
                      upgrade card (UPGRADE_SEEN_KEY).
+                     v7 rewrites it with `tokens`, the items its card names:
+                     v7's six, after v5's four whenever the save still held
+                     v5's record. A record without `tokens` is v5's four.
          A cleared limitations or grip is a stamped record, never null: null
          has no stamp and loses every sync (js/syncmerge.js).
          v6 (plan D3, D5):
@@ -311,6 +322,7 @@
          build opens a save holding coverage slots and mini-sessions
          read-only instead of misreading them — its recoveryOffer would call
          recommend on a coverage exercise it doesn't know. */
+      if (state.version < 7) toV7(state);            // v6 -> v7, after toV5's record
       state.version = SCHEMA_VERSION;
     } else {
       // Same version: still backfill keys added during default development.
@@ -491,7 +503,7 @@
     if (!TDATA || !TDATA.EXERCISES) throw new Error("v5 migration needs fitness/training.data.js");
     var eq = state.equipment, tr = state.training, inferred = {};
     if (!isObj(eq) || !isObj(tr)) return;   // healState replaces both with defaults
-    function infer(id, from) {
+    eachTrained(state, function (id, from) {
       ((TDATA.EXERCISES[id] || {}).equipment || []).forEach(function (t) {
         var any = Array.isArray(t) ? t : [t];
         if (any.some(function (u) { return eq[u]; })) return;
@@ -500,18 +512,66 @@
         eq[tok] = true;
         inferred[tok] = { id: id, from: from };
       });
-    }
+    });
+    if (state.meta && state.meta.onboarded) tr.equipmentCheck = { at: new Date().toISOString(), inferred: inferred };
+  }
+
+  /* What your own data says you train, in the order v5 and v7 read it:
+     every exercise a logged session performed (a set above 0, not skipped),
+     then the exercise in every slot that is on. */
+  function eachTrained(state, fn) {
     (Array.isArray(state.sessions) ? state.sessions : []).forEach(function (s) {
       (s && Array.isArray(s.exercises) ? s.exercises : []).forEach(function (ex) {
         if (ex && !ex.skipped && Array.isArray(ex.sets) &&
-            ex.sets.some(function (st) { return Number(st && st.reps) > 0; })) infer(ex.key, "session");
+            ex.sets.some(function (st) { return Number(st && st.reps) > 0; })) fn(ex.key, "session");
       });
     });
-    var slots = isObj(tr.slots) ? tr.slots : {};
+    var slots = isObj(state.training.slots) ? state.training.slots : {};
     Object.keys(slots).forEach(function (k) {
-      if (slots[k] && !slots[k].off) infer(slots[k].exerciseId, "slot");
+      if (slots[k] && !slots[k].off) fn(slots[k].exerciseId, "slot");
     });
-    if (state.meta && state.meta.onboarded) tr.equipmentCheck = { at: new Date().toISOString(), inferred: inferred };
+  }
+
+  /* v6 -> v7 · SIX MORE EQUIPMENT ITEMS (plans/PLAN-yellow-dude.md, step 1.2)
+     ----------------------------------------------------------------------
+     The Yellow Dude catalogue needs gear no token named: a weighted vest, an
+     ab wheel, a jump rope, a box, a barbell, and something that holds your
+     ankles for a Nordic curl. All six start off but one. Nordic curls
+     (hinge_4-6) needed no equipment before v7, and plan A1 gives them the
+     anchor; read as false, a save that trains them would open owning no
+     anchor, and its hinge slot would quietly fall back to an easier
+     movement. So `nordicAnchor` is turned on when a logged session performed
+     one, or a slot that is on holds one: v5's two sources, in v5's order. A
+     slot needs no second condition, as v5's did: before v7 every profile
+     could be prescribed a Nordic.
+
+     Everything else is additive. The six keys come from the defaults (the
+     deep merge above), and sessions, slots, decisions and PRs are untouched.
+     An onboarded save records what was turned on and why, and the tokens
+     the one-time Equipment check card names. A save that still holds v5's
+     record (from toV5 in this same load, or from an earlier one) keeps v5's
+     four and what v5 inferred: one card for both upgrades. Replacing it
+     would erase a v5 card a device hasn't shown yet; a device that did
+     show it drops the four from the card instead (equipCheckHtml).
+
+     No dependency on training.js: the inference is by id. */
+  var V7_TOKENS = ["vest", "abWheel", "jumpRope", "box", "barbell", "nordicAnchor"];
+  var V7_NORDIC = ["hinge_4", "hinge_5", "hinge_6"];
+  function toV7(state) {
+    var eq = state.equipment, tr = state.training, inferred = {};
+    if (!isObj(eq) || !isObj(tr)) return;   // healState replaces both with defaults
+    eachTrained(state, function (id, from) {
+      if (eq.nordicAnchor || V7_NORDIC.indexOf(id) < 0) return;
+      eq.nordicAnchor = true;
+      inferred.nordicAnchor = { id: id, from: from };
+    });
+    if (!state.meta || !state.meta.onboarded) return;
+    var v5 = isObj(tr.equipmentCheck) && !Array.isArray(tr.equipmentCheck.tokens) && tr.equipmentCheck;
+    tr.equipmentCheck = {
+      at: new Date().toISOString(),
+      inferred: Object.assign({}, v5 && v5.inferred, inferred),
+      tokens: (v5 ? ["dipBars", "lowBar", "bands", "parallettes"] : []).concat(V7_TOKENS)
+    };
   }
 
   /* Deep-merge `source` onto a fresh `base` so newly-added schema keys are
@@ -1167,7 +1227,13 @@
     { key: "bands",      label: "Resistance bands" },
     { key: "parallettes",label: "Parallettes" },
     { key: "dipBars",    label: "Dip bars" },
-    { key: "lowBar",     label: "Waist-height bar" }
+    { key: "lowBar",     label: "Waist-height bar" },
+    { key: "vest",       label: "Weighted vest" },
+    { key: "abWheel",    label: "Ab wheel" },
+    { key: "jumpRope",   label: "Jump rope" },
+    { key: "box",        label: "Sturdy box" },
+    { key: "barbell",    label: "Barbell" },
+    { key: "nordicAnchor", label: "Nordic anchor" }   // one line, like the other tiles; the card says what it is
   ];
   var WEIGHT_IMPLEMENTS = [["dumbbells", "Dumbbells"], ["kettlebells", "Kettlebells"]];
   var LIMIT_JOINTS = [["wrist", "Wrist"], ["elbow", "Elbow"], ["shoulder", "Shoulder"], ["neck", "Neck"],
@@ -3576,6 +3642,10 @@
 
   function newSets(n, kg) { var a = []; for (var i = 0; i < n; i++) a.push({ value: null, weight: kg != null ? kg : null, done: false }); return a; }
   function TD() { return window.TRAINING_DATA; }
+  /* A timed record is continuous movement (jump rope), not a still position.
+     Every rule treats it as a hold; only the words differ, so a rope set never
+     reads "hold" (plan 1.3). */
+  function isTimed(id) { return !!(TD().EXERCISES[id] || {}).timed; }
 
   /* A fresh prescription in the range your goal sets (plan D2). Every new
      prescription in the running app goes through here, so no call site can
@@ -3748,7 +3818,10 @@
     { id: "bench", t: "Bench" }, { id: "kettlebells", t: "Kettlebells" },
     { id: "rings", t: "Rings" }, { id: "bands", t: "Resistance bands" },
     { id: "parallettes", t: "Parallettes" }, { id: "dipBars", t: "Dip bars" },
-    { id: "lowBar", t: "A waist-height bar" }, { id: "nothing", t: "Just the floor" }
+    { id: "lowBar", t: "A waist-height bar" }, { id: "vest", t: "A weighted vest" },
+    { id: "abWheel", t: "An ab wheel" }, { id: "jumpRope", t: "A jump rope" },
+    { id: "box", t: "A sturdy box or step" }, { id: "barbell", t: "A barbell" },
+    { id: "nordicAnchor", t: "An ankle anchor for Nordic curls" }, { id: "nothing", t: "Just the floor" }
   ];
 
   function startDraft() {
@@ -3896,7 +3969,7 @@
      its range. */
   function assessBar(id) {
     var r = TD().rangeFor(id);
-    return r.unit === "sec" ? r.lo + " s hold" : r.lo + " clean reps" + (r.perSide ? " per side" : "");
+    return r.unit === "sec" ? (r.timed ? "for " + r.lo + " s" : r.lo + " s hold") : r.lo + " clean reps" + (r.perSide ? " per side" : "");
   }
 
   function stepAssess() {
@@ -4719,8 +4792,9 @@
     var loadMode = (TD().EXERCISES[ex.id] || {}).loadMode;
     var showW = !!loadMode || (s.era === 2) || ex.era2;
     var isHold = ex.mode === "hold";
+    var timed = isHold && isTimed(ex.id);
     var sets = ex.sets.map(function (st, j) {
-      var holdBtn = isHold ? '<button class="mini-timer mini-timer--hold" data-holdtimer="' + i + "-" + j + '" type="button" title="Time this hold" aria-label="Start hold timer">' +
+      var holdBtn = isHold ? '<button class="mini-timer mini-timer--hold" data-holdtimer="' + i + "-" + j + '" type="button" title="' + (timed ? "Time this set" : "Time this hold") + '" aria-label="' + (timed ? "Start set timer" : "Start hold timer") + '">' +
         '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>Time it</button>' : "";
       return '<div class="setrow" data-ex="' + i + '" data-set="' + j + '">' +
         '<span class="setrow__n">SET ' + (j + 1) + '</span>' +
@@ -4830,7 +4904,8 @@
         var m = b.dataset.holdtimer.match(/^(\d+)-(\d+)$/); if (!m) return;
         var ei = +m[1], si = +m[2], ex = w.exercises[ei];
         var target = Number(ex.target) || 30;
-        rtStart(target, "Hold · " + ex.name, function () {
+        var timed = isTimed(ex.id);
+        rtStart(target, (timed ? "Timed · " : "Hold · ") + ex.name, function () {
           // auto-log the achieved hold + mark the set done
           var stt = ex.sets[si];
           if (stt.value == null || stt.value === "") stt.value = target;
@@ -4840,7 +4915,7 @@
           if (doneBtn) doneBtn.classList.add("is-on");
           var inp = el.querySelector('[data-stepper="set-' + ei + "-" + si + '"] .stepper__inp');
           if (inp && (inp.value === "" || inp.value == null)) inp.value = target;
-          App.toast("Hold logged: " + target + "s.", "success");
+          App.toast((timed ? "Set logged: " : "Hold logged: ") + target + "s.", "success");
         });
       });
     });
@@ -4950,7 +5025,7 @@
     }
 
     var prog = App.PROGRESSIONS[ex.pattern] || {};
-    var modeStr = ex.mode === "hold" ? "Timed hold (" + ex.unit + ")" : "Reps-based (" + ex.unit + ")";
+    var modeStr = ex.mode === "hold" ? (isTimed(ex.id) ? "Timed work (" : "Timed hold (") + ex.unit + ")" : "Reps-based (" + ex.unit + ")";
     var equipStr = (ex.equipment && ex.equipment.length) ? ex.equipment.join(", ") : "Bodyweight only";
 
     document.getElementById("guide-pattern").textContent = (prog.label || ex.pattern).toUpperCase();
@@ -5025,7 +5100,9 @@
   var EQUIP_LABEL = {
     pullupBar: "pull-up bar", dumbbells: "dumbbells", bench: "bench",
     kettlebells: "kettlebells", rings: "rings", bands: "resistance bands",
-    parallettes: "parallettes", dipBars: "dip bars", lowBar: "waist-height bar"
+    parallettes: "parallettes", dipBars: "dip bars", lowBar: "waist-height bar",
+    vest: "weighted vest", abWheel: "ab wheel", jumpRope: "jump rope", box: "sturdy box",
+    barbell: "barbell", nordicAnchor: "ankle anchor"
   };
   window.EQUIP_LABEL_GLOBAL = EQUIP_LABEL;
   function openSwapPanel(i, w, showExcluded) {
@@ -5193,7 +5270,7 @@
 
     /* celebrate */
     res.prs.forEach(function (p) {
-      App.toast("New " + p.kind + " PR · " + p.exercise + ": " + p.value + (p.kind === "hold" ? "s" : ""), "success", 4200);
+      App.toast("New " + (p.kind === "hold" && isTimed(p.exerciseId) ? "longest-set" : p.kind) + " PR · " + p.exercise + ": " + p.value + (p.kind === "hold" ? "s" : ""), "success", 4200);
     });
     res.levelUps.forEach(function (l) {
       App.toast("Level up! " + cap(l.pattern) + " → L" + l.level + " · " + l.name, "success", 4600);
@@ -5224,6 +5301,7 @@
     var sec = (ex.rx ? ex.rx.unit === "sec" : ex.mode === "hold") ? " s" : " reps";
     var side = (TD().rangeFor(ex.id) || {}).perSide ? " /side" : "";
     var body = r[0] != null ? r[0] + "–" + r[1] : r[1] != null ? "up to " + r[1] : "attempts";
+    if (sec === " s" && isTimed(ex.id)) return n + " sets for " + body + sec + side;
     return n + " × " + body + sec + side;
   }
   /* The left tag in the swap lists: the ladder level, KG for loaded work,
@@ -5234,7 +5312,7 @@
   }
   function swapSub(alt) {
     var e = TD().EXERCISES[alt.id] || {};
-    return (alt.mode === "hold" ? "timed hold" : "reps") +
+    return (alt.mode === "hold" ? (isTimed(alt.id) ? "timed work" : "timed hold") : "reps") +
       (e.loadMode ? " · loaded, " + (e.loadMode === "perHand" ? "kg per hand" : "kg total") : "") +
       (e.branch === "skill" ? " · optional" : "");
   }
@@ -5468,14 +5546,23 @@
      the one card that says so, with every token's state, so a token the app
      couldn't infer can be ticked here. Dismissed per device, like the v4
      card; the record it reads (training.equipmentCheck) syncs. A tick saves
-     at once: it changes which movements your slots can use. */
-  var EQCHECK_SEEN_KEY = "v5.equipmentCheckSeen";
-  var EQCHECK_TOKENS = [["dipBars", "Dip bars"], ["lowBar", "A waist-height bar"], ["bands", "Resistance bands"], ["parallettes", "Parallettes"]];
+     at once: it changes which movements your slots can use.
+     v7 (plans/PLAN-yellow-dude.md) reuses it for six more items. Its record
+     names the tokens to list, and it has its own dismissal key, so a device
+     that already dismissed v5's card still sees v7's once, without v5's
+     four. A record without `tokens` is v5's: the four, under v5's key. */
+  var EQCHECK_V5 = ["dipBars", "lowBar", "bands", "parallettes"];
+  var EQCHECK_TOKENS = [["dipBars", "Dip bars"], ["lowBar", "A waist-height bar"], ["bands", "Resistance bands"], ["parallettes", "Parallettes"],
+    ["vest", "A weighted vest"], ["abWheel", "An ab wheel"], ["jumpRope", "A jump rope"], ["box", "A sturdy box"],
+    ["barbell", "A barbell"], ["nordicAnchor", "An ankle anchor"]];
+  function eqCheckSeenKey(chk) { return chk.tokens ? "v7.equipmentCheckSeen" : "v5.equipmentCheckSeen"; }
   function equipCheckHtml(s) {
     var chk = s.training && s.training.equipmentCheck;
-    if (!chk || App.util.uiGet(EQCHECK_SEEN_KEY, false)) return "";
-    var inf = chk.inferred || {};
-    var rows = EQCHECK_TOKENS.map(function (t) {
+    if (!chk || App.util.uiGet(eqCheckSeenKey(chk), false)) return "";
+    var inf = chk.inferred || {}, list = Array.isArray(chk.tokens) ? chk.tokens : EQCHECK_V5;
+    if (chk.tokens && App.util.uiGet("v5.equipmentCheckSeen", false))
+      list = list.filter(function (k) { return EQCHECK_V5.indexOf(k) < 0; });
+    var rows = EQCHECK_TOKENS.filter(function (t) { return list.indexOf(t[0]) >= 0; }).map(function (t) {
       var on = !!s.equipment[t[0]], from = inf[t[0]], ex = from && TD().EXERCISES[from.id];
       var why = from && ex
         ? "turned on for you: " + (from.from === "session" ? "you logged " : "your " + TD().SLOTS[ex.slot].label.toLowerCase() + " slot is ") + ((DB.getExercise(from.id) || {}).name || from.id)
@@ -5485,7 +5572,9 @@
     }).join("");
     return '<div class="wh-advice wh-advice--info mt-4" data-eqcheck role="status"><div>' +
       '<div class="wh-advice__title">Check your equipment</div>' +
-      '<p class="wh-advice__body" style="margin:var(--sp-2) 0">"Pull-up bar" used to stand for four different things. They\'re separate now: dip bars, a waist-height bar (for rows and straight-bar dips), resistance bands and parallettes. ' +
+      '<p class="wh-advice__body" style="margin:var(--sp-2) 0">' +
+        (list.indexOf("dipBars") >= 0 ? '"Pull-up bar" used to stand for four different things. They\'re separate now: dip bars, a waist-height bar (for rows and straight-bar dips), resistance bands and parallettes. ' : "") +
+        (list.indexOf("nordicAnchor") >= 0 ? 'Six more items can be listed now: a weighted vest, an ab wheel, a jump rope, a sturdy box or step, a barbell, and an ankle anchor — a strap, a partner or heavy furniture that holds your ankles for Nordic curls. ' : "") +
         'The app turned on what your own sessions show you have. Untick anything you don\'t, and tick what it couldn\'t know. Ticking saves at once.</p>' +
       '<div class="stack" style="gap:var(--sp-2);margin-bottom:var(--sp-3)">' + rows + '</div>' +
       '<button class="btn btn--ghost btn--sm" data-eqcheck-ok type="button">Looks right</button></div></div>';
@@ -5501,7 +5590,7 @@
     });
     var ok = el.querySelector("[data-eqcheck-ok]");
     if (ok) ok.addEventListener("click", function () {
-      App.util.uiSet(EQCHECK_SEEN_KEY, true);
+      App.util.uiSet(eqCheckSeenKey(App.getState().training.equipmentCheck || {}), true);
       var card = el.querySelector("[data-eqcheck]");
       if (card) card.remove();
     });
@@ -6537,7 +6626,7 @@
     var body = prs.length
       ? prs.map(function (p) {
           return '<div class="drow"><div class="drow__main"><div class="drow__title">' + esc(p.exercise) + "</div>" +
-            '<div class="drow__sub">' + (p.kind === "hold" ? "max hold" : (p.kind === "weight" ? "top weight" : "best set")) +
+            '<div class="drow__sub">' + (p.kind === "hold" ? ((window.TRAINING_DATA.EXERCISES[p.exerciseId] || {}).timed ? "longest set" : "max hold") : (p.kind === "weight" ? "top weight" : "best set")) +
             " · " + lib.relTime(p.dateISO) + "</div></div>" +
             (p.improved ? '<span class="badge badge--success" style="margin-right:var(--sp-2)"><span class="dot"></span>new</span>' : "") +
             '<span class="kv__v" style="font-size:var(--fs-lg)">' + prValue(p) + "</span></div>";
@@ -6990,7 +7079,7 @@
     var body = prs.length
       ? prs.map(function (p) {
           var val = p.kind === "hold" ? (p.value + "s") : (p.kind === "weight" ? (p.value + " kg") : (p.value + " reps"));
-          var kindL = p.kind === "hold" ? "max hold" : (p.kind === "weight" ? "top weight" : "best set");
+          var kindL = p.kind === "hold" ? ((window.TRAINING_DATA.EXERCISES[p.exerciseId] || {}).timed ? "longest set" : "max hold") : (p.kind === "weight" ? "top weight" : "best set");
           return '<div class="pr-row">' +
             '<span class="pr-row__dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 0 12 0V3H6z"/><path d="M6 4H3v2a3 3 0 0 0 3 3M18 4h3v2a3 3 0 0 1-3 3M9 21h6M12 15v6"/></svg></span>' +
             '<div class="pr-row__main"><div class="pr-row__t">' + esc(p.exercise) + '</div>' +

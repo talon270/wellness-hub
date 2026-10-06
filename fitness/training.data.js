@@ -9,6 +9,7 @@
                       plus the coverage slots (Stage 3) that top up one muscle
    · EXERCISES        id -> { slot, branch, kind, equipment, next, offer, … }
    · RANGES           rep ranges by kind, and the hold ranges per exercise
+   · REP_RANGES       a rep range for one exercise, ahead of goal and kind
    · GOAL_RANGES      rep ranges by goal, and GOAL_REST_SEC, rest by goal
    · COVERAGE_RANGES  rep ranges for coverage slots, which ignore the goal
    · SETUPS           what changes difficulty without changing the movement
@@ -45,6 +46,13 @@
      four that split what "pull-up bar" used to stand for (F5): `bands`,
      `parallettes`, `dipBars` (parallel bars or a dip station) and `lowBar` (a
      bar or table edge at waist or hip height).
+
+     Six more came with schema v7 (plans/PLAN-yellow-dude.md): `vest` (a
+     weighted vest or a loaded backpack), `abWheel`, `jumpRope`, `box` (a
+     sturdy box or step to sit to, step on or jump onto), `barbell` (with
+     plates) and `nordicAnchor` (whatever holds your ankles for a Nordic
+     curl: a strap, a partner, heavy furniture). Furniture itself — a chair,
+     a table, a door, a wall — is never a token.
 
    COVERAGE SLOTS (plan D2)
      A slot with `coverage: true` tops up ONE muscle the eight main slots barely
@@ -95,6 +103,15 @@
      with the goal that suits a push-up. Holds keep their own range below. */
   var COVERAGE_RANGES = { standard: [10, 15], light: [12, 20] };
   var COVERAGE_LIGHT_SLOTS = ["cuff", "neck", "shin"];
+
+  /* One exercise's own rep range, for moves no one meets at 6–12 on the day
+     they step to them: a muscle-up, a planche push-up, a box jump. It beats
+     the goal and coverage ranges, because a first muscle-up is one rep under
+     every goal. Only the plain rep kinds (reps, unilateral) take one:
+     eccentrics already sit at 3–6, and loaded work progresses by weight.
+     Empty until the catalogue adds its first entry; the check refuses a key
+     that isn't a reps or unilateral exercise. */
+  var REP_RANGES = {};
 
   /* Rest after a rep set for a NEW profile, by goal. A profile that already
      exists keeps the rest it has: changing your goal never rewrites a setting
@@ -154,8 +171,10 @@
 
   /* Per implement, not per exercise: a dumbbell comes in 2.5 kg steps, a
      kettlebell in 4 kg ones. Loaded work steps up by this and drops back to the
-     bottom of its range. */
-  var LOAD_STEP_KG = { dumbbells: 2.5, kettlebells: 4 };
+     bottom of its range. A vest (or a dip belt, or a loaded backpack) steps
+     like a dumbbell; a barbell by 5 kg, a 2.5 kg plate a side. All four are
+     guesses at the common case, and the weights you own override them. */
+  var LOAD_STEP_KG = { dumbbells: 2.5, kettlebells: 4, vest: 2.5, barbell: 5 };
 
   /* Ready to step up needs this many comparable sessions, on different days,
      with every working set at the top of the range and an effort in
@@ -304,6 +323,10 @@
        extra  { loadMode: "perHand" | "total", perSide: true } for loaded work.
               perHand: the number is what each hand holds. total: the whole
               load, a vest or one kettlebell held in both hands.
+              { timed: true } on a hold that is continuous movement, not a
+              still position (jump rope, flutter kicks). Every rule treats it
+              as a hold; only the words on screen change, so a rope set never
+              reads "hold".
      ------------------------------------------------------------------------ */
   var EXERCISES = {};
   function x(id, slot, branch, kind, equipment, next, offer, extra) {
@@ -547,8 +570,10 @@
      { kind, unit, sets, lo, hi, perSide } for one exercise, or null for an
      unknown id. A skill returns lo null, hi its standard (null if it has none)
      and `attempts` in place of a fixed set count. An eccentric also carries
-     `lowerSec`. `goal` ("strength" | "size" | "both") picks GOAL_RANGES for
-     the rep kinds; omitted, the range is RANGES'.
+     `lowerSec`, and a timed hold `timed: true`. An exercise in REP_RANGES
+     takes that range whatever the goal; otherwise `goal` ("strength" |
+     "size" | "both") picks GOAL_RANGES for the rep kinds, and omitted, the
+     range is RANGES'.
      ------------------------------------------------------------------------ */
   function rangeFor(id, goal) {
     var e = EXERCISES[id];
@@ -560,10 +585,14 @@
     }
     if (e.kind === "hold") {
       var h = HOLD_RANGES[id];
-      return h ? { kind: e.kind, unit: "sec", sets: SETS, lo: h[0], hi: h[1], perSide: false } : null;
+      if (!h) return null;
+      var hold = { kind: e.kind, unit: "sec", sets: SETS, lo: h[0], hi: h[1], perSide: false };
+      if (e.timed) hold.timed = true;
+      return hold;
     }
     var r = RANGES[e.kind];
-    if (SLOTS[e.slot] && SLOTS[e.slot].coverage && GOAL_KINDS.indexOf(e.kind) >= 0)
+    if (REP_RANGES[id] && (e.kind === "reps" || e.kind === "unilateral")) r = REP_RANGES[id];
+    else if (SLOTS[e.slot] && SLOTS[e.slot].coverage && GOAL_KINDS.indexOf(e.kind) >= 0)
       r = COVERAGE_RANGES[COVERAGE_LIGHT_SLOTS.indexOf(e.slot) >= 0 ? "light" : "standard"];
     else if (GOAL_RANGES[goal] && GOAL_KINDS.indexOf(e.kind) >= 0 &&
         (goal !== "strength" || e.loadMode || SETUPS[id])) r = GOAL_RANGES[goal];
@@ -778,7 +807,7 @@
   var JOINTS = ["wrist", "elbow", "shoulder", "neck", "lowerBack", "hip", "knee", "ankle"];
 
   window.TRAINING_DATA = {
-    SETS: SETS, RANGES: RANGES, ECCENTRIC_LOWER_SEC: ECCENTRIC_LOWER_SEC,
+    SETS: SETS, RANGES: RANGES, REP_RANGES: REP_RANGES, ECCENTRIC_LOWER_SEC: ECCENTRIC_LOWER_SEC,
     GOAL_RANGES: GOAL_RANGES, GOAL_KINDS: GOAL_KINDS, GOAL_REST_SEC: GOAL_REST_SEC,
     COVERAGE_RANGES: COVERAGE_RANGES, COVERAGE_LIGHT_SLOTS: COVERAGE_LIGHT_SLOTS,
     HOLD_RANGES: HOLD_RANGES, SKILL_ATTEMPTS: SKILL_ATTEMPTS,

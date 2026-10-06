@@ -34,7 +34,8 @@ const BATCHES = {
   a:  ["push", "shoulder", "dip"],
   b:  ["row", "pull", "squat", "hinge", "core"],
   c1: ["curl", "lateral", "reardelt", "cuff", "traps", "neck", "grip"],
-  c2: ["quad", "hamstring", "calf", "shin", "adductor", "abductor", "antirot", "backext"]
+  c2: ["quad", "hamstring", "calf", "shin", "adductor", "abductor", "antirot", "backext"],
+  d:  ["conditioning"]
 };
 
 /* Field rules. Lengths are characters per string; counts are list items. */
@@ -48,6 +49,9 @@ const FIELDS = {
   feel:       { kind: "feel" },
   mistakes:   { kind: "mistakes", count: [2, 4] },
   safety:     { kind: "list", count: [1, 3] },
+  // "Before you start": a self-check, never a gate. Optional until plan step 3.5
+  // (W12) writes it on all 150 existing guides, then it becomes required.
+  prereq:     { kind: "list", count: [1, 3], optional: true, noDigits: true },
   variations: { kind: "variations", optional: true }
 };
 
@@ -163,6 +167,7 @@ for (const [id, c] of Object.entries(all)) {
       if (!Array.isArray(v)) { bad(k, "isn't a list"); continue; }
       if (v.length < rule.count[0] || v.length > rule.count[1]) bad(k, `has ${v.length} items (${rule.count[0]}–${rule.count[1]})`);
       v.forEach((item, i) => {
+        if (rule.noDigits && /\d/.test(item)) bad(`${k}[${i}]`, "has a number; a prerequisite is words, not a prescription");
         if (rule.kind === "list") return text(`${k}[${i}]`, item);
         if (!item || typeof item !== "object" || Object.keys(item).sort().join() !== "fix,mistake") return bad(`${k}[${i}]`, "isn't { mistake, fix }");
         text(`${k}[${i}].mistake`, item.mistake);
@@ -242,7 +247,7 @@ for (const b of Object.keys(BATCHES)) {
   if (!html.includes(`src="${f}"`)) shipProblems.push(`index.html doesn't load ${f}`);
   if (!sw.includes(`"./${f}"`)) shipProblems.push(`PRECACHE lacks ${f}`);
 }
-report("shipped", shipProblems, "4 script tags and 4 PRECACHE entries");
+report("shipped", shipProblems, `${Object.keys(BATCHES).length} script tags and ${Object.keys(BATCHES).length} PRECACHE entries`);
 
 if (failed) { console.log(`\n${failed} check(s) failed`); process.exit(1); }
 console.log("\nall passed");

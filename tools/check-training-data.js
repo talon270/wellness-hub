@@ -20,8 +20,10 @@
  *      it maps to exists.
  *   6. The two Stage 2 movements have a DB entry, a muscle map row and a phase
  *      entry, and every phase entry is well formed.
- *   7. The nine equipment tokens, and the exercises plan C5 moved onto the four
- *      new ones (bands, parallettes, dipBars, lowBar), exactly as written.
+ *   7. The fifteen equipment tokens, each labelled, and the exercises plan C5
+ *      moved onto four of them (bands, parallettes, dipBars, lowBar), exactly
+ *      as written. v7's six (plans/PLAN-yellow-dude.md) need only a label
+ *      until Stage 2 gives them exercises.
  *   8. Grips: the capable exercises exist, are push-ups, and carry no setup
  *      that would clash with a grip; the pain swaps that name a grip.
  *   9. Joint stress: every exercise has an entry, every joint is reachable,
@@ -65,7 +67,8 @@ const fail = (msg) => { failed = true; console.error("  ✗ " + msg); };
 const ok = (msg) => console.log("  ✓ " + msg);
 const section = (t) => console.log("\n" + t);
 const TOKENS = new Set(["pullupBar", "dumbbells", "bench", "kettlebells", "rings",
-  "bands", "parallettes", "dipBars", "lowBar"]);
+  "bands", "parallettes", "dipBars", "lowBar",
+  "vest", "abWheel", "jumpRope", "box", "barbell", "nordicAnchor"]);
 const flat = (eq) => [].concat(...eq.map((t) => (Array.isArray(t) ? t : [t])));
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 
@@ -182,9 +185,21 @@ section("equipment, units and ranges");
     if (!r) bad.push(`${id}: rangeFor returned null`);
     else if (r.kind !== "skill" && !(r.lo > 0 && r.lo < r.hi)) bad.push(`${id}: range ${r.lo}–${r.hi}`);
     else if (r.kind === "skill" && r.hi !== null && !(r.hi > 0)) bad.push(`${id}: skill standard ${r.hi}`);
+    if (e.timed && e.kind !== "hold") bad.push(`${id}: timed is only for a hold, not ${e.kind}`);
+  }
+  /* An exercise's own rep range (plans/PLAN-yellow-dude.md, A3): a real reps
+     or unilateral exercise, whole numbers, the top at least 2 above the
+     bottom, as customError asks of a custom range. */
+  for (const [id, rr] of Object.entries(TD.REP_RANGES || {})) {
+    const e = EX[id];
+    if (!e) bad.push(`REP_RANGES: ${id} is not an exercise`);
+    else if (e.kind !== "reps" && e.kind !== "unilateral") bad.push(`REP_RANGES: ${id} is ${e.kind}; only reps and unilateral take one`);
+    if (!(Array.isArray(rr) && rr.length === 2 && rr.every(Number.isInteger) && rr[0] >= 1 && rr[1] - rr[0] >= 2))
+      bad.push(`REP_RANGES: ${id} is ${JSON.stringify(rr)}`);
   }
   bad.forEach(fail);
-  if (!bad.length) ok("equipment, hold-vs-reps, loaded fields and every range check out against EXERCISE_DB");
+  if (!bad.length) ok(`equipment, hold-vs-reps, loaded fields, timed flags and every range check out against EXERCISE_DB; ` +
+    `${Object.keys(TD.REP_RANGES || {}).length} REP_RANGES entries`);
 
   // hold ranges: exactly the hold exercises, and the engine's numbers
   const holds = Object.keys(EX).filter((id) => EX[id].kind === "hold");
@@ -302,7 +317,7 @@ section("equipment tokens");
   if (!lm) bad.push("could not find EQUIP_LABEL in basalt.js");
   for (const t of TOKENS) if (!labels[t]) bad.push(`EQUIP_LABEL has no label for ${t}`);
   bad.forEach(fail);
-  if (!bad.length) ok(`${Object.keys(C5).length} exercises carry plan C5's tokens; all ${TOKENS.size} tokens are used and labelled`);
+  if (!bad.length) ok(`${Object.keys(C5).length} exercises carry plan C5's tokens, all four used; all ${TOKENS.size} tokens labelled`);
 }
 
 /* -- 9. grips --------------------------------------------------------------- */

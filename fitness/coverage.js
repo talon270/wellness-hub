@@ -9,7 +9,10 @@
    · status(sessions, today, planned)   per group: floor, direct, planned,
                                         shortfall, lastDay, daysSince
    · pick(sessions, today, o)           the slots to train, best first, each
-                                        with its rx and the reason in words
+                                        with its rx and the reason in words.
+                                        A `conditioning` slot trains no one
+                                        group, so it is picked only when
+                                        pinned for today, with group null
 
    GLOBALS EXPOSED
      window.Coverage   (needs TRAINING_DATA and the muscles.data.js globals)
@@ -128,17 +131,20 @@
     var pins = o.pins || {}, picks = [], rest = [];
     Object.keys(SLOTS).forEach(function (slot, order) {
       if (!SLOTS[slot].coverage) return;
-      /* The group a slot tops up: its most-short one. Every slot trains one. */
-      var g = SLOTS[slot].trains.map(function (k) { return st[k]; })
+      /* A conditioning slot tops up no muscle, so no shortfall can ask for it:
+         it runs only on a day you pinned it to. Every other slot trains at
+         least one group, and the group it tops up is its most-short one. */
+      var cond = !!SLOTS[slot].conditioning;
+      var g = cond ? null : SLOTS[slot].trains.map(function (k) { return st[k]; })
         .sort(function (a, b) { return ratio(b) - ratio(a); })[0];
       var pin = pins[slot], pinned = !!(pin && Array.isArray(pin.days) && pin.days.indexOf(wd) >= 0);
-      if (!pinned && (g.shortfall <= 0 || (g.daysSince != null && g.daysSince < REST_DAYS))) return;
+      if (!pinned && (cond || g.shortfall <= 0 || (g.daysSince != null && g.daysSince < REST_DAYS))) return;
       var rx = o.rxFor ? o.rxFor(slot) : null;
       if (!rx) return;
-      var row = { slot: slot, group: g.key, rx: rx, pinned: pinned, shortfall: g.shortfall,
+      var row = { slot: slot, group: g ? g.key : null, rx: rx, pinned: pinned, shortfall: g ? g.shortfall : 0,
                   reason: (pinned ? "Pinned for " + pin.days.map(function (d) { return WEEKDAY[d]; }).join(", ") +
-                           " — " : "") + sentence(g),
-                  _r: ratio(g), _d: g.daysSince == null ? Infinity : g.daysSince, _o: order };
+                           " — " : "") + (g ? sentence(g) : "conditioning, not counted against any one muscle"),
+                  _r: g ? ratio(g) : 0, _d: !g || g.daysSince == null ? Infinity : g.daysSince, _o: order };
       (pinned ? picks : rest).push(row);
     });
     rest.sort(function (a, b) { return (b._r - a._r) || (b._d - a._d) || (a._o - b._o); });

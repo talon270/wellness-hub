@@ -1545,6 +1545,8 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 .dx-tags, .dx-joints { display: flex; flex-wrap: wrap; gap: 4px; }
 .dx-summary { margin: 0 0 var(--sp-3); font-size: var(--fs-md); color: var(--text-100); }
 .dx-block { margin-top: var(--sp-4); }
+/* "Before you start" leads the page, so the summary that follows it needs its own gap. */
+.dx-block + .dx-summary { margin-top: var(--sp-4); }
 .dx-block p { margin: 0 0 var(--sp-2); }
 .dx-h { margin: 0 0 var(--sp-2); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: .06em; color: var(--text-500); }
 .dx-steps { margin: 0; padding-left: 1.25rem; display: grid; gap: var(--sp-2); }

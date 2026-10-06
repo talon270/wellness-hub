@@ -71,6 +71,16 @@ WELLNESS HUB · WORKOUT REGRESSION HARNESS
              was left by the nav, a loaded movement's history and best, one
              render per row click, the nav bar's one row at 1440 px, and the
              muscle filter's screen-reader labels
+  · Y6-Y8    plans/PLAN-yellow-dude.md step 1.2, schema v7: the v6 fixture
+             (tools/fixtures/v6-midworkout.json) upgrades with the ankle
+             anchor inferred from a Nordic session or slot, everything else
+             byte-identical, and the Equipment check card naming the six
+             (Y6); a v7 save opened by the v6 build, b0bae7a, extracted with
+             git archive, is read-only (Y7); Settings and setup list the six
+             (Y8). The sync half, Y5, is in check-syncmerge.js
+  · Y9-Y10   R1's findings: a v5 card not yet shown survives the v7 upgrade,
+             and a device that showed it gets only the six (Y9); every
+             Settings equipment tile is one line (Y10)
 
 Retired in step 2.4 (W8), because Stage 2 removed what they measured; each
 reason is in plans/PROGRESS-workout-progression.md:
@@ -109,7 +119,9 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -142,7 +154,7 @@ def ist(y, mo, d, h=0, mi=0) -> datetime:
 class Session:
     """One fresh browser context, with the page errors it has collected."""
 
-    def __init__(self, pw, now=None, seed=None):
+    def __init__(self, pw, now=None, seed=None, url=None):
         self.browser = pw.chromium.launch()
         self.ctx = self.browser.new_context(
             viewport=VIEWPORT, timezone_id=TZ, locale="en-IN", service_workers="block")
@@ -161,7 +173,7 @@ class Session:
                 "if(!sessionStorage.getItem('__seeded')){"
                 "localStorage.setItem(%s,%s);sessionStorage.setItem('__seeded','1');}"
                 % (json.dumps(STORAGE_KEY), json.dumps(seed)))
-        self.pg.goto(INDEX_URL)
+        self.pg.goto(url or INDEX_URL)
         self.pg.wait_for_timeout(700)
 
     def close(self):
@@ -2062,6 +2074,7 @@ def h6(pw):
 # --- K9 · schema v5 (plans/PLAN-fitness-control-and-coverage.md, C6) ----------
 FIXTURE_V4 = ROOT / "tools" / "fixtures" / "v4-midworkout.json"
 V5_TOKENS = ("bands", "parallettes", "dipBars", "lowBar")
+V7_TOKENS = ("vest", "abWheel", "jumpRope", "box", "barbell", "nordicAnchor")
 
 
 def v4_fixture() -> dict:
@@ -2104,7 +2117,8 @@ def k9(pw):
             new_on = {k: eq.get(k) for k in V5_TOKENS}
             want_on = {k: k in want for k in V5_TOKENS}
             checks[label + ": version %s" % schema] = st["version"] == schema and schema >= 5
-            checks[label + ": tokens"] = new_on == want_on and all(eq.get(k) == v4["equipment"][k] for k in v4["equipment"])
+            checks[label + ": tokens"] = new_on == want_on and all(eq.get(k) == v4["equipment"][k] for k in v4["equipment"]) \
+                and all(eq.get(k) is False for k in V7_TOKENS)     # v7's six: no Nordic in this fixture
             checks[label + ": the check records why"] = inferred == want
             checks[label + ": dip slot owned %s" % dip_owned] = owned is dip_owned
             if label == "as saved":
@@ -2129,8 +2143,10 @@ def k9(pw):
                 to_fitness(s)
                 open_section(s, "program")
                 again_n = s.pg.locator("[data-eqcheck]").count()
-                checks["the card shows once, all four tokens listed"] = shown_n == 1 and ticks == {
-                    "dipBars": True, "lowBar": False, "bands": False, "parallettes": False} and again_n == 0
+                # v4 -> v7 runs both upgrades in one load, so one card names v5's four and v7's six
+                checks["the card shows once, v5's four and v7's six listed"] = shown_n == 1 and ticks == dict({
+                    "dipBars": True, "lowBar": False, "bands": False, "parallettes": False},
+                    **{k: False for k in V7_TOKENS}) and again_n == 0
                 shown.append("card: %d, ticks %s, after Looks right %d" % (shown_n, json.dumps(ticks), again_n))
             shown.append("%s: %s, dip owned %s" % (label, json.dumps(inferred), owned))
             errors += s.errors
@@ -2820,11 +2836,12 @@ def v5(pw):
             "v6 defaults: finisher off, no pins": st["prefs"].get("finisher") == "off" and tr.get("pins") == {},
             "other prefs unchanged": {k: v for k, v in st["prefs"].items() if k != "finisher"} == v5s["prefs"],
             "slots unchanged": tr["slots"] == v5s["training"]["slots"],
+            # equipmentCheck and v7's six equipment keys are the v6 -> v7 step's, which Y6 checks
             "decisions, exclusions, limits, grip unchanged": all(tr.get(k) == v5s["training"][k] for k in (
-                "decisions", "assessment", "exclusions", "limitations", "grip", "equipmentCheck")),
+                "decisions", "assessment", "exclusions", "limitations", "grip")),
             "history and equipment unchanged": all(st[k] == v5s[k] for k in (
                 "sessions", "prs", "tiers", "phaseHistory", "currentPhase", "benchmarks", "flagsHistory",
-                "equipment", "equipmentLoads", "recoveryBlocks")),
+                "equipmentLoads", "recoveryBlocks")) and all(st["equipment"][k] == v for k, v in v5s["equipment"].items()),
             "migrated twice is identical": twice,
             "the draft resumes": w and w["dayType"] == "legs" and [e["id"] for e in w["exercises"]] == ["squat_2", "hinge_2", "core_2"],
             "no coverage slot after Program, Today and a main workout":
@@ -3875,6 +3892,258 @@ def r4f(pw):
     finally:
         s.close()
 
+
+
+# --- Y6-Y8 · schema v7 (plans/PLAN-yellow-dude.md, step 1.2) -----------------
+# Y6 seeds the v6 fixture, which the b0bae7a build wrote by clicks; the card's
+# tick and Looks right are clicks. Y7 needs the v6 build itself, so it
+# extracts b0bae7a from this repository: without git or that commit it can't
+# run, and ERRORs rather than FAILs.
+FIXTURE_V6 = ROOT / "tools" / "fixtures" / "v6-midworkout.json"
+V6_BUILD = "b0bae7a"
+NORDICS = ("hinge_4", "hinge_5", "hinge_6")
+
+
+def v6_fixture() -> dict:
+    """localStorage as the b0bae7a build (v6) left it, mid-workout: the two keys."""
+    fx = json.loads(FIXTURE_V6.read_text())
+    return {k: v for k, v in fx.items() if not k.startswith("_")}
+
+
+def drop_nordic_sessions(v6: dict):
+    for x in v6["sessions"]:
+        x["exercises"] = [e for e in x["exercises"] if e.get("key") not in NORDICS]
+
+
+def eqcheck_rows(s: Session) -> list:
+    """The Equipment check card's rows in screen order: [token, ticked, its line]."""
+    return s.ev("""() => [...document.querySelectorAll('[data-eqcheck-tok]')].map(b =>
+        [b.dataset.eqcheckTok, b.checked, b.parentNode.innerText.replace(/\\s+/g, ' ').trim()])""")
+
+
+def jdump(v) -> str:
+    return json.dumps(v, ensure_ascii=False)
+
+
+@case("Y6", "v6 save -> v7: the ankle anchor from a Nordic session or slot, everything else byte-identical, the card names the six")
+def y6(pw):
+    hip_thrust = v5_fixture()[STORAGE_KEY]["training"]["slots"]["hinge"]   # hinge_2, as the v5 build wrote it
+    legs = [
+        ("as saved", lambda v: None, {"nordicAnchor": {"id": "hinge_4", "from": "session"}}, "you logged Nordic Curl Negative"),
+        ("Nordic slot, none logged", drop_nordic_sessions,
+         {"nordicAnchor": {"id": "hinge_4", "from": "slot"}}, "your hinge slot is Nordic Curl Negative"),
+        ("no Nordic anywhere", lambda v: (drop_nordic_sessions(v), v["training"]["slots"].update(hinge=hip_thrust)),
+         {}, "off — tick it if you have it"),
+    ]
+    checks, shown, errors = {}, [], []
+    for label, mutate, want, line in legs:
+        fx = v6_fixture()
+        v6 = fx[STORAGE_KEY]
+        mutate(v6)
+        if label == "as saved":
+            # this device dismissed v5's card long ago; v7's must still show once
+            fx["ironframe.ui"] = dict(fx["ironframe.ui"], **{"v5.equipmentCheckSeen": True})
+        anchor = "nordicAnchor" in want
+        s = Session(pw, now=ist(2026, 10, 6, 8, 0))
+        try:
+            seed_and_reload(s, fx)
+            st = s.state()
+            schema = s.ev("() => App.SCHEMA_VERSION")
+            eq, chk = st["equipment"], st["training"].get("equipmentCheck") or {}
+            checks[label + ": version %s" % schema] = st["version"] == schema and schema >= 7
+            checks[label + ": the nine unchanged, anchor %s, the other five off" % anchor] = \
+                all(eq.get(k) == v for k, v in v6["equipment"].items()) and eq.get("nordicAnchor") is anchor \
+                and all(eq.get(k) is False for k in V7_TOKENS if k != "nordicAnchor")
+            checks[label + ": the check records why and names the six"] = \
+                chk.get("inferred") == want and chk.get("tokens") == list(V7_TOKENS) and bool(chk.get("at"))
+            to_fitness(s)
+            open_section(s, "program")
+            rows = eqcheck_rows(s)
+            nordic_line = next((r[2] for r in rows if r[0] == "nordicAnchor"), "")
+            checks[label + ": the card lists the six, the anchor ticked %s" % anchor] = \
+                [r[0] for r in rows] == list(V7_TOKENS) and [r[0] for r in rows if r[1]] == (["nordicAnchor"] if anchor else []) \
+                and line in nordic_line
+            shown.append("%s: anchor %s, inferred %s, card %s, %r" % (
+                label, eq.get("nordicAnchor"), jdump(chk.get("inferred")), [r[0] for r in rows if r[1]] or "none ticked", nordic_line))
+            if label == "as saved":
+                twice = s.ev("""raw => { const a = App.migrate(JSON.parse(raw));
+                    return JSON.stringify(a) === JSON.stringify(App.migrate(JSON.parse(JSON.stringify(a)))); }""", jdump(v6))
+                s.tick('[data-eqcheck-tok="jumpRope"]')       # the card saves at once: the round trip's write
+                s.pg.wait_for_timeout(200)
+                saved = json.loads(s.raw())
+                ui = json.loads(s.ev("() => localStorage.getItem('ironframe.ui')"))
+                same = lambda a, b: jdump(a) == jdump(b)
+                diff = [k for k in v6 if k not in ("version", "equipment", "training", "meta") and not same(saved.get(k), v6[k])]
+                diff += ["training." + k for k in v6["training"] if k != "equipmentCheck" and not same(saved["training"].get(k), v6["training"][k])]
+                diff += ["meta." + k for k in v6["meta"] if k != "updatedAt" and not same(saved["meta"].get(k), v6["meta"][k])]
+                diff += ["equipment." + k for k in v6["equipment"] if saved["equipment"].get(k) is not v6["equipment"][k]]
+                extra = sorted(set(saved) - set(v6)) + ["training." + k for k in sorted(set(saved["training"]) - set(v6["training"]))]
+                checks["round trip: sessions, slots, PRs and every other key byte-identical"] = not diff and not extra \
+                    and saved["version"] == 7 and saved["equipment"].get("jumpRope") is True
+                checks["the mid-workout draft is untouched"] = same(ui.get("today.workout"), fx["ironframe.ui"]["today.workout"])
+                checks["migrated twice is identical"] = twice
+                s.tap("[data-eqcheck-ok]")
+                s.pg.reload()
+                s.pg.wait_for_timeout(700)
+                to_fitness(s)
+                open_section(s, "program")
+                again = s.pg.locator("[data-eqcheck]").count()
+                checks["Looks right: gone after a reload"] = again == 0
+                shown.append("round trip: differs in %s, extra %s; %d sessions, %d slots, %d PRs; after Looks right %d" % (
+                    diff or "nothing", extra or "none", len(saved["sessions"]), len(saved["training"]["slots"]), len(saved["prs"]), again))
+            errors += s.errors
+        finally:
+            s.close()
+    bad = [k for k, ok in checks.items() if not ok]
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "; ".join(shown), errors
+
+
+@case("Y7", "A v7 save opened by the v6 build (b0bae7a): read-only, the save untouched")
+def y7(pw):
+    s = Session(pw, now=ist(2026, 10, 6, 8, 0))
+    try:
+        seed_and_reload(s, v6_fixture())
+        to_fitness(s)
+        open_section(s, "program")
+        s.tick('[data-eqcheck-tok="vest"]')               # a real save, by this build
+        s.pg.wait_for_timeout(200)
+        raw, errors = s.raw(), list(s.errors)
+    finally:
+        s.close()
+    v7 = json.loads(raw)
+    with tempfile.TemporaryDirectory() as tmp:
+        tar = subprocess.run(["git", "-C", str(ROOT), "archive", V6_BUILD], check=True, capture_output=True).stdout
+        subprocess.run(["tar", "-x", "-C", tmp], input=tar, check=True)
+        old = Session(pw, now=ist(2026, 10, 6, 9, 0), seed=raw, url=pathlib.Path(tmp, "index.html").as_uri())
+        try:
+            build = old.ev("() => App.SCHEMA_VERSION")
+            to_fitness(old)
+            try_to_log(old)
+            kept = old.raw() == raw
+            banner = banner_visible(old, BANNER_NEWER)
+            ok = v7.get("version") == 7 and v7["equipment"].get("vest") is True and build == 6 and kept and banner
+            return ok, "saved at v%s with vest %s; opened by a v%s build: key unchanged=%s, banner=%s" % (
+                v7.get("version"), v7["equipment"].get("vest"), build, kept, banner), errors + old.errors
+        finally:
+            old.close()
+
+
+@case("Y8", "Setup and Settings list v7's six items; a tick in each reaches the saved equipment")
+def y8(pw):
+    s = Session(pw, now=ist(2026, 10, 6, 12, 0))
+    try:
+        to_fitness(s)
+        for _ in range(3):
+            s.tap('#onb-body [data-onb="next"]')
+        setup = s.ev("() => [...document.querySelectorAll('#onb-body [data-equip]')].map(b => [b.dataset.equip, b.innerText.trim()])")
+        s.tap('#onb-body [data-equip="box"]')
+        s.tap('#onb-body [data-equip="nordicAnchor"]')
+        s.tap('#onb-body [data-onb="next"]')
+        s.tap('#onb-body [data-onb="next"]')
+        s.tap('[data-onb="finish"]')
+        s.pg.wait_for_timeout(400)
+        from_setup = {k: s.state()["equipment"].get(k) for k in V7_TOKENS}
+        s.tap("#btn-settings")
+        s.pg.wait_for_timeout(300)
+        settings = s.ev("""() => [...document.querySelectorAll('#set-equip [data-equip]')].map(b =>
+            [b.dataset.equip, b.innerText.trim(), b.getAttribute('aria-pressed')])""")
+        s.tap('#set-equip [data-equip="vest"]')
+        s.tap('#set-equip [data-equip="nordicAnchor"]')
+        s.tap("#btn-settings-save")
+        s.pg.wait_for_timeout(400)
+        from_settings = {k: s.state()["equipment"].get(k) for k in V7_TOKENS}
+        on = lambda *ks: {k: k in ks for k in V7_TOKENS}
+        named = lambda rows: next((r[1] for r in rows if r[0] == "nordicAnchor"), "")
+        checks = {
+            "setup lists the six, before Just the floor": [r[0] for r in setup if r[0] in V7_TOKENS] == list(V7_TOKENS)
+                and setup[-1][0] == "nothing",
+            "setup saves the box and the anchor, the rest off": from_setup == on("box", "nordicAnchor"),
+            "Settings lists the six, the two from setup pressed": [r[0] for r in settings if r[0] in V7_TOKENS] == list(V7_TOKENS)
+                and [r[0] for r in settings if r[0] in V7_TOKENS and r[2] == "true"] == ["box", "nordicAnchor"],
+            "Settings saves the vest on and the anchor off": from_settings == on("vest", "box"),
+            "the anchor says what it is for, on both screens": "Nordic" in named(setup) and "Nordic" in named(settings),
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
+            "setup %s; saved %s; Settings %s; saved %s" % (
+                [r[1] for r in setup if r[0] in V7_TOKENS], [k for k, v in from_setup.items() if v],
+                [r[1] for r in settings if r[0] in V7_TOKENS], [k for k, v in from_settings.items() if v]), s.errors
+    finally:
+        s.close()
+
+
+# --- Y9-Y10 · R1's findings (plans/PLAN-yellow-dude.md, step 1.4) -------------
+V5_ORDER = ("dipBars", "lowBar", "bands", "parallettes")   # the card's order, and the record's
+
+
+def v6_with_v5_card() -> dict:
+    """The v6 fixture with a v5 Equipment check record still on it: dip bars
+    turned on by a logged dip, as the v5 upgrade wrote it."""
+    fx = v6_fixture()
+    st = fx[STORAGE_KEY]
+    st["equipment"]["dipBars"] = True
+    st["training"]["equipmentCheck"] = {"at": "2026-10-03T08:00:00.000Z",
+                                        "inferred": {"dipBars": {"id": "dip_3", "from": "session"}}}
+    return fx
+
+
+@case("Y9", "A v5 card this device hasn't shown survives v7, as one card of ten; a device that showed it gets the six")
+def y9(pw):
+    checks, shown, errors = {}, [], []
+    for label, seen in (("v5 card not yet shown", False), ("v5 card already shown", True)):
+        fx = v6_with_v5_card()
+        if seen:
+            fx["ironframe.ui"] = dict(fx["ironframe.ui"], **{"v5.equipmentCheckSeen": True})
+        s = Session(pw, now=ist(2026, 10, 6, 8, 0))
+        try:
+            seed_and_reload(s, fx)
+            chk = s.state()["training"].get("equipmentCheck") or {}
+            to_fitness(s)
+            open_section(s, "program")
+            rows = eqcheck_rows(s)
+            dip = next((r[2] for r in rows if r[0] == "dipBars"), "")
+            want = (list(V5_ORDER) if not seen else []) + list(V7_TOKENS)
+            checks[label + ": the record keeps v5's four and why"] = chk.get("tokens") == list(V5_ORDER) + list(V7_TOKENS) \
+                and (chk.get("inferred") or {}).get("dipBars") == {"id": "dip_3", "from": "session"} \
+                and (chk.get("inferred") or {}).get("nordicAnchor", {}).get("id") == "hinge_4"
+            checks[label + ": the card lists %d" % len(want)] = [r[0] for r in rows] == want \
+                and (seen or "you logged Parallel Bar Dip" in dip)
+            shown.append("%s: card %s%s" % (label, [r[0] for r in rows], ", %r" % dip if dip else ""))
+            errors += s.errors
+        finally:
+            s.close()
+    bad = [k for k, ok in checks.items() if not ok]
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "; ".join(shown), errors
+
+
+@case("Y10", "Every Settings equipment tile is one line, at 390 and 1440 px")
+def y10(pw):
+    global VIEWPORT
+    saved, shown, bad, errors = VIEWPORT, [], [], []
+    try:
+        for w, h in ((390, 844), (1440, 950)):
+            VIEWPORT = {"width": w, "height": h}
+            s = Session(pw, now=ist(2026, 10, 6, 12, 0))
+            try:
+                onboard(s)
+                if s.pg.locator("#btn-settings").is_visible():
+                    open_settings(s)
+                else:
+                    s.tap("#fit-toggle")
+                    s.tap("#fit-panel [data-fitsetup]")
+                    s.pg.wait_for_timeout(300)
+                tiles = s.ev("""() => [...document.querySelectorAll('#set-equip [data-equip]')].map(b =>
+                    [b.dataset.equip, Math.round(b.getBoundingClientRect().height)])""")
+                tall = [t for t in tiles if t[1] != tiles[0][1]] if tiles else ["no tiles"]
+                if tall:
+                    bad.append("%d px: %s" % (w, tall))
+                shown.append("%d px: %d tiles, height %s" % (w, len(tiles), sorted({t[1] for t in tiles})))
+                errors += s.errors
+            finally:
+                s.close()
+    finally:
+        VIEWPORT = saved
+    return not bad, ("taller than the rest: " + "; ".join(bad) + " | " if bad else "") + "; ".join(shown), errors
 
 
 def main() -> int:

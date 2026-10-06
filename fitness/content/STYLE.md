@@ -1,6 +1,6 @@
 # Exercise guides — schema and style guide
 
-Written 2026-10-06 (plan step 4.3) for the four batch files beside it. Read this and the 12 exemplars before writing a guide. `node tools/check-exercise-content.js` enforces everything marked **(checked)**. A reviewer has to read for the rest.
+Written 2026-10-06 (plan step 4.3) for the batch files beside it. Read this and the 12 exemplars before writing a guide. `node tools/check-exercise-content.js` enforces everything marked **(checked)**. A reviewer has to read for the rest.
 
 **A guide teaches the movement and nothing else.** The app already knows your prescription, your ladder and your muscles. The guide covers what the app can't work out: how to set up, how a good rep moves, where you should feel it, and when to stop. If a sentence could go out of date when the rules change, it doesn't belong here.
 
@@ -18,9 +18,12 @@ Written 2026-10-06 (plan step 4.3) for the four batch files beside it. Read this
 | `feel` | `{ should, shouldnt }` | 15–240 each | Where the work should land, and where it shouldn't |
 | `mistakes` | list of `{ mistake, fix }` | 2–4 | The error as you'd notice it, and the one change that fixes it |
 | `safety` | list | 1–3 items | Who should skip or change it, and the sign to stop |
+| `prereq` | list | 1–3 items, **optional until the last guide is done** | What you should already be able to do, and what a support must be, in words |
 | `variations` | `{ grip?, alternatives? }` | optional | See below |
 
 Every string is 15–240 characters unless the table says otherwise, has no stray whitespace and ends with a full stop, question mark or exclamation mark **(checked)**. No other fields **(checked)**.
+
+**`prereq`** prints first on the page as **Before you start**, and prints nothing when a guide has none. It is a self-check written down: text, never a gate, and nothing in the app reads it. **No numbers (checked):** "a clean set of the rung before" is allowed, "ten push-ups" is not. Name a support by what it must do ("a table that doesn't slide"), because furniture is never an equipment token. It becomes required on all guides in plan step 3.5.
 
 **`variations.grip.knuckles`**: 2–4 lines, on the six grip-capable push-ups and only there (`GRIPS.exercises`) **(checked both ways)**. It covers the front two knuckles, a straight wrist, starting on a mat or folded towel, and what changes compared with palms.
 
@@ -62,6 +65,7 @@ Each file adds to the same global and marks its own state. The checker owns whic
 | `batch-b.js` | row, pull, squat, hinge, core | 47 |
 | `batch-c1.js` | curl, lateral, reardelt, cuff, traps, neck, grip | 29 |
 | `batch-c2.js` | quad, hamstring, calf, shin, adductor, abductor, antirot, backext | 35 |
+| `batch-d.js` | conditioning | 0 until plan step 2.4 adds the slot and its exercises |
 
 **Mark the batch `"complete"` in the same edit that writes its last guide.** A pending batch with every guide written fails, and so does a complete batch with one missing **(checked)**.
 
