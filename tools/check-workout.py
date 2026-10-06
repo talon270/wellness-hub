@@ -3687,12 +3687,12 @@ def d7(pw):
         page = pg.evaluate("""() => { if (!window.App || !App.directory) return { h1: null, guides: 0, map: false, knuckles: false };
             App.directory.open('push_2');
             return { h1: document.querySelector('#view-exercises h1').innerText.trim(),
-                     guides: Object.keys(EXERCISE_CONTENT).length, map: !!window.BODY_MAP,
+                     guides: Object.keys(EXERCISE_CONTENT).length, movements: Object.keys(EXERCISE_DB).length, map: !!window.BODY_MAP,
                      knuckles: /knuckles/i.test(document.getElementById('view-exercises').innerText) }; }""")
         checks = {
             "every fitness and vendor script in index.html is in PRECACHE": not missing,
             "the new files come from the worker, status 200, offline": new_files and not not_cached,
-            "the directory runs offline: Push-up's page, 150 guides, the map": page["h1"] == "Push-up" and page["guides"] == 150 and page["map"] and page["knuckles"],
+            "the directory runs offline: Push-up's page, a guide per movement, the map": page["h1"] == "Push-up" and page["guides"] == page["movements"] and page["map"] and page["knuckles"],
         }
         bad = [k for k, ok in checks.items() if not ok]
         return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \

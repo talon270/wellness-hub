@@ -18,12 +18,12 @@ Written 2026-10-06 (plan step 4.3) for the batch files beside it. Read this and 
 | `feel` | `{ should, shouldnt }` | 15–240 each | Where the work should land, and where it shouldn't |
 | `mistakes` | list of `{ mistake, fix }` | 2–4 | The error as you'd notice it, and the one change that fixes it |
 | `safety` | list | 1–3 items | Who should skip or change it, and the sign to stop |
-| `prereq` | list | 1–3 items, **optional until the last guide is done** | What you should already be able to do, and what a support must be, in words |
+| `prereq` | list | 1–3 items, **required** (checked) | What you should already be able to do, and what a support must be, in words |
 | `variations` | `{ grip?, alternatives? }` | optional | See below |
 
 Every string is 15–240 characters unless the table says otherwise, has no stray whitespace and ends with a full stop, question mark or exclamation mark **(checked)**. No other fields **(checked)**.
 
-**`prereq`** prints first on the page as **Before you start**, and prints nothing when a guide has none. It is a self-check written down: text, never a gate, and nothing in the app reads it. **No numbers (checked):** "a clean set of the rung before" is allowed, "ten push-ups" is not. Name a support by what it must do ("a table that doesn't slide"), because furniture is never an equipment token. It becomes required on all guides in plan step 3.5.
+**`prereq`** prints first on the page as **Before you start**, and prints nothing when a record has none, which the checker no longer lets a guide do. It is a self-check written down: text, never a gate, and nothing in the app reads it. **No numbers (checked):** "a clean set of the rung before" is allowed, "ten push-ups" is not. Name a support by what it must do ("a table that doesn't slide"), because furniture is never an equipment token. It is required on every guide since plan step 3.5.
 
 **`variations.grip.knuckles`**: 2–4 lines, on the six grip-capable push-ups and only there (`GRIPS.exercises`) **(checked both ways)**. It covers the front two knuckles, a straight wrist, starting on a mat or folded towel, and what changes compared with palms.
 
@@ -61,11 +61,13 @@ Each file adds to the same global and marks its own state. The checker owns whic
 
 | File | Slots | Exercises |
 |---|---|---|
-| `batch-a.js` | push, shoulder, dip | 39 |
-| `batch-b.js` | row, pull, squat, hinge, core | 47 |
-| `batch-c1.js` | curl, lateral, reardelt, cuff, traps, neck, grip | 29 |
-| `batch-c2.js` | quad, hamstring, calf, shin, adductor, abductor, antirot, backext | 35 |
-| `batch-d.js` | conditioning | 0 until plan step 2.4 adds the slot and its exercises |
+| `batch-a.js` | push, shoulder, dip | 66 |
+| `batch-b.js` | row, pull, squat, hinge, core | 106 |
+| `batch-c1.js` | curl, lateral, reardelt, cuff, traps, neck, grip | 35 |
+| `batch-c2.js` | quad, hamstring, calf, shin, adductor, abductor, antirot, backext | 43 |
+| `batch-d.js` | conditioning | 13 |
+
+The counts are as of the Yellow Dude catalogue (2026-10-06). The checker's "shipped" line is the live figure.
 
 **Mark the batch `"complete"` in the same edit that writes its last guide.** A pending batch with every guide written fails, and so does a complete batch with one missing **(checked)**.
 

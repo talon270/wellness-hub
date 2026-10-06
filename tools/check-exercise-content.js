@@ -49,9 +49,9 @@ const FIELDS = {
   feel:       { kind: "feel" },
   mistakes:   { kind: "mistakes", count: [2, 4] },
   safety:     { kind: "list", count: [1, 3] },
-  // "Before you start": a self-check, never a gate. Optional until plan step 3.5
-  // (W12) writes it on all 150 existing guides, then it becomes required.
-  prereq:     { kind: "list", count: [1, 3], optional: true, noDigits: true },
+  // "Before you start": a self-check, never a gate. Required since plan step
+  // 3.5 wrote it on the 150 guides that predated it.
+  prereq:     { kind: "list", count: [1, 3], noDigits: true },
   variations: { kind: "variations", optional: true }
 };
 

@@ -14,9 +14,13 @@
   "use strict";
   var C = window.EXERCISE_CONTENT = window.EXERCISE_CONTENT || {};
   var B = window.EXERCISE_CONTENT_BATCHES = window.EXERCISE_CONTENT_BATCHES || {};
-  B.a = "pending";
+  B.a = "complete";
 
   C.push_2 = {
+    prereq: [
+      "A controlled incline or knee push-up.",
+      "A straight-body plank you can hold without your hips sagging."
+    ],
     summary: "A horizontal press from the floor that trains your chest and triceps while your whole body holds one rigid line.",
     setup: [
       "Place your hands on the floor just wider than your shoulders, fingers spread, index fingers pointing forward.",
@@ -64,6 +68,10 @@
   };
 
   C.push_incline = {
+    prereq: [
+      "A comfortable wall push-up.",
+      "A firm, high support for your hands that won't slide."
+    ],
     summary: "A push-up with your hands raised on a sturdy surface, so you press a smaller share of your bodyweight while learning the full movement.",
     setup: [
       "Choose a surface that cannot slide or tip, such as a kitchen counter, a heavy table, a chair against a wall or a stair.",
@@ -105,6 +113,10 @@
   };
 
   C.shoulder_1 = {
+    prereq: [
+      "A stable pike hold on the floor.",
+      "Shoulders and wrists that tolerate loading overhead."
+    ],
     summary: "A push-up done from a hips-high pike so you press upward rather than forward, the first step toward overhead strength without weights.",
     setup: [
       "Start in a push-up position, hands just wider than your shoulders.",
@@ -138,6 +150,10 @@
   };
 
   C.dip_3 = {
+    prereq: [
+      "A comfortable support hold on straight arms.",
+      "A controlled dip on an easier support, such as chairs or a bench."
+    ],
     summary: "A press on two parallel bars that lifts your whole bodyweight, mostly with your triceps and lower chest.",
     setup: [
       "Grip the bars with your palms facing in and jump or step up until your arms are straight.",
@@ -171,6 +187,9 @@
   };
 
   C.push_1 = {
+    prereq: [
+      "Comfortable standing, with your hands lightly loaded against a wall."
+    ],
     summary: "A push-up done standing against a wall, the lightest way to learn the pressing pattern and the rigid body line.",
     setup: [
       "Stand about an arm's length from a wall, feet hip-width apart.",
@@ -212,6 +231,10 @@
   };
 
   C.push_3 = {
+    prereq: [
+      "A comfortable close-hand push-up.",
+      "Wrists that tolerate the narrower hand position."
+    ],
     summary: "A push-up with your hands together under your chest, which shifts more of the work onto your triceps.",
     setup: [
       "Start in a push-up position and bring your hands together under your chest.",
@@ -243,6 +266,10 @@
   };
 
   C.push_4 = {
+    prereq: [
+      "A comfortable standard push-up.",
+      "A controlled plank with your feet raised on a firm support."
+    ],
     summary: "A push-up with your feet raised on a bench, so more of your bodyweight loads your shoulders and upper chest.",
     setup: [
       "Place your feet on a stable bench and your hands on the floor just wider than your shoulders.",
@@ -286,6 +313,10 @@
   };
 
   C.push_5 = {
+    prereq: [
+      "A strong, clean push-up.",
+      "The control to shift your weight toward one arm without twisting."
+    ],
     summary: "A wide push-up where you lower toward one arm while the other stays straight, a step toward pressing on a single arm.",
     setup: [
       "Start in a push-up position with your hands much wider than your shoulders.",
@@ -317,6 +348,10 @@
   };
 
   C.push_6 = {
+    prereq: [
+      "A comfortable push-up.",
+      "Wrists that tolerate leaning forward over your hands."
+    ],
     summary: "A push-up with your hands near your hips and your shoulders leaning well forward, which loads your shoulders and wrists far more.",
     setup: [
       "Start in a push-up position, then move your hands back until they sit beside your lower ribs or hips.",
@@ -348,6 +383,10 @@
   };
 
   C.push_e2_weighted = {
+    prereq: [
+      "A comfortable standard push-up.",
+      "A load you can keep secure on your back without it sliding or your hips sagging."
+    ],
     summary: "A push-up with extra weight resting across your upper back, for when bodyweight push-ups no longer challenge you.",
     setup: [
       "Choose a weight you can place across your upper back without it sliding, such as a plate or a loaded backpack.",
@@ -379,6 +418,10 @@
   };
 
   C.push_e2_dbpress = {
+    prereq: [
+      "Comfortable shoulders when pressing a pair of dumbbells away from your chest.",
+      "A bench or floor position that holds you steady."
+    ],
     summary: "A press lying on a bench or the floor with a dumbbell in each hand, easy on the wrists and simple to load in small steps.",
     setup: [
       "Lie on a bench or the floor with a dumbbell in each hand, held above your chest with your palms facing your feet.",
@@ -412,6 +455,10 @@
   };
 
   C.push_alt_scapula = {
+    prereq: [
+      "The strength to hold a straight-arm plank.",
+      "Enough control to move your shoulder blades without bending your elbows."
+    ],
     summary: "A small movement in a straight-arm plank that trains your shoulder blades to move on their own, without bending your elbows.",
     setup: [
       "Start in a tall plank with your hands under your shoulders and your arms straight.",
@@ -443,6 +490,10 @@
   };
 
   C.push_alt_wide = {
+    prereq: [
+      "A comfortable standard push-up.",
+      "Shoulders that tolerate a wider hand position."
+    ],
     summary: "A push-up with your hands wider than your shoulders, which shifts more of the work onto your chest and away from your triceps.",
     setup: [
       "Place your hands on the floor noticeably wider than your shoulders, fingers turned slightly outward.",
@@ -484,6 +535,10 @@
   };
 
   C.push_alt_negative = {
+    prereq: [
+      "The ability to reach the top push-up position.",
+      "The control to lower slowly rather than drop."
+    ],
     summary: "A push-up where you take the lowering part as slowly as you can, which builds the strength to complete a full rep.",
     setup: [
       "Start at the top of a push-up with your arms straight and hands just wider than your shoulders.",
@@ -524,6 +579,10 @@
   };
 
   C.push_alt_explosive = {
+    prereq: [
+      "Fast, clean standard push-ups.",
+      "A controlled landing on your hands when they leave the floor."
+    ],
     summary: "A push-up pressed up fast enough that your hands leave the floor, which trains speed in the press rather than slow strength.",
     setup: [
       "Start in a strong push-up position, hands just wider than your shoulders, on a surface that won't slip.",
@@ -555,6 +614,10 @@
   };
 
   C.push_alt_onearm = {
+    prereq: [
+      "A strong archer push-up or assisted one-arm push-up.",
+      "The control to resist rotation through your full range."
+    ],
     summary: "A push-up pressed on a single arm, the hardest horizontal press you can do without equipment.",
     setup: [
       "Start in a push-up position with your feet wider than your shoulders for a stable base.",
@@ -586,6 +649,10 @@
   };
 
   C.push_alt_tricep = {
+    prereq: [
+      "A controlled plank.",
+      "Elbows that extend without pain."
+    ],
     summary: "A plank-lean extension against a bench that bends only at the elbows, to isolate your triceps.",
     setup: [
       "Place your hands on the edge of a stable bench, a little narrower than your shoulders.",
@@ -617,6 +684,10 @@
   };
 
   C.shoulder_2 = {
+    prereq: [
+      "A controlled floor pike push-up.",
+      "A firm support for your feet that won't slide."
+    ],
     summary: "A pike push-up with your feet raised on a bench, which stacks your hips over your shoulders and moves the press closer to vertical.",
     setup: [
       "Place your feet on a stable bench and your hands on the floor just wider than your shoulders.",
@@ -648,6 +719,10 @@
   };
 
   C.shoulder_3 = {
+    prereq: [
+      "A stable elevated pike position.",
+      "A clear wall and a safe way to come back down."
+    ],
     summary: "A held handstand with your feet resting on a wall, to build the shoulder strength and straight line a free handstand needs.",
     setup: [
       "Choose a clear stretch of wall and a floor that won't slip, and warm up your wrists first.",
@@ -680,6 +755,10 @@
   };
 
   C.shoulder_4 = {
+    prereq: [
+      "A steady wall handstand hold.",
+      "A clear floor and wall, and a safe way out if you lose balance."
+    ],
     summary: "The entry into a handstand: kick up from a lunge and find your balance, using the wall to stop you falling over.",
     setup: [
       "Clear the floor and place your hands a short distance from the wall, shoulder-width apart, fingers spread.",
@@ -711,6 +790,11 @@
   };
 
   C.shoulder_5 = {
+    prereq: [
+      "A stable wall handstand.",
+      "Pike pressing that feels controlled.",
+      "A clear space to bail out of if you tire."
+    ],
     summary: "The lowering half of a handstand push-up, taken as slowly as you can, to build the strength for the full press.",
     setup: [
       "Clear the floor and set a mat or folded towels beneath your head so you can touch down lightly.",
@@ -742,6 +826,10 @@
   };
 
   C.shoulder_6 = {
+    prereq: [
+      "Controlled handstand push-up negatives.",
+      "A reliable way to bail out of the position."
+    ],
     summary: "A push-up upside down against a wall: you lower your head to the floor and press back up to straight arms.",
     setup: [
       "Clear the floor, place a mat under your head, and kick up to a wall handstand with your hands about shoulder-width apart.",
@@ -773,6 +861,10 @@
   };
 
   C.shoulder_e2_ohp = {
+    prereq: [
+      "Comfortable shoulders when pressing a weight overhead.",
+      "A braced stance that keeps your ribs down."
+    ],
     summary: "A dumbbell press overhead from shoulder height, a direct way to load your shoulders and triceps with weights you can adjust.",
     setup: [
       "Stand or sit tall with a dumbbell in each hand at shoulder height, palms facing forward or toward each other.",
@@ -804,6 +896,10 @@
   };
 
   C.dip_1 = {
+    prereq: [
+      "A comfortable plank and wrists that tolerate your weight behind you.",
+      "A bench that won't slide."
+    ],
     summary: "A dip with your hands on a bench behind you and your legs out front, a gentler way to learn the pattern.",
     setup: [
       "Sit on the edge of a stable bench with your hands gripping it beside your hips, fingers forward.",
@@ -835,6 +931,10 @@
   };
 
   C.dip_2 = {
+    prereq: [
+      "A stable support on a straight bar.",
+      "The control to lower under your own power."
+    ],
     summary: "A dip on a single straight bar at hip height, where you press yourself up with the bar close to your body.",
     setup: [
       "Find a straight bar at about hip height that can't move, such as a sturdy rail or a rack.",
@@ -866,6 +966,10 @@
   };
 
   C.dip_4 = {
+    prereq: [
+      "A controlled parallel bar dip.",
+      "Wrists and elbows that tolerate a bar passing close to your body."
+    ],
     summary: "A dip on a straight bar with your body behind it, so the bar travels up toward your upper chest and neck.",
     setup: [
       "Use a fixed straight bar at about hip height, with your body positioned behind it.",
@@ -897,6 +1001,10 @@
   };
 
   C.dip_5 = {
+    prereq: [
+      "A controlled parallel bar dip.",
+      "Stable support on rings that you can hold still."
+    ],
     summary: "A dip on gymnastic rings, which move freely and force your shoulders and arms to stabilise as well as press.",
     setup: [
       "Hang the rings at hip height or higher from a fixed support, and check the straps and attachment points.",
@@ -928,6 +1036,10 @@
   };
 
   C.dip_6 = {
+    prereq: [
+      "Full, controlled bodyweight dips before adding any load.",
+      "A load that hangs or sits secure without swinging."
+    ],
     summary: "A parallel-bar dip with added weight hung from a belt or held between your feet, for when bodyweight dips no longer challenge you.",
     setup: [
       "Secure the weight with a dip belt, or hold a dumbbell between your feet with your ankles crossed over it.",
@@ -959,6 +1071,10 @@
   };
 
   C.dip_alt_chair = {
+    prereq: [
+      "Shoulders that tolerate a supported dip range.",
+      "A chair that is firm and won't slide."
+    ],
     summary: "A dip off the edge of a chair, with your hands beside your hips and your legs out front; easy to scale by bending or straightening your knees.",
     setup: [
       "Sit on the edge of a stable chair, preferably against a wall, with your hands beside your hips, fingers forward.",
@@ -990,6 +1106,10 @@
   };
 
   C.dip_alt_twochair = {
+    prereq: [
+      "A stable support between two chairs that won't slide.",
+      "A controlled shallow dip first."
+    ],
     summary: "A dip between two sturdy chairs set side by side, with your arms locked and your legs free, as a stand-in for parallel bars.",
     setup: [
       "Set two sturdy chairs of equal height facing each other, about shoulder-width apart, preferably against a wall.",
@@ -1021,6 +1141,10 @@
   };
 
   C.skill_planche_1 = {
+    prereq: [
+      "A straight-arm plank.",
+      "Wrists that tolerate a small lean forward."
+    ],
     summary: "A held plank with your shoulders pushed far past your hands, the first step toward the planche and a heavy test of your wrists.",
     setup: [
       "Warm up your wrists first, then start in a push-up plank with your hands turned slightly outward.",
@@ -1052,6 +1176,10 @@
   };
 
   C.skill_planche_2 = {
+    prereq: [
+      "A stable planche lean.",
+      "Your shoulder blades pushing the floor away as your feet get light."
+    ],
     summary: "A hold balanced on your hands alone with your knees tucked to your chest and your feet off the floor.",
     setup: [
       "Warm up your wrists, then start from a planche lean with your hands turned slightly outward.",
@@ -1083,6 +1211,10 @@
   };
 
   C.skill_planche_3 = {
+    prereq: [
+      "A stable tuck planche.",
+      "The control to open your hips and knees on purpose."
+    ],
     summary: "A tuck planche with your hips opened so your back is flat, which makes the hold much harder without extending your legs.",
     setup: [
       "Warm up your wrists, then get into a tuck planche with your hands turned slightly outward.",
@@ -1114,6 +1246,10 @@
   };
 
   C.skill_planche_4 = {
+    prereq: [
+      "A stable advanced tuck planche.",
+      "Straight-arm loading that your wrists and elbows tolerate."
+    ],
     summary: "A planche held with your legs spread wide and straight, shortening the lever compared with a full planche.",
     setup: [
       "Warm up your wrists, then get into an advanced tuck planche on a clear, non-slip floor.",
@@ -1145,6 +1281,10 @@
   };
 
   C.skill_planche_5 = {
+    prereq: [
+      "A stable straddle planche.",
+      "Full-body straight-arm strength and balance."
+    ],
     summary: "The full planche: your whole body held straight and parallel to the floor, supported on your hands alone.",
     setup: [
       "Warm up your wrists, shoulders and elbows thoroughly before you try this.",
@@ -1176,6 +1316,10 @@
   };
 
   C.skill_handstand_1 = {
+    prereq: [
+      "Comfortable shoulders when bearing weight overhead.",
+      "A controlled elevated pike position."
+    ],
     summary: "A plank with your feet walked up a wall, giving you a steadier, safer way to practise the inverted shoulder position.",
     setup: [
       "Place your feet against the base of a wall and start in a plank with your hands a little in front of your shoulders.",
@@ -1207,6 +1351,10 @@
   };
 
   C.skill_handstand_2 = {
+    prereq: [
+      "A controlled wall walk.",
+      "Straight-arm support overhead."
+    ],
     summary: "A handstand held facing a wall, with your chest and toes touching it, which teaches the straight stacked line.",
     setup: [
       "Place your hands a short distance from the wall, shoulder-width apart, and warm your wrists first.",
@@ -1238,6 +1386,10 @@
   };
 
   C.skill_handstand_3 = {
+    prereq: [
+      "A steady chest-to-wall handstand.",
+      "A clear space and a safe way down."
+    ],
     summary: "A handstand held with your back to the wall and your heels resting on it, so you can practise balance with a safety net.",
     setup: [
       "Place your hands about a forearm's length from the wall, shoulder-width apart, and warm your wrists first.",
@@ -1269,6 +1421,11 @@
   };
 
   C.skill_handstand_4 = {
+    prereq: [
+      "Stable holds against the wall.",
+      "Weight shifts that feel controlled.",
+      "A safe way out, such as a cartwheel or a step-out."
+    ],
     summary: "A handstand balanced with no wall at all, held by constant small corrections through your hands.",
     setup: [
       "Choose a clear, soft or non-slip floor with plenty of room, and warm your wrists first.",
@@ -1296,6 +1453,981 @@
     safety: [
       "Always know your bail-out, and practise on a soft, clear surface while you're learning.",
       "Stop if you feel dizzy or your wrists hurt."
+    ]
+  };
+
+  /* ---- Yellow Dude catalogue, Group A (plan step 3.1): 27 guides. Each is
+     written from the card's Prerequisites, Gear, Cues, Errors and Pain lines
+     and the exercise's own cues, in original words; never from a Practice line. */
+
+  C.push_alt_knee = {
+    summary: "A push-up from your knees: the same press and the same straight line, with a shorter lever so you can control every rep.",
+    prereq: [
+      "You can hold a straight line from knees to head on your hands and knees without your hips folding.",
+      "Your wrists are comfortable taking your weight with your hands flat on the floor."
+    ],
+    setup: [
+      "Pad the floor under your knees with a mat or a folded towel.",
+      "Put your hands just wider than your shoulders, fingers spread, then walk your knees back until your body is one line from knees to head.",
+      "Squeeze your glutes and brace your stomach so your hips stay in that line."
+    ],
+    steps: [
+      "Bend your elbows and lower your chest toward the floor, elbows about 45° from your sides.",
+      "Keep your head in line with your spine; your chest leads the way down, not your chin.",
+      "Stop with your chest a fist's height from the floor, or lightly touching it.",
+      "Press the floor away until your arms are straight, without letting your hips pike up."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press up.",
+    tempo: "Lower over about two seconds, pause briefly at the bottom without resting, then press up smoothly.",
+    feel: {
+      should: "Across your chest and in the backs of your arms, with your stomach and glutes keeping the line.",
+      shouldnt: "In your lower back, which means your hips have folded, or sharply in your wrists."
+    },
+    mistakes: [
+      { mistake: "You fold at the hips, so the line from your knees to your head breaks.",
+        fix: "Squeeze your glutes and brace your stomach, and film a set from the side to check the line." },
+      { mistake: "You drop onto your knees at the bottom instead of lowering under control.",
+        fix: "Slow the last part of the descent and stop with your chest just above the floor." }
+    ],
+    safety: [
+      "Pad your knees, and ease off if your wrists ache; a higher surface under your hands loads them less.",
+      "Stop at a sharp pain in your wrists, elbows or the front of your shoulders."
+    ]
+  };
+
+  C.push_alt_kneeassist = {
+    summary: "A full-body lowering from a toes plank, then a press from your knees, so the slow lowering does most of the work.",
+    prereq: [
+      "You can lower under control in a knee push-up and press back up with your body in one line.",
+      "Your wrists and elbows are comfortable with a long, slow lowering."
+    ],
+    setup: [
+      "Clear room for your full body length, with a mat under your knees if the floor is hard.",
+      "Start in a full plank on your toes, with your hands just wider than your shoulders.",
+      "Squeeze your glutes and brace your stomach so you lower as one piece."
+    ],
+    steps: [
+      "Lower your whole body in one line over about three seconds, until your chest nears the floor.",
+      "Settle your knees onto the floor while your hands stay planted exactly where they are.",
+      "Press up from your knees until your arms are straight.",
+      "Lift your knees back into the toes plank and repeat."
+    ],
+    breathing: "Breathe in as you lower, keep a steady brace as your knees land, and breathe out as you press.",
+    tempo: "Take the lowering slowly, about three seconds, set your knees down gently, then press up at an even pace.",
+    feel: {
+      should: "In your chest and triceps through the long lowering, with your stomach holding the line.",
+      shouldnt: "As a crash at the bottom, or a sharp ache in your elbows or wrists."
+    },
+    mistakes: [
+      { mistake: "You crash down at the bottom instead of lowering under control.",
+        fix: "Slow the lowering until your chest hovers just above the floor before your knees touch." },
+      { mistake: "You shuffle your hands when your knees go down.",
+        fix: "Plant your hands and keep them still; if they move, you lowered too fast." }
+    ],
+    safety: [
+      "The long lowering loads your elbows and wrists; stop if either turns sharp.",
+      "Pad the floor under your knees so landing on them never jars you."
+    ]
+  };
+
+  C.push_alt_partial = {
+    summary: "A push-up done to a fixed depth that you choose, so every rep matches and you can deepen the range a little at a time.",
+    prereq: [
+      "You can hold a straight plank on your hands and toes.",
+      "You can stop a rep at a depth you set in advance, without bouncing."
+    ],
+    setup: [
+      "Put a depth marker under your chest, such as a folded towel or a stack of books, at a height you can reach with control.",
+      "Take a plank with your hands just wider than your shoulders and your body in one line.",
+      "Squeeze your glutes and brace your stomach."
+    ],
+    steps: [
+      "Lower until your chest touches the marker, with your elbows about 45° from your sides.",
+      "Keep your body rigid the whole way down.",
+      "Press back up until your arms are straight.",
+      "Use the same depth on every rep."
+    ],
+    breathing: "Breathe in as you lower to the marker, and breathe out as you press up.",
+    tempo: "Lower over about two seconds, touch the marker lightly without bouncing, then press up smoothly.",
+    feel: {
+      should: "In your chest and triceps, with the same effort at the same depth on every rep.",
+      shouldnt: "As a bounce off the marker, or a pinch at the front of your shoulder."
+    },
+    mistakes: [
+      { mistake: "You change the depth from rep to rep, so the reps can't be compared.",
+        fix: "Keep the marker in place and touch it every rep; if you can't reach it, the marker is too low." },
+      { mistake: "You bounce off the marker instead of touching it and pressing.",
+        fix: "Pause for a beat on the marker with your weight still on your arms, then press." }
+    ],
+    safety: [
+      "Stay inside a range that feels strong at your shoulders and elbows, and deepen it gradually, never by forcing it.",
+      "Stop if the front of your shoulder pinches, and raise the marker."
+    ]
+  };
+
+  C.push_alt_staggered = {
+    summary: "A push-up with one hand set ahead of the other, which loads the two sides unevenly and is done on each side in turn.",
+    prereq: [
+      "A clean standard push-up, with your body in one line from top to bottom.",
+      "Comfort with your hands loaded unevenly, one ahead of the other."
+    ],
+    setup: [
+      "Place one hand under your chest and the other about a hand's length ahead of it.",
+      "Set your feet hip-width apart for balance and take a plank, with your hips and shoulders square to the floor.",
+      "Squeeze your glutes and brace your stomach, then mark your hand positions so you can repeat them.",
+      "Plan the same work with the other hand forward."
+    ],
+    steps: [
+      "Lower your chest between your hands, with your elbows about 45° from your sides.",
+      "Keep your hips and shoulders level; don't twist toward the forward hand.",
+      "Press up evenly through both hands until your arms are straight.",
+      "Finish your reps, then swap which hand is forward and repeat."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press up.",
+    tempo: "Lower over about two seconds, pause briefly at the bottom, then press up smoothly and evenly.",
+    feel: {
+      should: "In your chest and triceps, a little more on the forward side, with your stomach stopping any twist.",
+      shouldnt: "As a twist through your torso, or a pinch at the front of the shoulder on the forward-hand side."
+    },
+    mistakes: [
+      { mistake: "You set your hands so far apart that your body twists.",
+        fix: "Shorten the stagger until your hips and shoulders stay level through the whole rep." },
+      { mistake: "You always put the same hand forward.",
+        fix: "Do the same work with each hand forward, and start with your weaker side." }
+    ],
+    safety: [
+      "The forward-hand shoulder takes more strain; shorten the stagger if it pinches.",
+      "Stop at a sharp pain in your wrists, elbows or the front of your shoulders."
+    ]
+  };
+
+  C.push_alt_onearmassist = {
+    summary: "A one-arm push-up with your other hand resting on a low support as a light prop, so you can practise the single-arm press under control.",
+    prereq: [
+      "Strong, level staggered-hand push-ups on both sides.",
+      "You can lower on one working arm while the other hand only props."
+    ],
+    setup: [
+      "Set a low, stable support beside your torso, such as a firm step or a stack of books that won't slide.",
+      "Take a wide foot stance so you can resist rotating.",
+      "Put your working hand under your chest and rest the other hand lightly on the support.",
+      "Square your hips and shoulders to the floor, then brace your stomach and glutes."
+    ],
+    steps: [
+      "Lower under control on your working arm, using the helper hand only as a prop.",
+      "Keep your hips and shoulders square; the free side must not turn you open.",
+      "Press up through the working arm until it is straight.",
+      "Let the helper hand do less as you get stronger, then repeat on the other side."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press, keeping your stomach braced throughout.",
+    tempo: "Lower slowly, about three seconds, with no drop at the bottom, then press up without rushing.",
+    feel: {
+      should: "In the chest, triceps and front of the shoulder of your working arm, with your stomach resisting rotation.",
+      shouldnt: "Mostly through the helper hand, or as a twist in your lower back."
+    },
+    mistakes: [
+      { mistake: "You press mostly through the helper hand, so the working arm does little.",
+        fix: "Rest only your fingertips on the support, so the working arm has to do the lowering." },
+      { mistake: "You twist your torso open to get up.",
+        fix: "Widen your feet, square your hips and shorten the range until you can stay square." }
+    ],
+    safety: [
+      "A heavy single-shoulder load; keep the helper hand on its support until the working arm controls the whole lowering.",
+      "Stop at a sharp pain in your wrist, elbow or the front of your shoulder."
+    ]
+  };
+
+  C.push_alt_pseudoweighted = {
+    summary: "A pseudo planche push-up with a load worn close to your torso, for building strength in a deep forward lean.",
+    prereq: [
+      "A controlled pseudo planche push-up with no load, with the same lean on every rep.",
+      "Wrists and elbows that are comfortable in a deep forward lean."
+    ],
+    setup: [
+      "Put on a snug vest, or a packed backpack worn high on your back, so the load sits close to your body.",
+      "Place your hands beside your hips on a stable, flat surface, with your fingers turned out.",
+      "Lean your shoulders well ahead of your hands, the same lean as your unweighted version.",
+      "Brace your stomach and squeeze your glutes."
+    ],
+    steps: [
+      "Hold the lean and bend your elbows, keeping them tight against your ribs.",
+      "Lower until your chest is close to the floor, with your body in one line.",
+      "Press up while holding the same forward lean.",
+      "Keep the lean the same on every rep, so the load is the only thing that changes."
+    ],
+    breathing: "Breathe in as you lower, and breathe out through the press without letting your lean slip.",
+    tempo: "Lower over about two seconds, keep the lean through the bottom, then press up smoothly; no bouncing under the load.",
+    feel: {
+      should: "In the fronts of your shoulders, your chest and triceps, with your wrists loaded and your stomach tight.",
+      shouldnt: "As an arch in your lower back, or a sharp ache in your wrists, elbows or the fronts of your shoulders."
+    },
+    mistakes: [
+      { mistake: "You add lean and load in the same session, so you can't tell which one is too much.",
+        fix: "Fix the lean first, then change the load in small steps with the lean unchanged." },
+      { mistake: "You arch your lower back to get the press up.",
+        fix: "Squeeze your glutes, tuck your ribs down and drop the load if you can't keep the line." }
+    ],
+    safety: [
+      "High load on your wrists, elbows and the fronts of your shoulders; stop at any sharp pain.",
+      "Wear the load snug against your body, and warm up your wrists thoroughly first."
+    ]
+  };
+
+  C.push_alt_parallette = {
+    summary: "A push-up on raised handles, which keeps your wrists straight and lets your chest travel a little lower than the floor allows.",
+    prereq: [
+      "A solid floor push-up, with your shoulders in control at the bottom.",
+      "Parallettes that stay put and don't flex under your full weight."
+    ],
+    setup: [
+      "Set the parallettes shoulder-width apart on level, non-slip ground, and press each one to check it doesn't rock.",
+      "Grip the handles with your wrists straight, then take a plank with your body in one line.",
+      "Squeeze your glutes and brace your stomach."
+    ],
+    steps: [
+      "Lower between the handles with your elbows about 45° from your sides.",
+      "Stop where your shoulders still feel in control, even if the handles allow more.",
+      "Press up without letting the handles rock.",
+      "Finish with straight arms and your shoulder blades spread."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press up.",
+    tempo: "Lower over about two seconds, pause briefly at the bottom without sinking, then press up smoothly.",
+    feel: {
+      should: "In your chest and triceps, with your wrists comfortable and straight.",
+      shouldnt: "As a stretch that pinches the front of your shoulder at the bottom, or as handles wobbling under you."
+    },
+    mistakes: [
+      { mistake: "You set up on handles that wobble or sit unevenly.",
+        fix: "Check both handles on level ground before the first rep, and stop if either moves." },
+      { mistake: "You go deeper than your shoulders control, just because the handles allow it.",
+        fix: "Stop at the depth where you can still press out smoothly, even if that's no deeper than the floor." }
+    ],
+    safety: [
+      "The handles let you go deeper, which stretches the front of your shoulder; stay inside your range.",
+      "Stop if a handle moves or if the front of your shoulder pinches."
+    ]
+  };
+
+  C.push_alt_slider = {
+    summary: "A push-up with a towel or slider under each hand, where you resist your hands sliding apart and so brace your chest and shoulders harder.",
+    prereq: [
+      "A controlled floor push-up, with your body in one line.",
+      "You can stop your hands sliding apart on a smooth floor."
+    ],
+    setup: [
+      "Use a smooth floor, such as tile or wood, and put a towel or slider under each hand.",
+      "Take a plank with your hands about shoulder-width apart and your body in one line.",
+      "Clear space on both sides, so your hands have room to travel.",
+      "Test the slide with a very small lowering before your first full rep."
+    ],
+    steps: [
+      "Lower your chest while drawing your hands toward each other, so they don't slide out.",
+      "Keep your body straight and your ribs from sagging.",
+      "Press back up, letting your hands return to shoulder width under control.",
+      "Reset your hands if they have drifted before the next rep."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press up.",
+    tempo: "Lower over about two seconds, keep the squeeze steady at the bottom, then press up smoothly.",
+    feel: {
+      should: "Across your chest and in your shoulders, with your hands pulling in as if to squeeze the floor.",
+      shouldnt: "As your hands sliding out from under you, or a sharp tug at the front of your shoulder."
+    },
+    mistakes: [
+      { mistake: "You let your hands slide out and your chest collapses.",
+        fix: "Draw your hands toward each other from the first moment, and shorten the range until they stay put." },
+      { mistake: "You use a floor so slick, or so grippy, that your two sides slide unevenly.",
+        fix: "Change the surface or the cloth until both hands move together." }
+    ],
+    safety: [
+      "A sudden slide can wrench the shoulder; keep the slide short and controlled.",
+      "Keep the area around you clear in case a hand slips, and stop at a sharp pain in your shoulder or elbow."
+    ]
+  };
+
+  C.push_alt_ringcross = {
+    summary: "A ring push-up where you reach one ring across your body at the top, so your chest and shoulders must control a moving load.",
+    prereq: [
+      "A steady ring push-up with no wobble at the bottom.",
+      "Shoulders that stay stable when the rings move.",
+      "Rings hung from a point that holds your full weight without shifting."
+    ],
+    setup: [
+      "Set the rings at equal height, low enough that your feet carry most of your weight.",
+      "Check the straps and the anchor before the first rep, since a slipping ring drops you.",
+      "Take a ring push-up plank with your hands under your shoulders and your body in one line.",
+      "Square your hips, and brace your stomach and glutes."
+    ],
+    steps: [
+      "Lower with control, with your elbows about 45° from your sides.",
+      "Press up, then reach one ring across your body toward the other side, only as far as you can keep it steady.",
+      "Bring it back under control and set your hand beside your chest again.",
+      "Cross with the other side next, keeping both rings steady throughout."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press and reach.",
+    tempo: "Lower over about two seconds, then move the reach slowly; a quick swing is how the rings get away from you.",
+    feel: {
+      should: "In your chest, the front of your shoulder and your stomach, as they hold the rings still.",
+      shouldnt: "As a wrench at the front of your shoulder, or from the rings swinging out of your control."
+    },
+    mistakes: [
+      { mistake: "You let the rings fly apart or swing as you cross.",
+        fix: "Cross a shorter distance and slow the movement until both rings stay quiet." },
+      { mistake: "You twist your hips to make the reach.",
+        fix: "Keep your hips square; if you can't reach without twisting, reach less far." }
+    ],
+    safety: [
+      "Unstable rings load your shoulders from awkward angles; keep the crossing small.",
+      "Keep your feet on the floor, and stop at a sharp pain in your shoulder, elbow or wrist."
+    ]
+  };
+
+  C.push_alt_fingertip = {
+    summary: "A push-up with your weight on the pads of your fingers, which loads your fingers and forearms far more than flat hands do.",
+    prereq: [
+      "A strong standard push-up.",
+      "Fingers that take your weight gradually without any pain."
+    ],
+    setup: [
+      "Begin against a wall or a high, stable support, so only part of your weight lands on your fingers.",
+      "Spread your fingers wide with your weight on the finger pads.",
+      "Brace into a straight line from your head to your heels."
+    ],
+    steps: [
+      "Lower your chest toward the support, keeping your fingers from folding flat.",
+      "Spread the load across all your fingers, not just your thumbs and index fingers.",
+      "Press back up until your arms are straight.",
+      "Reset your fingers on the support before the next rep."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press up.",
+    tempo: "Lower slowly, about two seconds, with no drop at the bottom, then press up smoothly.",
+    feel: {
+      should: "In the pads of your fingers and your forearms, along with your chest and triceps.",
+      shouldnt: "As a sharp ache in the finger joints or tendons, or fingers collapsing flat."
+    },
+    mistakes: [
+      { mistake: "You let your finger joints cave in at the bottom.",
+        fix: "Move to a higher surface, so less weight sits on your fingers." },
+      { mistake: "You jump straight to the floor with your full bodyweight.",
+        fix: "Start high and lower the surface gradually across many sessions." }
+    ],
+    safety: [
+      "Stop if your finger joints or tendons ache; they adapt more slowly than muscle.",
+      "Build up on a high surface first, and lower it only if your fingers stay comfortable."
+    ]
+  };
+
+  C.skill_planche_band = {
+    summary: "A planche lean with a band taking part of your weight, so you can lean further than your arms alone allow.",
+    prereq: [
+      "A straight-arm plank held with your body in one line and your wrists comfortable.",
+      "A band that is intact and anchored to something solid that won't move."
+    ],
+    setup: [
+      "Inspect the band for nicks and wear, then anchor it to something that can't move.",
+      "Loop the band so it takes part of your weight as you lean forward.",
+      "Take a straight-arm plank, on the floor or on parallettes, with your hands turned slightly outward.",
+      "Clear space ahead of you, and know how you'll put your feet down."
+    ],
+    steps: [
+      "Squeeze your glutes, brace your stomach and push the floor away with straight elbows.",
+      "Lean your shoulders forward past your hands, letting the band take some of the weight.",
+      "Hold the lean with your elbows locked and your body in one line.",
+      "Put your feet down before the band goes slack, and ease out of the lean slowly."
+    ],
+    breathing: "Breathe steadily through the hold; if you catch yourself holding your breath, ease out of the lean.",
+    tempo: "Lean forward slowly, hold still, and come out gently; never let the band snap you back.",
+    feel: {
+      should: "In the fronts of your shoulders, your wrists and your stomach, with the band taking some weight.",
+      shouldnt: "As a sharp ache in your wrists, or from bent elbows letting you sag."
+    },
+    mistakes: [
+      { mistake: "You bend your elbows to reach a deeper lean.",
+        fix: "Lock your elbows and lean only as far as you can with them straight." },
+      { mistake: "You let the band recoil suddenly when you come out.",
+        fix: "Put your feet down before the band goes slack, and ease out under control." }
+    ],
+    safety: [
+      "Heavy wrist loading: build the lean a little at a time, and stop if your wrists ache sharply.",
+      "Check the band for wear and the anchor for movement before every session."
+    ]
+  };
+
+  C.skill_planche_boxtuck = {
+    summary: "A tuck planche with your feet resting lightly on a box, so you can practise the position with some of your weight off your hands.",
+    prereq: [
+      "A planche lean with straight elbows and your shoulders well past your hands.",
+      "You can rest your feet on a box without pushing off it.",
+      "A box that doesn't slide or tip when you push on it."
+    ],
+    setup: [
+      "Set the parallettes on level, non-slip ground, with a sturdy box behind them at a height your feet can rest on.",
+      "Push on the box and the parallettes with your full weight to check neither slides or tips.",
+      "Support yourself on straight arms with your hands fixed on the handles.",
+      "Clear space ahead of you, and know how you'll put your feet down."
+    ],
+    steps: [
+      "Rest your feet lightly on the box with your elbows locked.",
+      "Lean your shoulders forward past your hands, pushing the floor away.",
+      "Tuck your knees toward your chest, taking as little weight on the box as you can.",
+      "Settle your feet back on the box before you come down."
+    ],
+    breathing: "Breathe steadily through the hold; if you catch yourself holding your breath, put your feet back on the box.",
+    tempo: "Lean and tuck slowly, hold still, and settle your feet back gently; no jumping onto or off the box.",
+    feel: {
+      should: "In the fronts of your shoulders, your wrists and your stomach, with the box taking only a little.",
+      shouldnt: "From your feet pushing hard on the box, or as a sharp ache in your wrists or elbows."
+    },
+    mistakes: [
+      { mistake: "You push hard off the box with your feet, so your arms do little.",
+        fix: "Let your feet rest on the box and lean further forward, so your arms and shoulders carry the weight." },
+      { mistake: "You use a box that slides or tips.",
+        fix: "Test it with your full weight before the first rep, and put it against a wall if it slides." }
+    ],
+    safety: [
+      "Check that the box and parallettes are stable, and stop on any wrist or elbow pain.",
+      "Heavy wrist load: warm up first, and stop at a sharp ache."
+    ]
+  };
+
+  C.skill_planche_boxpushup = {
+    summary: "A push-up from a straddle planche with your feet resting lightly on a box, so you practise lowering and pressing with some weight taken off.",
+    prereq: [
+      "A stable box-supported planche hold and a controlled bent-arm descent in your push-ups.",
+      "Parallettes and a box that stay put under your full weight."
+    ],
+    setup: [
+      "Set the parallettes in front of a stable box, and check that neither slides.",
+      "Rest your feet lightly on the box in a wide straddle.",
+      "Lean forward over your hands with straight elbows, taking most of your weight on your arms.",
+      "Clear space ahead of you, and know how you'll put your feet down."
+    ],
+    steps: [
+      "Lean your shoulders ahead of your hands with your elbows straight.",
+      "Bend your elbows slowly, to a depth you can reverse.",
+      "Press back up to straight arms, keeping your feet light on the box.",
+      "Settle your feet back on the box before you come down."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press; don't hold your breath at the bottom.",
+    tempo: "Lower over about three seconds, with no drop, then press up smoothly without kicking off the box.",
+    feel: {
+      should: "In the fronts of your shoulders, your chest and triceps, with your wrists taking a heavy load.",
+      shouldnt: "As a sharp pain in your wrists, elbows or shoulders, or from your feet pushing off the box."
+    },
+    mistakes: [
+      { mistake: "You let the box slide, or you push off it with your feet.",
+        fix: "Brace the box against a wall, and keep your feet resting on it rather than pushing." },
+      { mistake: "Your elbows flare or collapse during the descent.",
+        fix: "Cut the depth and keep your elbows close to your ribs, so you can reverse every rep." }
+    ],
+    safety: [
+      "Very high wrist, elbow and shoulder load; stop at any sharp pain.",
+      "Never train it tired, and check the box and handles before each set."
+    ]
+  };
+
+  C.skill_planche_pushup = {
+    summary: "A push-up from a full planche, bending your elbows while your body stays flat and parallel to the floor.",
+    prereq: [
+      "A stable full planche with a controlled exit.",
+      "A controlled pseudo planche push-up, with the same lean on every rep.",
+      "Someone qualified to watch your technique, since the app can't."
+    ],
+    setup: [
+      "Warm up your wrists, elbows and shoulders thoroughly.",
+      "Use a flat, non-slip floor or stable parallettes, with a mat and clear space ahead of you.",
+      "Know how you'll put your feet down if you lose the line.",
+      "Get into your full planche with your shoulders well ahead of your hands."
+    ],
+    steps: [
+      "From a full planche, bend your elbows while your body stays parallel to the floor.",
+      "Lower in one rigid line, without letting your hips rise.",
+      "Reverse the descent under control; don't kick or drop into the bottom.",
+      "Press back to a straight-arm planche, then lower your feet."
+    ],
+    breathing: "Breathe steadily through the movement; if you can't breathe, you've held the position too long.",
+    tempo: "Lower and press slowly and evenly, with no drop at the bottom and no kick on the way up.",
+    feel: {
+      should: "In the fronts of your shoulders, your chest, triceps and stomach, all working together.",
+      shouldnt: "As a sharp pain in your wrists, elbows or shoulders, or from your hips rising to help."
+    },
+    mistakes: [
+      { mistake: "You drop into the bottom position instead of lowering under control.",
+        fix: "Cut the depth until you can reverse every rep without kicking." },
+      { mistake: "Your hips rise to ease the press.",
+        fix: "Squeeze your glutes and tuck your pelvis, and go back to a shallower range if the line breaks." }
+    ],
+    safety: [
+      "Elite load on your wrists, elbows and shoulders; never train it cold or tired.",
+      "Have a coach watch you, and stop at any sharp joint pain."
+    ]
+  };
+
+  C.shoulder_alt_pikeneg = {
+    summary: "A slow lowering from a pike position toward the floor, building the strength you need for a pike push-up.",
+    prereq: [
+      "A steady pike hold on your hands and feet.",
+      "You can control a slow lowering, in a shallow range at first.",
+      "Clear floor ahead of your hands for your head to travel into."
+    ],
+    setup: [
+      "Clear the floor ahead of your hands, since your head travels there.",
+      "Use a non-slip floor or a mat that stays put.",
+      "Place your hands shoulder-width apart and walk your feet in until your hips are high.",
+      "Press your hands into the floor and push your shoulders tall."
+    ],
+    steps: [
+      "Bend your elbows and lower your head slowly toward the floor over about four seconds.",
+      "Keep your hips high and your elbows from flaring.",
+      "Stop before you lose control; keep the range shallow at first.",
+      "Reset to the top by pressing up or walking your feet back, and repeat."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you press or walk back to the top.",
+    tempo: "Lower slowly, about four seconds, without stopping dead, then reset at the top before the next one.",
+    feel: {
+      should: "In your shoulders and triceps, working to slow the descent, with your stomach keeping your body tight.",
+      shouldnt: "As weight dropping onto your head, or a sharp pinch in your neck, wrists or shoulders."
+    },
+    mistakes: [
+      { mistake: "You drop onto your head instead of lowering under control.",
+        fix: "Stop higher, where you can control the speed, and go a little lower only as the control holds." },
+      { mistake: "Your elbows flare and your shoulders lose their position.",
+        fix: "Keep your elbows angled back toward your hips and your shoulders pushed tall." }
+    ],
+    safety: [
+      "Keep the landing area clear and the range shallow at first; stop if your neck or wrists complain.",
+      "Go slowly, and stop at dizziness, or at pain or tingling in your neck or arms."
+    ]
+  };
+
+  C.skill_handstand_pike = {
+    summary: "A held pike with your hips high over your shoulders, the first step toward carrying your weight upside down.",
+    prereq: [
+      "A comfortable pike position with your hands on the floor.",
+      "Shoulders that tolerate your weight pressing down through your hands."
+    ],
+    setup: [
+      "Clear a non-slip floor, with a mat only if it doesn't slip.",
+      "Place your hands shoulder-width apart and walk your feet in until your hips are high and your body is an upside-down V.",
+      "Press your hands into the floor and push your shoulders tall, away from your ears.",
+      "Leave clear space to one side, so you can step out of the position."
+    ],
+    steps: [
+      "Press the floor away until your arms are straight and your shoulders are tall.",
+      "Stack your hips toward being over your shoulders, without forcing your back to round.",
+      "Keep your chest from sagging and your head relaxed between your arms.",
+      "Hold still, then walk your feet back out to a plank."
+    ],
+    breathing: "Breathe steadily through the hold; don't hold your breath, and keep your neck relaxed.",
+    tempo: "Walk your feet in slowly, hold still without bouncing, and walk out at the same pace.",
+    feel: {
+      should: "In your shoulders as they push tall, with the backs of your legs stretching and your stomach engaged.",
+      shouldnt: "In your neck from shrugging, or as a sharp ache in your wrists."
+    },
+    mistakes: [
+      { mistake: "You shrug into your neck.",
+        fix: "Push the floor away until there's a gap between your shoulders and your ears." },
+      { mistake: "You let your trunk sag, so your hips drop.",
+        fix: "Press your hips up and back, and bring your feet in a little if you can't keep them high." }
+    ],
+    safety: [
+      "The hold is heavy on your wrists; shift your weight back toward your feet if they complain.",
+      "Come out if you feel dizzy, or if your wrists, shoulders or neck hurt."
+    ]
+  };
+
+  C.skill_handstand_pikeelev = {
+    summary: "A pike hold with your feet raised on a platform, so more of your weight sits over your hands and shoulders.",
+    prereq: [
+      "A steady pike hold on the floor.",
+      "A low platform that stays still when you put your full weight on it."
+    ],
+    setup: [
+      "Put your feet on a stable low platform, such as a bench, that won't slide.",
+      "Place your hands on the floor shoulder-width apart and walk them in until your hips rise above your shoulders.",
+      "Press through your hands and push your shoulders tall.",
+      "Warm up your wrists, and leave space to one side for a safe exit."
+    ],
+    steps: [
+      "Walk your hands in until your hips are stacked over your shoulders.",
+      "Keep your feet planted on the platform and the platform still.",
+      "Press the floor away and hold, without letting your shoulders collapse.",
+      "Walk your hands back out, then lower your feet to the floor."
+    ],
+    breathing: "Breathe steadily through the hold; if you catch yourself holding your breath, come down.",
+    tempo: "Walk in slowly, hold still without bouncing, and come out at the same pace.",
+    feel: {
+      should: "In your shoulders and triceps, working harder than in the floor pike, with your stomach holding the line.",
+      shouldnt: "From your shoulders sinking toward your ears, or as an ache in your wrists or neck."
+    },
+    mistakes: [
+      { mistake: "The platform shifts under your feet.",
+        fix: "Use a platform that can't slide, or push it against a wall, and test it before you hold." },
+      { mistake: "You collapse through your shoulders as the load builds.",
+        fix: "Keep pushing the floor away until your shoulders feel tall; if they sink, come down." }
+    ],
+    safety: [
+      "More weight on your wrists and shoulders than the floor pike; come down if either feels unstable.",
+      "Stop at dizziness, or at pain or tingling in your neck, wrists or shoulders."
+    ]
+  };
+
+  C.skill_handstand_wallwalk = {
+    summary: "A walk up a wall from a plank into a steep pike, then back down, which builds comfort with your weight overhead.",
+    prereq: [
+      "A strong plank and a steady pike hold.",
+      "You can climb up and down a wall in small, controlled steps.",
+      "A clear wall and a non-slip floor."
+    ],
+    setup: [
+      "Start in a plank with your feet at the base of a wall, and warm up your wrists first.",
+      "Use a non-slip floor or a mat that stays put, with clear space to the side.",
+      "Know which side you would step out to before you start."
+    ],
+    steps: [
+      "Walk your feet up the wall while your hands walk toward it, in small steps.",
+      "Keep your arms straight and your stomach braced.",
+      "Stop where you still feel in control, even if that's far from the wall.",
+      "Walk back down the same way, one hand and one foot at a time."
+    ],
+    breathing: "Breathe steadily all the way up and down; holding your breath is how people tense up and rush.",
+    tempo: "Move in small steps at an even pace going up, pause where you stop, then come down at the same speed.",
+    feel: {
+      should: "In your shoulders as they hold you up, with your stomach and glutes keeping a tight line.",
+      shouldnt: "As a sag in your lower back, or a sharp ache in your wrists or neck."
+    },
+    mistakes: [
+      { mistake: "You walk too close to the wall before you're ready.",
+        fix: "Stop at the height where you can control the descent, and go closer only a little at a time." },
+      { mistake: "You hold your breath on the way up.",
+        fix: "Breathe through every step, and slow down if you can't." }
+    ],
+    safety: [
+      "The walk back down loads your wrists and shoulders heavily; stay in a range you can reverse.",
+      "Stop if you feel dizzy, or if your wrists, shoulders or neck hurt."
+    ]
+  };
+
+  C.skill_handstand_cartwheel = {
+    summary: "A sideways exit from a handstand: you turn toward open floor and put one foot down at a time, like a cartwheel.",
+    prereq: [
+      "A comfortable wall handstand, and a cartwheel on the floor.",
+      "Open floor with a clear lane to one side."
+    ],
+    setup: [
+      "Use open, non-slip floor with a clear lane to one side and nothing you could hit.",
+      "Practise at low height first, from a wall-supported handstand or a low kick-up.",
+      "Decide which way you'll turn before you go up."
+    ],
+    steps: [
+      "From a low or wall-supported handstand, turn your body sideways toward the open space.",
+      "Lower one leg toward the floor and place that foot down first.",
+      "Place the other foot down, coming out like a cartwheel.",
+      "Stand up and reset before the next try."
+    ],
+    breathing: "Breathe steadily through the turn; don't hold your breath as you leave the handstand.",
+    tempo: "Turn smoothly and place each foot down in turn, with no hurry and no stalling halfway.",
+    feel: {
+      should: "In your shoulders as they steer the turn, with your legs controlled rather than flung.",
+      shouldnt: "As a jolt through your wrists, or from aiming toward the wall."
+    },
+    mistakes: [
+      { mistake: "You try to roll toward the wall.",
+        fix: "Turn your body sideways every time; the exit always goes toward the open space." },
+      { mistake: "You cross your legs without turning your body.",
+        fix: "Turn your hips and chest sideways as your legs come down." }
+    ],
+    safety: [
+      "Keep the floor clear of objects, and use a non-slip floor or a mat that doesn't slide.",
+      "Stop if you feel dizzy, or if your wrists, shoulders or neck hurt."
+    ]
+  };
+
+  C.skill_handstand_toetap = {
+    summary: "A chest-to-wall handstand where you lift one toe off the wall and tap it back, practising balance with the wall still beside you.",
+    prereq: [
+      "A stable chest-to-wall handstand.",
+      "You can release one foot a small distance from the wall, under control.",
+      "A safe exit that you have already practised."
+    ],
+    setup: [
+      "Warm up your wrists, then place your hands a short way from the wall, shoulder-width apart.",
+      "Use a non-slip floor with clear space to the side for your exit.",
+      "Walk your feet up the wall until your chest and toes touch it."
+    ],
+    steps: [
+      "Hold a stable chest-to-wall handstand with your toes against the wall.",
+      "Lift one toe lightly off the wall, keeping your shoulders stacked over your hands.",
+      "Tap it back to the wall and switch sides.",
+      "Walk your feet back down to finish."
+    ],
+    breathing: "Breathe steadily through the whole hold; holding your breath ruins your balance.",
+    tempo: "Lift and tap slowly and lightly, hold still between taps, and come down at the same pace.",
+    feel: {
+      should: "In your shoulders and fingers as they balance, with your stomach and glutes holding the line.",
+      shouldnt: "From a twist in your pelvis, or as a sharp ache in your wrists."
+    },
+    mistakes: [
+      { mistake: "You kick away from the wall.",
+        fix: "Lift the toe only a little; the tap is a small release, not a push-off." },
+      { mistake: "You twist your pelvis as the leg lifts.",
+        fix: "Keep your hips square to the wall by squeezing your glutes before you lift." }
+    ],
+    safety: [
+      "Know a safe exit before you start, and step down if your wrists tire.",
+      "Stop if you feel dizzy, or if your wrists, shoulders or neck hurt."
+    ]
+  };
+
+  C.skill_handstand_split = {
+    summary: "A handstand balanced with your legs in a gentle split, one near the wall for control, to prepare for balancing free.",
+    prereq: [
+      "A stable wall handstand.",
+      "You can balance with one leg near the wall and exit safely."
+    ],
+    setup: [
+      "Warm up your wrists, then place your hands about a forearm's length from the wall.",
+      "Clear a non-slip floor with open space to the side for your exit.",
+      "Decide your exit before you go up."
+    ],
+    steps: [
+      "Go up to a handstand with one leg near the wall and the other held forward.",
+      "Push the floor away and keep your shoulders tall.",
+      "Hold your legs in a gentle split, without scissoring them.",
+      "Look at the floor between your hands, then come down by stepping out."
+    ],
+    breathing: "Breathe steadily through the hold; holding your breath stiffens you and wrecks your balance.",
+    tempo: "Kick up smoothly, hold still, and come down slowly; avoid a hard kick or a quick drop.",
+    feel: {
+      should: "In your shoulders and fingers as they balance, with your stomach and glutes holding the line.",
+      shouldnt: "In your lower back, or as a jolt through your wrists."
+    },
+    mistakes: [
+      { mistake: "You scissor your legs wildly.",
+        fix: "Keep the leg near the wall in light contact and move the other leg only a little." },
+      { mistake: "You look far ahead of your hands.",
+        fix: "Look at the floor between your hands and keep your neck long." }
+    ],
+    safety: [
+      "Practise on a non-slip surface, with clear space to the side.",
+      "Stop if you feel dizzy, or if your wrists, shoulders or neck hurt."
+    ]
+  };
+
+  C.skill_handstand_parallette = {
+    summary: "A handstand held on parallette handles, which keeps your wrists straight but makes the balance narrower and the fall higher.",
+    prereq: [
+      "A stable freestanding handstand on the floor.",
+      "A secure grip on the handles, and parallettes that stay still under your full weight."
+    ],
+    setup: [
+      "Set the parallettes on non-slip ground, with plenty of clear space on both sides.",
+      "Press on each one to check it doesn't rock or slide.",
+      "Grip the handles evenly, with your hands shoulder-width apart.",
+      "Know your exit, and warm up your wrists first."
+    ],
+    steps: [
+      "Go up to a handstand with your shoulders stacked over the handles.",
+      "Grip evenly and keep the handles still.",
+      "Balance through your fingers and your grip, with small corrections.",
+      "Come down by stepping or cartwheeling out, away from the handles."
+    ],
+    breathing: "Breathe steadily through the hold; holding your breath ruins your balance.",
+    tempo: "Kick up with control, make small smooth corrections, and come down calmly.",
+    feel: {
+      should: "In your fingers and grip as they correct your balance, with your stomach and glutes holding the line.",
+      shouldnt: "In your lower back, or as a sharp ache in your wrists."
+    },
+    mistakes: [
+      { mistake: "The handles rock because they were set up unevenly.",
+        fix: "Set both on level ground and press on them before you go up; stop if either moves." },
+      { mistake: "You over-grip while your shoulder line collapses.",
+        fix: "Grip firmly but not hard, and keep pushing the floor away so your shoulders stay tall." }
+    ],
+    safety: [
+      "A fall from raised handles is higher; choose a stable floor and know your exit.",
+      "Stop if you feel dizzy, or if your wrists, shoulders or neck hurt."
+    ]
+  };
+
+  C.skill_handstand_bentarm = {
+    summary: "A handstand held with your elbows bent through a small range, which builds the strength for a handstand push-up.",
+    prereq: [
+      "A strong handstand balance, and a controlled bent-arm position in your pike push-ups.",
+      "A padded surface, with a wall or a spotter beside you.",
+      "Someone qualified who can watch you, since a loss of control here puts your head at risk."
+    ],
+    setup: [
+      "Put a mat down that doesn't slide, with a wall or a spotter within reach.",
+      "Warm up your wrists and shoulders thoroughly.",
+      "Go up to a stable handstand before you bend your elbows."
+    ],
+    steps: [
+      "From a stable handstand, bend your elbows slowly through a small range.",
+      "Keep your head clear of the floor and your shoulders active.",
+      "Push the floor away rather than sinking into it.",
+      "Press back up to straight arms before you tire, then come down."
+    ],
+    breathing: "Breathe steadily through the hold; holding your breath makes you stiff and throws off your balance.",
+    tempo: "Bend slowly, pause only as long as you stay in control, and press back up without bouncing.",
+    feel: {
+      should: "In your shoulders and triceps, working to hold the position, with your stomach and glutes keeping the line.",
+      shouldnt: "As weight dropping toward your head, or a sharp pain in your neck, wrists or shoulders."
+    },
+    mistakes: [
+      { mistake: "You drop onto your head.",
+        fix: "Keep the range small, and press back up before your elbows pass the point you can reverse." },
+      { mistake: "Your elbows flare out of control.",
+        fix: "Keep your elbows moving back along your sides, and shorten the range until they stay put." }
+    ],
+    safety: [
+      "Your head and neck are at risk if control goes; use a padded surface and keep the range small.",
+      "Stop at dizziness, or at pain or tingling in your neck, wrists or shoulders."
+    ]
+  };
+
+  C.skill_handstand_onearm = {
+    summary: "A handstand held on one hand, built by shifting your weight gradually over your supporting hand while your free shoulder stays up.",
+    prereq: [
+      "A consistent freestanding handstand, and practised weight shifts onto one hand.",
+      "A cartwheel exit that you can do toward both sides.",
+      "A coach or a spotter, where you can."
+    ],
+    setup: [
+      "Warm up your wrists and shoulders thoroughly; the load on a single wrist is very high.",
+      "Use a non-slip floor with a wall and open space to the side, ideally with a coach or spotter.",
+      "Know your cartwheel exit before you go up."
+    ],
+    steps: [
+      "Go up to a steady freestanding handstand.",
+      "Shift your weight gradually over your supporting hand.",
+      "Keep your free shoulder up rather than letting it drop.",
+      "Come out by cartwheeling toward the open space."
+    ],
+    breathing: "Breathe steadily through the hold; holding your breath stiffens you and ends the balance.",
+    tempo: "Shift your weight in small, slow steps, stay only as long as it's controlled, and exit before a wobble gets away from you.",
+    feel: {
+      should: "In your supporting wrist, shoulder and fingers as they take the load, with your stomach and glutes holding the line.",
+      shouldnt: "As a dropped free shoulder or a twist, or a sharp pain in your wrist or shoulder."
+    },
+    mistakes: [
+      { mistake: "You drop your free shoulder.",
+        fix: "Keep pushing it up toward your ear, and shift less weight until you can." },
+      { mistake: "You twist out of control.",
+        fix: "Keep your hips and chest square, and exit before the twist starts." }
+    ],
+    safety: [
+      "Very high single-wrist and shoulder load; keep sessions short and always know your exit.",
+      "Work with a coach or a spotter where you can, and stop at any sharp pain or dizziness."
+    ]
+  };
+
+  C.dip_alt_negative = {
+    summary: "A slow lowering from a straight-arm support on dip bars or a straight bar, building the strength for a full dip.",
+    prereq: [
+      "A steady straight-arm support on bars, without shrugging.",
+      "You can lower yourself under control, to a depth you set in advance.",
+      "Bars that are stable, with a step to reset on."
+    ],
+    setup: [
+      "Use dip bars or a straight bar that don't move under your full weight.",
+      "Put a step or a box within reach, so you can reset without dropping.",
+      "Step or jump up into a straight-arm support, with your shoulders pressed down away from your ears.",
+      "Check whether you're on parallel bars or a straight bar, since they feel different."
+    ],
+    steps: [
+      "Start in a stable straight-arm support.",
+      "Lower yourself slowly, with your elbows pointing back, to a depth you can control.",
+      "Keep your shoulders from shrugging as you go down.",
+      "Step down or onto the step rather than dropping, then return to the top for the next rep."
+    ],
+    breathing: "Breathe in as you lower, and breathe out when you reach the bottom or reset.",
+    tempo: "Lower slowly over about four seconds, with no drop at the bottom, then reset without rushing.",
+    feel: {
+      should: "In your chest, the fronts of your shoulders and the backs of your arms, resisting the descent.",
+      shouldnt: "As a pinch at the front of your shoulder at the bottom, or an ache in your wrists."
+    },
+    mistakes: [
+      { mistake: "You jump into an unstable support.",
+        fix: "Step up into the support calmly, and check the bars don't move before you lower." },
+      { mistake: "You lose control and drop at the bottom.",
+        fix: "Stop higher, where you can still control the speed, and go deeper gradually." }
+    ],
+    safety: [
+      "The bottom of a dip stretches the front of your shoulder; stay above the depth where it pinches.",
+      "Stop at a sharp pain in your wrist, elbow or shoulder, and choose a comfortable push-up instead."
+    ]
+  };
+
+  C.dip_alt_support = {
+    summary: "A straight-arm hold on parallel bars with your shoulders pressed down, the base position for every dip.",
+    prereq: [
+      "You can bear your weight through straight arms with steady shoulders.",
+      "Bars that are stable and low enough that you can step down safely."
+    ],
+    setup: [
+      "Use parallel bars low enough to step down from, or put a stable step beside them.",
+      "Take a straight-arm support with your hands beside your hips.",
+      "Press down into the bars so your shoulders stay away from your ears.",
+      "Rest your feet lightly on the floor if you need to take some weight off."
+    ],
+    steps: [
+      "Press down through the bars until your elbows are straight.",
+      "Keep your shoulders low, away from your ears, and your body still.",
+      "Lock your elbows without collapsing into the joints.",
+      "Hold, then step down to finish."
+    ],
+    breathing: "Breathe steadily through the hold; if you catch yourself holding your breath, step down.",
+    tempo: "Get into the support smoothly, hold still without swinging, and step down gently at the end.",
+    feel: {
+      should: "In your shoulders as they push down and in the backs of your arms, with your stomach keeping your body steady.",
+      shouldnt: "As shrugging into your ears, or an ache in your wrists or at the backs of your elbows."
+    },
+    mistakes: [
+      { mistake: "You shrug up into your ears.",
+        fix: "Push the bars down until there's a gap between your shoulders and your ears." },
+      { mistake: "You hang on your joints at the end of their range.",
+        fix: "Keep a light muscle effort in your arms and shoulders instead of relaxing into the joints." }
+    ],
+    safety: [
+      "The wrists take the load; stop if they or your shoulders ache.",
+      "Unload through your feet if your arms tire, and step down rather than dropping."
+    ]
+  };
+
+  C.dip_alt_ringsupport = {
+    summary: "A straight-arm support on rings, where the rings can move, so your shoulders and arms must work to hold still.",
+    prereq: [
+      "A comfortable support on parallel bars, held with straight arms and your shoulders low.",
+      "You can steady rings that move under your hands.",
+      "Rings hung from a point that holds your full weight without shifting."
+    ],
+    setup: [
+      "Set the rings at equal height, with safe access to the floor or a step.",
+      "Check the straps and the anchor before you put your weight on them.",
+      "Take a straight-arm support with your hands beside your hips and the rings close to your body.",
+      "Keep your feet lightly on the floor at first if you need to share the load."
+    ],
+    steps: [
+      "Press down until your elbows are straight and your shoulders are low.",
+      "Keep the rings close to your body and stop them drifting apart.",
+      "Control any rotation, letting your hands turn out only as far as is comfortable.",
+      "Hold still, then step down."
+    ],
+    breathing: "Breathe steadily through the hold; if you catch yourself holding your breath, step down.",
+    tempo: "Move into the support smoothly, hold still as the rings settle, and step down gently.",
+    feel: {
+      should: "In your shoulders and the backs of your arms, with small corrections keeping the rings still.",
+      shouldnt: "As rings drifting apart, or an ache in your wrists, elbows or the fronts of your shoulders."
+    },
+    mistakes: [
+      { mistake: "You let the rings drift apart.",
+        fix: "Squeeze the rings in toward your hips, and step down when you can't keep them there." },
+      { mistake: "You force your hands to turn out.",
+        fix: "Let them turn only as far as is comfortable, and keep the rings close to your body." }
+    ],
+    safety: [
+      "Unstable rings load your shoulders and elbows from awkward angles; step down if control goes.",
+      "Stop at pain in your wrists, elbows or shoulders."
     ]
   };
 })();

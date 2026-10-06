@@ -15,11 +15,15 @@
   "use strict";
   var C = window.EXERCISE_CONTENT = window.EXERCISE_CONTENT || {};
   var B = window.EXERCISE_CONTENT_BATCHES = window.EXERCISE_CONTENT_BATCHES || {};
-  B.c1 = "pending";
+  B.c1 = "complete";
 
   /* ---- curl · biceps ---- */
 
   C.acc_curl_doorframe = {
+    prereq: [
+      "A door frame that is firm and won't move.",
+      "Elbows that bend and straighten without pain."
+    ],
     summary: "A bodyweight curl done by leaning back from a door frame and pulling your chest toward it, which trains your biceps with no equipment.",
     setup: [
       "Use a solid, fixed door frame, and lean on it gently first to check that it doesn't flex.",
@@ -57,6 +61,10 @@
   };
 
   C.acc_curl_invrow = {
+    prereq: [
+      "A controlled door-frame curl.",
+      "A bar, rings or table edge that won't slip."
+    ],
     summary: "A row lying under a low bar or rings with your palms facing you, which brings your biceps more into the pull than an overhand row does.",
     setup: [
       "Set a bar at waist height or hang rings low, and check that it is fixed and takes your full weight.",
@@ -88,6 +96,10 @@
   };
 
   C.acc_curl_band = {
+    prereq: [
+      "Comfortable elbows when curling under tension.",
+      "A band that is secure and has no tears."
+    ],
     summary: "A standing curl against a resistance band, where the pull gets heavier as your hands rise toward your shoulders.",
     setup: [
       "Check the band for nicks or thin spots before you start.",
@@ -124,6 +136,10 @@
   };
 
   C.acc_curl_db = {
+    prereq: [
+      "Comfortable elbows when curling a weight.",
+      "A weight you can control without swinging."
+    ],
     summary: "A standing curl with a dumbbell in each hand, the most direct way to load your biceps once you own weights.",
     setup: [
       "Choose a weight you can lower under control, not one you have to heave up.",
@@ -159,6 +175,10 @@
   };
 
   C.acc_curl_hammer = {
+    prereq: [
+      "Comfortable elbows and wrists when curling a weight.",
+      "A weight you can control without swinging."
+    ],
     summary: "A curl with your palms facing each other, which works your biceps and the top of your forearms.",
     setup: [
       "Choose a weight you can lower under control.",
@@ -196,6 +216,9 @@
   /* ---- lateral · side delts ---- */
 
   C.acc_lateral_iso = {
+    prereq: [
+      "Comfortable shoulders when raising your arms out to the side."
+    ],
     summary: "Pressing the back of your hand into a door frame without letting your arm move, which works the sides of your shoulders with no equipment.",
     setup: [
       "Stand upright inside a doorway with one arm hanging by your side.",
@@ -232,6 +255,10 @@
   };
 
   C.acc_lateral_band = {
+    prereq: [
+      "A controlled isometric lateral raise.",
+      "A band that is secure and has no tears."
+    ],
     summary: "Raising your arms out to the sides against a band, to train the middle of your shoulders through a full range.",
     setup: [
       "Check the band for nicks, then stand on its middle with your whole foot, feet hip-width apart.",
@@ -268,6 +295,10 @@
   };
 
   C.acc_lateral_db = {
+    prereq: [
+      "Comfortable shoulders when raising your arms to the side.",
+      "A weight you can lift without shrugging."
+    ],
     summary: "Raising light dumbbells out to the sides to shoulder height, which works the middle of your shoulders directly.",
     setup: [
       "Choose a light weight, because your arms are at their longest lever here and heavy weights make you swing.",
@@ -304,6 +335,10 @@
   };
 
   C.acc_lateral_leanaway = {
+    prereq: [
+      "A controlled dumbbell lateral raise.",
+      "Something firm to lean away from."
+    ],
     summary: "A one-arm dumbbell raise done while leaning away from a fixed support, which changes the angle the weight pulls on the side of your shoulder.",
     setup: [
       "Check that the door frame or post is solid, because you lean your weight on it.",
@@ -343,6 +378,10 @@
   /* ---- reardelt · rear delts ---- */
 
   C.acc_reardelt_tdraise = {
+    prereq: [
+      "The ability to lie face down comfortably.",
+      "Shoulders that tolerate lifting your arms out to the side."
+    ],
     summary: "Lifting your arms out to the sides while lying face down, which trains the backs of your shoulders with no equipment.",
     setup: [
       "Lie face down on the floor with your arms straight out to the sides in a T, thumbs pointing up.",
@@ -379,6 +418,10 @@
   };
 
   C.acc_reardelt_snowangel = {
+    prereq: [
+      "A controlled prone T raise.",
+      "Shoulders that tolerate sweeping your arms overhead."
+    ],
     summary: "A face-down sweep of your arms from your hips to overhead and back, which trains the backs of your shoulders through a long arc.",
     setup: [
       "Lie face down with your arms by your hips, palms down.",
@@ -410,6 +453,10 @@
   };
 
   C.acc_reardelt_bandpull = {
+    prereq: [
+      "A controlled reverse snow angel.",
+      "A band that is secure and has no tears."
+    ],
     summary: "Pulling a band apart in front of you at shoulder height, which trains the backs of your shoulders and the muscles between your shoulder blades.",
     setup: [
       "Check the band for nicks, because an end that slips snaps back.",
@@ -445,6 +492,10 @@
   };
 
   C.acc_reardelt_facepull = {
+    prereq: [
+      "A controlled band pull-apart.",
+      "An anchor that holds the band without slipping."
+    ],
     summary: "Pulling a band from an anchor toward your face with your elbows high, which trains the backs of your shoulders and your upper back.",
     setup: [
       "Anchor a band at about face height on a closed door anchor or a solid post, and test it with a gentle tug before you step back.",
@@ -481,6 +532,10 @@
   };
 
   C.acc_reardelt_dbfly = {
+    prereq: [
+      "A flat back in a hip hinge.",
+      "Light dumbbells you can control without swinging."
+    ],
     summary: "Raising light dumbbells out to the sides from a hinged position, which works the backs of your shoulders.",
     setup: [
       "Choose light weights and hold one in each hand.",
@@ -520,6 +575,9 @@
   /* ---- cuff · rotator cuff ---- */
 
   C.acc_cuff_walllift = {
+    prereq: [
+      "Comfortable shoulders when lifting your arms against a wall."
+    ],
     summary: "Sliding your forearms up a wall and lifting your hands off it at the top, a small movement for the rotator cuff muscles that steady your shoulder.",
     setup: [
       "Stand with your back, head and hips against a wall and your feet a short step out.",
@@ -551,6 +609,10 @@
   };
 
   C.acc_cuff_pronew = {
+    prereq: [
+      "A controlled wall slide with lift-off.",
+      "The ability to lie face down comfortably."
+    ],
     summary: "A face-down lift of your elbows and hands in a W shape, for the small muscles around your shoulder blades that steady your shoulder.",
     setup: [
       "Lie face down with your forehead near the floor.",
@@ -582,6 +644,10 @@
   };
 
   C.acc_cuff_bander = {
+    prereq: [
+      "A controlled prone W raise.",
+      "A band that is secure and has no tears."
+    ],
     summary: "Rotating your forearm outward against a band with your elbow tucked in, a small movement for the rotator cuff muscles at the back of your shoulder.",
     setup: [
       "Anchor a band at elbow height, and check it for nicks.",
@@ -618,6 +684,10 @@
   };
 
   C.acc_cuff_sidelying = {
+    prereq: [
+      "Comfortable shoulders when lying on your side.",
+      "A very light weight you can control slowly."
+    ],
     summary: "Rotating your forearm upward against a light dumbbell while lying on your side, which trains the rotator cuff muscles at the back of your shoulder.",
     setup: [
       "Lie on one side with your head resting on your lower arm.",
@@ -656,6 +726,9 @@
   /* ---- traps ---- */
 
   C.acc_traps_pike = {
+    prereq: [
+      "Comfortable shoulders when bearing weight in a pike position."
+    ],
     summary: "Shrugging your shoulders up and down from a pike position with straight arms, which trains your upper traps with just your bodyweight.",
     setup: [
       "Warm your wrists up first, because this loads them like a pike push-up.",
@@ -686,6 +759,10 @@
   };
 
   C.acc_traps_band = {
+    prereq: [
+      "A controlled pike shrug.",
+      "A band that is secure and has no tears."
+    ],
     summary: "Lifting your shoulders straight up against a band under your feet, a simple way to train your upper traps with a band.",
     setup: [
       "Check the band for nicks, then stand on its middle with your whole foot, feet hip-width apart.",
@@ -721,6 +798,10 @@
   };
 
   C.acc_traps_shrug = {
+    prereq: [
+      "Comfortable shoulders and neck when carrying a weight.",
+      "A weight you can hold without your grip giving out."
+    ],
     summary: "Lifting your shoulders straight up while holding a weight in each hand, which loads your upper traps directly.",
     setup: [
       "Pick the weights up from the floor with a flat back and bent knees.",
@@ -759,6 +840,10 @@
   /* ---- neck ---- */
 
   C.acc_neck_chintuck = {
+    prereq: [
+      "A neck that moves without pain, dizziness or tingling.",
+      "The ability to sit or lie upright and relaxed."
+    ],
     summary: "Sliding your head straight back and holding it, a gentle hold for the muscles at the front of your neck.",
     setup: [
       "Sit or stand tall with your eyes level.",
@@ -789,6 +874,10 @@
   };
 
   C.acc_neck_fourway = {
+    prereq: [
+      "A controlled chin tuck hold.",
+      "A neck that tolerates gentle pressure in every direction."
+    ],
     summary: "Pushing your head into your own hand in four directions without letting it move, which trains your neck from every side.",
     setup: [
       "Sit tall on a chair with your shoulders relaxed and your jaw soft.",
@@ -820,6 +909,10 @@
   };
 
   C.acc_neck_lyingraise = {
+    prereq: [
+      "A controlled four-way neck isometric.",
+      "A neck that moves without pain, dizziness or tingling."
+    ],
     summary: "Lifting your head a few centimetres off a mat while lying on your back with your chin tucked, a small movement for the front of your neck.",
     setup: [
       "Lie face up on a mat or a bed with your knees bent.",
@@ -852,6 +945,10 @@
   /* ---- grip · forearms ---- */
 
   C.acc_grip_wring = {
+    prereq: [
+      "Hands and wrists that tolerate twisting a towel.",
+      "A towel that won't tear."
+    ],
     summary: "Twisting a dry towel as if wringing it out and holding that squeeze, which works your forearms and grip with no equipment.",
     setup: [
       "Use a strong, dry hand towel that won't tear.",
@@ -887,6 +984,11 @@
   };
 
   C.acc_grip_towelhang = {
+    prereq: [
+      "A comfortable dead hang on a bare bar.",
+      "A towel grip built up a little at a time, starting with a towel wring hold.",
+      "A pull-up bar and towel that hold your weight."
+    ],
     summary: "Hanging from a towel draped over a pull-up bar, which makes your grip work much harder than it does on a bare bar.",
     setup: [
       "Check that the bar is fixed, and that the towel is strong and not worn.",
@@ -923,6 +1025,10 @@
   };
 
   C.acc_grip_farmer = {
+    prereq: [
+      "A controlled towel hang.",
+      "Weights you can pick up safely and carry upright."
+    ],
     summary: "Standing tall while holding a weight in each hand, which works your grip and forearms while your whole body braces.",
     setup: [
       "Place a dumbbell or kettlebell on the floor on each side of you.",
@@ -958,6 +1064,10 @@
   };
 
   C.acc_grip_wristcurl = {
+    prereq: [
+      "Wrists that bend and straighten without pain.",
+      "A light weight you can control slowly."
+    ],
     summary: "Curling a dumbbell with your forearm resting on your thigh, so only your wrist and fingers move, to train the inside of your forearm.",
     setup: [
       "Sit with your forearm resting along your thigh and your hand hanging past your knee, palm up.",
@@ -987,6 +1097,10 @@
   };
 
   C.acc_grip_revwristcurl = {
+    prereq: [
+      "Wrists that bend and straighten without pain.",
+      "A light weight you can control slowly."
+    ],
     summary: "Lifting a dumbbell by bending your wrist upward, palm down, to train the top of your forearm.",
     setup: [
       "Sit with your forearm resting along your thigh and your hand hanging past your knee, palm down.",
@@ -1012,6 +1126,231 @@
     ],
     safety: [
       "Use a lighter weight than you would for the palm-up curl, and stop if your wrist or the outside of your elbow aches."
+    ]
+  };
+
+  /* ---- yellow-dude catalogue additions (plan step 3.4) ---- */
+
+  C.acc_curl_pelican = {
+    summary: "A low-ring curl that starts with your arms long and your shoulders held back, loading the biceps at a stretched length.",
+    setup: [
+      "Set the rings low and walk your feet forward until the angle is one you can control for the whole rep.",
+      "Check that the rings are anchored to something built to take your bodyweight.",
+      "Hold the rings with your palms facing you and lean back with your body in one straight line.",
+      "Start with your arms straight and your shoulders pulled back, not hanging loose."
+    ],
+    steps: [
+      "Bend your elbows to bring your hands toward you, with your upper arms doing very little.",
+      "Finish with your hands close to your face and your body still in one line.",
+      "Pause for a beat at the top.",
+      "Straighten your arms slowly, back to the start.",
+      "Stop the lowering before your shoulders are forced back past where they feel supported."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you curl up. Don't hold your breath at the bottom.",
+    tempo: "Curl up smoothly, pause briefly, and lower for about three seconds so the stretched position is never reached with a drop.",
+    feel: {
+      should: "In your biceps, strongest in the lower half of the rep where your arms are longest.",
+      shouldnt: "As a pinch or ache at the front of your shoulder, or a sharp pull at the inside of your elbow."
+    },
+    mistakes: [
+      { mistake: "You force your shoulders back at the bottom of every rep.",
+        fix: "Stop lowering a little sooner, or raise the rings so the angle is easier." },
+      { mistake: "You drop fast into straight arms.",
+        fix: "Lower under control, because a sudden drop loads the biceps tendon in one jolt." },
+      { mistake: "Your hips sag or pike to help the curl.",
+        fix: "Squeeze your glutes and keep your body in one line from heels to head." }
+    ],
+    safety: [
+      "Stop at pain in the biceps tendon, the front of your shoulder or your elbow, and raise the rings before you try again.",
+      "Don't use this if a stretched, loaded biceps already feels irritated; a plain ring curl is gentler."
+    ],
+    prereq: [
+      "A comfortable ring row.",
+      "Elbows and shoulders that tolerate a long stretch under a little load.",
+      "A ring curl that already feels smooth."
+    ]
+  };
+
+  C.acc_curl_ring = {
+    summary: "A ring curl from a leaning position, bending your elbows to draw the rings toward your forehead and working the biceps.",
+    setup: [
+      "Set the rings at about chest height and check that they're anchored to something built to take your bodyweight.",
+      "Hold the rings with your palms facing you and your arms straight out in front.",
+      "Lean back with your body in one line and your feet flat on the floor."
+    ],
+    steps: [
+      "Keep your upper arms where they are and bend your elbows.",
+      "Curl the rings toward your forehead until your hands are beside your head.",
+      "Pause for a beat at the top.",
+      "Lower slowly until your arms are straight again."
+    ],
+    breathing: "Breathe out as you curl, and breathe in as you lower.",
+    tempo: "Curl smoothly, pause briefly, and lower for about two seconds without letting your body swing.",
+    feel: {
+      should: "In your biceps, with your shoulders and trunk holding still.",
+      shouldnt: "As a pull at the inside of your elbow, or as strain in your lower back."
+    },
+    mistakes: [
+      { mistake: "You drive with your hips instead of your arms.",
+        fix: "Squeeze your glutes to hold your body in one line and let only your elbows move." },
+      { mistake: "Your elbows wander wide or drop as you curl.",
+        fix: "Keep your upper arms still and your elbows pointing at the ceiling or slightly forward." },
+      { mistake: "You can't reach the top of the curl.",
+        fix: "Walk your feet closer to stand more upright, which takes load off your arms." }
+    ],
+    safety: [
+      "Stop at pain in your elbow or the front of your shoulder, and stand more upright to lighten the load."
+    ],
+    prereq: [
+      "A controlled ring row.",
+      "Rings that are anchored to something built to take your bodyweight.",
+      "Elbows that tolerate bending under load."
+    ]
+  };
+
+  C.acc_reardelt_ringfacepull = {
+    summary: "A ring pull to face height with your elbows high and wide, working the back of your shoulders and the muscles between your shoulder blades.",
+    setup: [
+      "Set the rings at about face height and check that they're anchored to something built to take your bodyweight.",
+      "Hold the rings with your palms facing each other and lean back with your body straight.",
+      "Walk your feet forward for a harder angle, or closer for an easier one."
+    ],
+    steps: [
+      "Pull the rings toward your face, with your elbows high and wide.",
+      "Finish with your hands beside your ears and your shoulder blades pulled back and down.",
+      "Pause for a beat with your ribs down and your neck long.",
+      "Straighten your arms slowly until you're back at the start."
+    ],
+    breathing: "Breathe in as you pull, and let the breath out slowly as you lower.",
+    tempo: "Pull smoothly, pause briefly at your face, and take about two seconds to lower.",
+    feel: {
+      should: "In the back of your shoulders and between your shoulder blades.",
+      shouldnt: "As a pinch at the front of your shoulder, or as tension in your neck."
+    },
+    mistakes: [
+      { mistake: "You poke your chin forward to meet the rings.",
+        fix: "Keep your head still and bring the rings to your face instead." },
+      { mistake: "You flare your ribs and arch your lower back.",
+        fix: "Squeeze your glutes and keep your ribs pulled down toward your hips." },
+      { mistake: "Your elbows drop low, so it turns into a row.",
+        fix: "Lead with your elbows and keep them at about the height of your hands." }
+    ],
+    safety: [
+      "Stop at pain in your shoulder or neck, and shorten the range or stand more upright if the shoulder pinches."
+    ],
+    prereq: [
+      "A controlled ring row.",
+      "Shoulders that let you raise your elbows high without pinching."
+    ]
+  };
+
+  C.acc_traps_proney = {
+    summary: "A face-down lift of both arms in a Y shape, working the lower and middle traps that hold your shoulder blades down and back.",
+    setup: [
+      "Lie face down on a mat with room above your head.",
+      "Reach your arms overhead in a Y, with your thumbs pointing at the ceiling.",
+      "Rest your forehead just off the floor with your neck long."
+    ],
+    steps: [
+      "Lift both arms a few centimetres, leading with your shoulder blades.",
+      "Keep your ribs on the floor and your neck long.",
+      "Pause for a beat at the top.",
+      "Lower your arms slowly until your hands touch down."
+    ],
+    breathing: "Breathe out as you lift, and breathe in as you lower. Keep breathing during the pause.",
+    tempo: "Lift smoothly, pause briefly, and lower for about two seconds. The lift is small, so don't rush it.",
+    feel: {
+      should: "In the muscles between and just below your shoulder blades.",
+      shouldnt: "In your neck, or as an arch in your lower back."
+    },
+    mistakes: [
+      { mistake: "You shrug your shoulders up toward your ears.",
+        fix: "Start the lift by sliding your shoulder blades down your back." },
+      { mistake: "You lift your arms by arching your lower back.",
+        fix: "Squeeze your glutes and keep your ribs on the floor, then lift less." },
+      { mistake: "Your chin lifts and your neck cranes.",
+        fix: "Keep your gaze at the floor and your forehead just off it." }
+    ],
+    safety: [
+      "Lift only as high as your arms move smoothly, and shorten the range if your neck or shoulder pinches.",
+      "Stop at persistent pain in your neck, shoulder or lower back."
+    ],
+    prereq: [
+      "Lying face down and lifting your arms gently without neck strain."
+    ]
+  };
+
+  C.acc_grip_falsegrip = {
+    summary: "A hang on rings with your wrist set over the top of each ring, training the grip used in muscle-ups and ring skills.",
+    setup: [
+      "Set the rings low enough that your feet stay on the floor, and check that they're anchored to something built to take your bodyweight.",
+      "Put the heel of your palm over the ring so your wrist sits on top of it, not under it.",
+      "Close your fingers over the ring, and use chalk if your skin slips."
+    ],
+    steps: [
+      "Take your weight onto your hands slowly, with your shoulders drawn down.",
+      "Keep your wrist over the ring and your feet close enough to take weight when you need them.",
+      "Hang for the set, breathing steadily.",
+      "Put your feet back on the floor before your grip gives."
+    ],
+    breathing: "Breathe slowly and steadily through the hang, and keep your shoulders away from your ears.",
+    tempo: "Take your weight gradually over a few seconds, and release by stepping down rather than dropping.",
+    feel: {
+      should: "In your forearms and the heel of your hand, with your shoulders active.",
+      shouldnt: "As a pinch of skin in your palm, or as numbness or sharp pain in your hand or wrist."
+    },
+    mistakes: [
+      { mistake: "You take your full bodyweight at once.",
+        fix: "Keep your feet on the floor and load your hands a little more each attempt." },
+      { mistake: "The ring pinches the skin of your palm.",
+        fix: "Shift the ring across your palm, and cut the attempt short if it keeps happening." },
+      { mistake: "Your shoulders shrug up and your arms go slack.",
+        fix: "Pull your shoulder blades down and keep your arms firm." }
+    ],
+    safety: [
+      "Stop at pain or numbness in your hand, wrist, elbow or shoulder, and put your feet down to take the load off.",
+      "Build the load slowly over many sessions, because your wrist and forearm adapt slower than your muscles."
+    ],
+    prereq: [
+      "A comfortable ring hang.",
+      "Wrists and forearms that are used to gradual loading.",
+      "Rings that are anchored to something built to take your bodyweight."
+    ]
+  };
+
+  C.acc_grip_ricebucket = {
+    summary: "Opening, closing and turning your hand in a bucket of dry rice, working the muscles of your fingers and forearm gently.",
+    setup: [
+      "Fill a stable bucket with clean, dry rice, deep enough to bury your hand to the wrist.",
+      "Sit beside it with the bucket at a height where your forearm rests comfortably.",
+      "Put one hand in up to the wrist."
+    ],
+    steps: [
+      "Spread your fingers wide against the rice.",
+      "Close your hand into a fist and squeeze gently.",
+      "Turn your wrist one way, then the other, with your hand buried.",
+      "Move from one motion to the next without stopping, then swap hands."
+    ],
+    breathing: "Breathe normally throughout. Gripping tends to make people hold their breath, so check it now and then.",
+    tempo: "Move steadily and gently, one motion flowing into the next, rather than fast or forceful.",
+    feel: {
+      should: "As a mild, even tiring across your fingers and forearm.",
+      shouldnt: "As pain in your wrist or fingers, or as pins and needles."
+    },
+    mistakes: [
+      { mistake: "You push through wrist pain.",
+        fix: "Stop that hand and shorten the time, because this is meant to be low effort." },
+      { mistake: "You squeeze hard instead of working through the range.",
+        fix: "Use light pressure and open the fingers as wide as you close them." },
+      { mistake: "You do a lot of it every day.",
+        fix: "Leave days between sessions if your hands are sore the next morning." }
+    ],
+    safety: [
+      "Stop at pain, numbness or skin irritation in your hand or wrist, and shorten the time next session.",
+      "Keep the rice clean and dry, and replace it if it gets damp or dusty."
+    ],
+    prereq: [
+      "Hands that tolerate repeated light gripping and opening."
     ]
   };
 })();

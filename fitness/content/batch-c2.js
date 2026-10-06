@@ -14,11 +14,15 @@
   "use strict";
   var C = window.EXERCISE_CONTENT = window.EXERCISE_CONTENT || {};
   var B = window.EXERCISE_CONTENT_BATCHES = window.EXERCISE_CONTENT_BATCHES || {};
-  B.c2 = "pending";
+  B.c2 = "complete";
 
   /* ---- quad ---- */
 
   C.acc_quad_wallsit = {
+    prereq: [
+      "Knees that tolerate a bent position.",
+      "A wall and floor that won't let your feet slip."
+    ],
     summary: "A timed hold against a wall with your thighs close to parallel with the floor, working your quads without any movement.",
     setup: [
       "Stand with your back flat against a smooth wall and walk your feet forward about 60 cm, hip-width apart.",
@@ -52,6 +56,10 @@
   };
 
   C.acc_quad_revlunge = {
+    prereq: [
+      "A controlled wall sit.",
+      "Balance on one leg for a moment."
+    ],
     summary: "A lunge where you step backward and lower until the back knee hovers above the floor, working the quads of the front leg one side at a time.",
     setup: [
       "Stand tall with your feet hip-width apart, close enough to a wall or a chair back to take a hand for balance.",
@@ -84,6 +92,10 @@
   };
 
   C.acc_quad_stepup = {
+    prereq: [
+      "A controlled reverse lunge.",
+      "A step or box that is firm and won't tip."
+    ],
     summary: "A single-leg climb onto a stair or a sturdy step, where the front leg lifts your whole body and lowers it again under control.",
     setup: [
       "Stand facing a stair or a sturdy step; a low step is easier, and one around knee height is hard.",
@@ -115,6 +127,11 @@
   };
 
   C.acc_quad_sissy = {
+    prereq: [
+      "A controlled step-up.",
+      "Knees that tolerate bending far forward.",
+      "Something to hold for balance."
+    ],
     summary: "A squat where your knees travel far forward while your torso leans back, putting the work on the front of your thighs.",
     setup: [
       "Stand beside a door frame or a solid post and hold it with one hand, feet about hip-width apart.",
@@ -146,6 +163,10 @@
   };
 
   C.acc_quad_dbsplit = {
+    prereq: [
+      "A controlled split squat.",
+      "Dumbbells you can hold without your grip giving out."
+    ],
     summary: "A split squat holding a dumbbell in each hand, dropping the back knee straight down while the front leg does most of the work.",
     setup: [
       "Hold a dumbbell in each hand at your sides and stand in a long stride, front foot flat and back heel lifted.",
@@ -177,6 +198,10 @@
   };
 
   C.acc_quad_spanish = {
+    prereq: [
+      "A controlled assisted sissy squat.",
+      "A band and anchor that are secure."
+    ],
     summary: "A squat against a band that pulls your knees forward, letting you sit back with upright shins while your quads take the load.",
     setup: [
       "Anchor a band at knee height on a sturdy post, loop it around the backs of your knees and step away until it is taut.",
@@ -210,6 +235,10 @@
   /* ---- hamstring ---- */
 
   C.acc_hamstring_slidecurl = {
+    prereq: [
+      "A comfortable glute bridge.",
+      "A surface your feet slide on smoothly."
+    ],
     summary: "A bridge with your heels on a towel that you slide out and pull back, loading the backs of your thighs as your legs lengthen.",
     setup: [
       "Lie on your back on a smooth floor such as tile or wood, or in socks on a polished one, with your heels on a towel.",
@@ -246,6 +275,10 @@
   };
 
   C.acc_hamstring_slidecurl1 = {
+    prereq: [
+      "A controlled sliding leg curl.",
+      "Hips that stay lifted throughout."
+    ],
     summary: "The sliding leg curl on one leg at a time, so each hamstring takes a heavier share of the work.",
     setup: [
       "Set up as for the two-leg version: lie bridged on a smooth floor with a towel under one heel.",
@@ -277,6 +310,10 @@
   };
 
   C.acc_hamstring_slrdl = {
+    prereq: [
+      "A hip hinge with a flat back.",
+      "Balance on one leg, with a hand on a support at first."
+    ],
     summary: "A one-legged hip hinge where your torso tips forward and your free leg sweeps back, training your hamstrings and your balance together.",
     setup: [
       "Stand on one foot with the knee slightly bent and your hands on your hips or reaching in front of you.",
@@ -309,6 +346,10 @@
   };
 
   C.acc_hamstring_slrdldb = {
+    prereq: [
+      "A controlled single-leg Romanian deadlift.",
+      "A dumbbell you can hold without losing your balance."
+    ],
     summary: "The single-leg hinge holding a dumbbell under your shoulder, which adds load to your hamstrings and makes balance the challenge.",
     setup: [
       "Hold one dumbbell in the hand opposite your standing leg, with the knee of that leg slightly bent.",
@@ -341,6 +382,10 @@
   };
 
   C.acc_hamstring_bandcurl = {
+    prereq: [
+      "A controlled single-leg sliding leg curl.",
+      "A band and anchor that are secure."
+    ],
     summary: "A face-down leg curl against a band anchored low, bending your knees to pull your heels toward your glutes.",
     setup: [
       "Anchor a band low on a sturdy post or heavy furniture and loop the other end around both heels.",
@@ -379,6 +424,10 @@
   /* ---- calf ---- */
 
   C.acc_calf_raise = {
+    prereq: [
+      "Ankles that tolerate rising onto your toes.",
+      "A step that is firm and won't slide."
+    ],
     summary: "A heel raise from the edge of a step, lowering below the step for a stretch and rising as high as you can onto your toes.",
     setup: [
       "Stand on the edge of a firm step with the balls of your feet on it and your heels hanging off.",
@@ -415,6 +464,10 @@
   };
 
   C.acc_calf_single = {
+    prereq: [
+      "A controlled calf raise on a step.",
+      "Balance on one leg."
+    ],
     summary: "The calf raise on one leg at a time, so your whole bodyweight rests on one ankle.",
     setup: [
       "Stand on one foot on the edge of a step, with the other foot hooked behind the ankle or held off the floor.",
@@ -447,6 +500,10 @@
   };
 
   C.acc_calf_bentknee = {
+    prereq: [
+      "A controlled calf raise on a step.",
+      "Knees that tolerate staying slightly bent."
+    ],
     summary: "A calf raise done with your knees held bent the whole time, which puts more of the work on the lower calf.",
     setup: [
       "Stand on the edge of a step with the balls of your feet on it and a hand on a wall.",
@@ -477,6 +534,10 @@
   };
 
   C.acc_calf_weighted = {
+    prereq: [
+      "A controlled single-leg calf raise.",
+      "A weight you can hold while balanced."
+    ],
     summary: "A single-leg calf raise holding a dumbbell or kettlebell in one hand, which adds load to the calf.",
     setup: [
       "Hold a dumbbell or kettlebell in one hand and a wall or a rail with the other.",
@@ -510,6 +571,10 @@
   /* ---- shin ---- */
 
   C.acc_shin_wall = {
+    prereq: [
+      "Shins and ankles that move without pain.",
+      "A wall and floor that won't let your feet slip."
+    ],
     summary: "A back-to-the-wall lift of the fronts of your feet toward your shins, working the muscle along the front of your lower leg.",
     setup: [
       "Stand with your back against a wall and your feet shoulder-width apart, a short way from it.",
@@ -541,6 +606,10 @@
   };
 
   C.acc_shin_single = {
+    prereq: [
+      "A controlled wall tibialis raise.",
+      "Balance on one leg."
+    ],
     summary: "The wall tibialis raise on one foot at a time, lifting the front of the standing foot while the other foot stays off the floor.",
     setup: [
       "Stand with your back against a wall, one foot on the floor a short way from it and the other foot held just off the floor.",
@@ -575,6 +644,10 @@
   /* ---- adductor ---- */
 
   C.acc_adductor_sidelying = {
+    prereq: [
+      "The ability to lie on your side comfortably.",
+      "Hips that tolerate lifting your lower leg."
+    ],
     summary: "A side-lying lift of the bottom leg toward the top one, a small movement that works your inner thigh.",
     setup: [
       "Lie on your side with the bottom leg straight and the top leg bent, its foot on the floor in front of the bottom knee.",
@@ -611,6 +684,10 @@
   };
 
   C.acc_adductor_copknee = {
+    prereq: [
+      "A controlled side-lying adduction.",
+      "A chair that is firm and won't slide."
+    ],
     summary: "A side plank with your top knee resting on a chair seat, pressing down into it to work the inner thigh while you hold your body level.",
     setup: [
       "Set a sturdy chair on a non-slip floor where it can't slide.",
@@ -643,6 +720,10 @@
   };
 
   C.acc_adductor_copfoot = {
+    prereq: [
+      "A controlled Copenhagen plank with your knee on a chair.",
+      "A chair that is firm and won't slide."
+    ],
     summary: "A side plank with the inside of your top foot on a chair seat, pressing into it to hold your body in one straight line.",
     setup: [
       "Set a sturdy chair on a non-slip floor where it can't slide.",
@@ -675,6 +756,10 @@
   };
 
   C.acc_adductor_band = {
+    prereq: [
+      "A controlled side-lying adduction.",
+      "A band and anchor that are secure."
+    ],
     summary: "A standing leg sweep across your body against a band anchored low, working the inner thigh of the moving leg.",
     setup: [
       "Anchor a band low on a sturdy post and loop the other end around one ankle.",
@@ -713,6 +798,10 @@
   /* ---- abductor ---- */
 
   C.acc_abductor_sidelying = {
+    prereq: [
+      "The ability to lie on your side comfortably.",
+      "Hips that tolerate lifting your top leg."
+    ],
     summary: "A side-lying lift of the top leg toward the ceiling, leading with the heel to work the muscles on the outside of your hip.",
     setup: [
       "Lie on your side with your hips stacked, the bottom knee bent for balance and the top leg straight in line with your torso.",
@@ -750,6 +839,10 @@
   };
 
   C.acc_abductor_sideplank = {
+    prereq: [
+      "A controlled side-lying abduction.",
+      "The ability to hold a side plank for a moment."
+    ],
     summary: "A side plank on your forearm where you lift the top leg while your hips stay level, working the outside of the hip and the side of your trunk.",
     setup: [
       "Set up in a side plank on your forearm, with your elbow under your shoulder.",
@@ -781,6 +874,10 @@
   };
 
   C.acc_abductor_bandwalk = {
+    prereq: [
+      "A controlled side-lying abduction, and a steady quarter squat.",
+      "A band that is secure and has no tears."
+    ],
     summary: "A sideways walk in a quarter squat with a band around your legs, keeping the muscles on the outside of your hips working throughout.",
     setup: [
       "Loop a band around both legs just above your knees; a band on the ankles is harder.",
@@ -812,6 +909,10 @@
   };
 
   C.acc_abductor_clamshell = {
+    prereq: [
+      "A controlled side-lying abduction.",
+      "A band that is secure and has no tears."
+    ],
     summary: "A side-lying movement with a band above your knees, lifting the top knee like a clamshell opening to work the outside of your hip.",
     setup: [
       "Lie on your side with a band looped around both legs just above the knees.",
@@ -850,6 +951,10 @@
   /* ---- antirot ---- */
 
   C.acc_antirot_knees = {
+    prereq: [
+      "Shoulders and wrists that tolerate a side-lying prop.",
+      "A controlled brace without your hips sagging."
+    ],
     summary: "A side plank held from your knees, building the sides of your trunk with a shorter lever than the full version.",
     setup: [
       "Lie on your side with your knees bent behind you and your forearm on the floor.",
@@ -881,6 +986,10 @@
   };
 
   C.acc_antirot_sideplank = {
+    prereq: [
+      "A controlled side plank from your knees.",
+      "Shoulders that tolerate bearing weight to the side."
+    ],
     summary: "A full side plank held on your forearm, with your body in one straight line from your ears to your ankles.",
     setup: [
       "Lie on your side with your legs straight and stacked and your forearm on the floor.",
@@ -912,6 +1021,10 @@
   };
 
   C.acc_antirot_leg = {
+    prereq: [
+      "A controlled side plank.",
+      "Hips that stay level as you lift your top leg."
+    ],
     summary: "A side plank with your top leg lifted a little above the bottom one, adding a balance demand to the hold.",
     setup: [
       "Get into a side plank on your forearm, with your elbow under your shoulder and your legs straight and stacked.",
@@ -944,6 +1057,10 @@
   };
 
   C.acc_antirot_deadbug = {
+    prereq: [
+      "You can move an opposite arm and leg slowly while your stomach stays braced.",
+      "The ability to lie on your back and keep your lower back steady."
+    ],
     summary: "A back-lying exercise where the opposite arm and leg lower toward the floor while your lower back stays pressed down.",
     setup: [
       "Lie on your back with your arms pointing at the ceiling.",
@@ -976,6 +1093,10 @@
   };
 
   C.acc_antirot_pallof = {
+    prereq: [
+      "You can stand or kneel steadily and keep your trunk from being turned.",
+      "A band and anchor that are secure."
+    ],
     summary: "A standing press against a band anchored at your side, where the job is to stop the band from twisting you toward the anchor.",
     setup: [
       "Anchor a band at chest height on a sturdy post and stand sideways to it, a step away.",
@@ -1008,6 +1129,10 @@
   };
 
   C.acc_antirot_suitcase = {
+    prereq: [
+      "A controlled side plank with the top leg raised.",
+      "A weight you can carry upright without leaning."
+    ],
     summary: "A standing hold with a weight in one hand, where your trunk works to keep you upright instead of leaning toward the load.",
     setup: [
       "Pick up one dumbbell or kettlebell with your knees bent and your back flat.",
@@ -1042,6 +1167,10 @@
   /* ---- backext ---- */
 
   C.acc_backext_birddog = {
+    prereq: [
+      "Hands and knees that tolerate a kneeling position.",
+      "A lower back that stays still as you move your limbs."
+    ],
     summary: "A hands-and-knees exercise where you reach one arm and the opposite leg out level with your torso while the rest of you stays still.",
     setup: [
       "Start on hands and knees with your hands under your shoulders and your knees under your hips.",
@@ -1074,6 +1203,10 @@
   };
 
   C.acc_backext_prone = {
+    prereq: [
+      "A controlled bird dog.",
+      "The ability to lie face down comfortably."
+    ],
     summary: "A face-down lift of your chest a few centimetres off the floor by squeezing the muscles along your spine.",
     setup: [
       "Lie face down with your legs straight and your toes on the floor.",
@@ -1105,6 +1238,10 @@
   };
 
   C.acc_backext_revhyper = {
+    prereq: [
+      "A controlled prone back extension.",
+      "A bench that is firm and won't slide."
+    ],
     summary: "A face-down lift of your straight legs from the end of a bench, squeezing your glutes and the muscles along your spine.",
     setup: [
       "Check that the bench can't slide or tip.",
@@ -1135,6 +1272,10 @@
   };
 
   C.acc_backext_goodmorning = {
+    prereq: [
+      "A comfortable hip hinge with a flat back.",
+      "A weight you can hold without your lower back rounding."
+    ],
     summary: "A hip hinge holding one dumbbell against your chest, pushing your hips back with a flat back to work the backs of your thighs and glutes.",
     setup: [
       "Hold one dumbbell upright against your chest with both hands.",
@@ -1163,6 +1304,300 @@
     safety: [
       "Keep the dumbbell light until the movement is smooth.",
       "Stop the lowering before your back rounds."
+    ]
+  };
+
+  /* ---- yellow-dude catalogue additions (plan step 3.4) ---- */
+
+  C.acc_quad_wallsit1 = {
+    summary: "A wall sit on one leg with the other foot lifted, a harder timed hold for the front of your thigh.",
+    setup: [
+      "Set up in a two-leg wall sit with your back flat on the wall.",
+      "Check that the floor is non-slip, because your supporting foot carries nearly all the load.",
+      "Let your arms hang by your sides or fold them across your chest."
+    ],
+    steps: [
+      "Slide down the wall until your thighs are near parallel with the floor.",
+      "Shift your weight onto one leg, then lift the other foot a short way off the floor.",
+      "Keep your hips level and your supporting knee over your ankle.",
+      "Hold, breathing steadily, then put the lifted foot down before your leg gives.",
+      "Slide up the wall slowly, and repeat on the other side."
+    ],
+    breathing: "Breathe slowly and steadily through the hold, and let each exhale relax your face and shoulders.",
+    tempo: "Shift your weight gradually rather than snatching the foot up, and slide up the wall slowly at the end.",
+    feel: {
+      should: "Across the front of your supporting thigh, with your hips level.",
+      shouldnt: "As pressure at the front of your supporting knee, or as a hip that drops on the lifted side."
+    },
+    mistakes: [
+      { mistake: "Your pelvis drops on the side of the lifted foot.",
+        fix: "Press your back into the wall and level your hips before you lift the foot." },
+      { mistake: "Your supporting foot slips.",
+        fix: "Move to a non-slip floor or wear grippy shoes, and keep your knee over your ankle." },
+      { mistake: "You shift your weight back onto the lifted leg to rest.",
+        fix: "Put the foot down and end the hold instead of cheating the time." }
+    ],
+    safety: [
+      "Stop at knee pain, if you feel dizzy, or if the foot slips, and stand up safely.",
+      "Sit higher for a shallower angle if your knee complains; it is still the same exercise."
+    ],
+    prereq: [
+      "A steady two-leg wall sit.",
+      "A brief one-leg balance.",
+      "A non-slip floor and a smooth wall."
+    ]
+  };
+
+  C.acc_quad_wallsitw = {
+    summary: "A wall sit with a weight added, held at one fixed knee angle, for a harder timed hold of the front of your thighs.",
+    setup: [
+      "Put on a fitted vest, or hold a weight against your thighs so it can't slide.",
+      "Check that the floor is non-slip and the wall is smooth.",
+      "Stand with your back flat against the wall and your feet about hip-width apart."
+    ],
+    steps: [
+      "Slide down the wall until your thighs are near parallel with the floor.",
+      "Check that your knees sit over your ankles.",
+      "Press your back into the wall and keep the same knee angle every time.",
+      "Hold, breathing steadily, then slide up the wall slowly."
+    ],
+    breathing: "Breathe slowly and steadily through the hold. A weight tempts you to hold your breath, so let each exhale out.",
+    tempo: "Slide down under control, hold still, and slide up slowly instead of pushing off the wall in one jerk.",
+    feel: {
+      should: "Across the front of your thighs, with the weight sitting steady against you.",
+      shouldnt: "As pressure at the front of your knees, or as a weight that bounces or slides."
+    },
+    mistakes: [
+      { mistake: "You hold a loose weight that slides or swings.",
+        fix: "Use a fitted vest, or hold the weight tight against your thighs with both hands." },
+      { mistake: "You hold your breath.",
+        fix: "Breathe out slowly through the hold, and ease the load if you can't." },
+      { mistake: "Your knee angle creeps higher as you tire.",
+        fix: "Start at a depth you can keep to the end, so the hold stays comparable from set to set." }
+    ],
+    safety: [
+      "Choose a load that is secure, and stop at knee pain, dizziness or a foot that slips.",
+      "Sit higher for a shallower angle if your knee complains."
+    ],
+    prereq: [
+      "A steady wall sit without added weight.",
+      "A fitted vest, or a weight you can hold securely against your thighs."
+    ]
+  };
+
+  C.acc_quad_lunge = {
+    summary: "A lunge where you step forward into a split stance and push back to standing, working your quads and glutes one leg at a time.",
+    setup: [
+      "Stand tall with your feet hip-width apart and clear floor in front of you.",
+      "Keep a wall or a rail within reach if you need it for balance.",
+      "Pick the leg you'll step with first and plan to switch after the set."
+    ],
+    steps: [
+      "Step forward a long stride and land with the whole foot flat.",
+      "Lower until your back knee hovers just above the floor, with your torso upright.",
+      "Keep your front knee over your toes, not caving in.",
+      "Push back off your front foot to stand, and bring your feet together."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you push back up.",
+    tempo: "Step with control, lower for about two seconds, and push back up smoothly without bouncing off the floor.",
+    feel: {
+      should: "In the front of your front thigh and your glute, with your back leg steadying you.",
+      shouldnt: "As sharp pain at the front of your knee, or as a wobble in your front foot."
+    },
+    mistakes: [
+      { mistake: "You over-stride, so your front knee pushes far past your toes.",
+        fix: "Take a shorter step, so your shin stays close to upright at the bottom." },
+      { mistake: "Your front foot wobbles or the heel lifts.",
+        fix: "Press the whole foot into the floor and slow the step down." },
+      { mistake: "Your torso folds forward over the front leg.",
+        fix: "Keep your chest tall and your gaze ahead." }
+    ],
+    safety: [
+      "The forward step loads your front knee more than a step back does. Shorten the stride and the depth if the knee complains.",
+      "Stop at knee, hip or back pain, and hold a wall or rail if your balance is the problem."
+    ],
+    prereq: [
+      "Stepping into a split stance and returning without losing your balance.",
+      "Clear floor to step forward onto."
+    ]
+  };
+
+  C.acc_quad_stepupw = {
+    summary: "A step-up holding a dumbbell in each hand, working your quads and glutes with extra load on the leg that climbs.",
+    setup: [
+      "Choose a fixed step that can't slide, at about knee height or lower.",
+      "Hold a dumbbell in each hand at your sides and stand facing the step.",
+      "Pick the leg you'll climb with first and plan to switch after the set."
+    ],
+    steps: [
+      "Place your whole foot on the step.",
+      "Drive through that foot to stand tall on the step.",
+      "Keep your torso upright and your knee over your toes.",
+      "Lower back to the floor under control, then step down with the trailing foot first."
+    ],
+    breathing: "Breathe out as you stand up, and breathe in as you lower. Don't hold your breath under the weights.",
+    tempo: "Drive up smoothly, and lower for about two seconds rather than dropping from the top.",
+    feel: {
+      should: "In the front of your thigh and your glute on the leg that's on the step.",
+      shouldnt: "As a knee that caves in, or as a push off your trailing foot doing most of the work."
+    },
+    mistakes: [
+      { mistake: "You push off your trailing foot instead of the one on the step.",
+        fix: "Keep the trailing foot light, and put your weight over the foot on the step." },
+      { mistake: "You drop from the top without control.",
+        fix: "Take about two seconds to lower, and use a lighter weight if you can't." },
+      { mistake: "Your knee caves in as you rise.",
+        fix: "Point your knee the same way as your toes and use a lower step." }
+    ],
+    safety: [
+      "Use a step that can't slide and a height you can control, and begin with light dumbbells.",
+      "Stop at knee, hip or back pain."
+    ],
+    prereq: [
+      "A controlled step-up without added weight.",
+      "Dumbbells you can hold securely at your sides."
+    ]
+  };
+
+  C.acc_calf_floor = {
+    summary: "A calf raise on flat ground, rising onto the balls of your feet and lowering slowly, with a short range that is gentle on the heel.",
+    setup: [
+      "Stand on a firm, level floor with your feet hip-width apart.",
+      "Rest a fingertip on a wall or rail for balance, without leaning on it."
+    ],
+    steps: [
+      "Rise up through the balls of your feet as high as you can.",
+      "Pause for a beat at the top.",
+      "Lower your heels slowly back to the floor."
+    ],
+    breathing: "Breathe out as you rise, and breathe in as you lower.",
+    tempo: "Rise smoothly, pause briefly, and lower for about two seconds without bouncing off the floor.",
+    feel: {
+      should: "Through the back of your lower leg, with your weight over the big toe side of each foot.",
+      shouldnt: "As pain at the back of your heel, or your ankles rolling outward."
+    },
+    mistakes: [
+      { mistake: "Your ankles roll outward as you rise.",
+        fix: "Press through the base of your big toe and keep your heels pointing straight back." },
+      { mistake: "You bounce off the floor instead of lowering under control.",
+        fix: "Take about two seconds to lower, and pause at the top to stop the bounce." },
+      { mistake: "You lean on the wall for the lift.",
+        fix: "Use only a fingertip for balance and push with your feet." }
+    ],
+    safety: [
+      "There's no step, so the range is short and kind to your heel. Stop at pain in your Achilles tendon, heel or ankle."
+    ],
+    prereq: [
+      "Standing and rising onto your toes with your balance."
+    ]
+  };
+
+  C.acc_calf_wallsit = {
+    summary: "A calf raise performed while holding a wall sit, so your quads stay under load while your heels rise and lower.",
+    setup: [
+      "Set up in a wall sit with your back flat on the wall and your knees over your ankles.",
+      "Check that the floor is non-slip, because your feet must stay put as your heels move.",
+      "Let your arms hang by your sides."
+    ],
+    steps: [
+      "Keep your knee angle fixed.",
+      "Raise both heels together as high as you can.",
+      "Pause for a beat at the top.",
+      "Lower your heels slowly, then slide up the wall when you finish."
+    ],
+    breathing: "Breathe steadily throughout, out as you raise your heels and in as you lower them.",
+    tempo: "Raise smoothly, pause briefly, and lower your heels for about two seconds.",
+    feel: {
+      should: "In your calves, with your thighs holding the sit.",
+      shouldnt: "As your feet sliding, or as pressure at the front of your knees."
+    },
+    mistakes: [
+      { mistake: "Your feet slide or your knee angle changes as you rise.",
+        fix: "Use a non-slip floor and keep your back pressed to the wall." },
+      { mistake: "One heel rises higher than the other.",
+        fix: "Press through both feet evenly and rise together." },
+      { mistake: "You lift your back off the wall.",
+        fix: "Keep your lower back and shoulders against the wall for the whole set." }
+    ],
+    safety: [
+      "Stop at knee pain, if you feel dizzy, or if your feet slip, and stand up safely.",
+      "Sit higher for a shallower angle if your knee complains."
+    ],
+    prereq: [
+      "A steady wall sit.",
+      "A controlled calf raise."
+    ]
+  };
+
+  C.acc_antirot_hipraise = {
+    summary: "From a side plank, you lower your hip toward the floor and raise it back up, training the side of your trunk to hold you straight.",
+    setup: [
+      "Lie on your side with your elbow under your shoulder and your forearm on the floor.",
+      "Pad your supporting forearm if the floor is hard.",
+      "Stack your feet or stagger them, and lift into a side plank with your body in one line."
+    ],
+    steps: [
+      "Lower your hip toward the floor without resting on it.",
+      "Raise your hips back up by squeezing the side of your trunk.",
+      "Keep your shoulder stacked over your elbow and your body facing forward.",
+      "Finish all the reps on one side, then switch."
+    ],
+    breathing: "Breathe in as you lower, and breathe out as you lift your hips.",
+    tempo: "Lower slowly, pause briefly without touching, and lift smoothly rather than bouncing.",
+    feel: {
+      should: "In the side of your trunk on the side nearest the floor, with your shoulder steady.",
+      shouldnt: "As pain in your supporting shoulder or elbow, or as your chest turning toward the floor."
+    },
+    mistakes: [
+      { mistake: "You twist your chest toward the floor or the ceiling.",
+        fix: "Keep your body in a flat plane facing forward and make the range smaller." },
+      { mistake: "You drop onto your elbow at the bottom.",
+        fix: "Lower only until your hip is just off the floor, not onto it." },
+      { mistake: "Your shoulder sinks into your elbow.",
+        fix: "Press your forearm into the floor and push the floor away." }
+    ],
+    safety: [
+      "Stop at pain in your supporting shoulder, elbow or back.",
+      "Shorten the range, or go back to a side plank held still, if the side of your trunk can't control it."
+    ],
+    prereq: [
+      "A steady side plank.",
+      "Lowering and raising your hips smoothly without collapsing."
+    ]
+  };
+
+  C.acc_backext_superman = {
+    summary: "A face-down hold with your arms and legs lifted a little off the floor, building endurance in your lower back and glutes.",
+    setup: [
+      "Lie face down on a mat with your arms reaching ahead and your legs straight.",
+      "Check that there's room around your arms and legs, and that the floor is firm."
+    ],
+    steps: [
+      "Lift your arms and legs only a little off the floor.",
+      "Keep your gaze down and your neck in line with your spine.",
+      "Squeeze your glutes and hold, breathing normally.",
+      "Lower your arms and legs slowly to the mat."
+    ],
+    breathing: "Breathe normally through the hold. Holding your breath tends to make you arch harder.",
+    tempo: "Lift only a small amount, hold still, and lower slowly rather than dropping to the floor.",
+    feel: {
+      should: "In your lower back and glutes, as a steady, even tiring.",
+      shouldnt: "As a pinch at the base of your spine, or as strain in your neck."
+    },
+    mistakes: [
+      { mistake: "You arch your back as high as it will go.",
+        fix: "Lift less, so your back stays long and your glutes do part of the work." },
+      { mistake: "You hold your breath.",
+        fix: "Breathe through the hold and end the set if you can't." },
+      { mistake: "You crane your neck up.",
+        fix: "Look at the floor just ahead of your hands and keep your neck in line." }
+    ],
+    safety: [
+      "A small lift is enough. Stop at back pain, or any pain that travels down a leg.",
+      "A prone back extension, done gently, is a lower-load alternative."
+    ],
+    prereq: [
+      "Lying face down and lightly lifting your arms and legs without back pain."
     ]
   };
 })();

@@ -476,3 +476,203 @@ Not changed, as they are outside step 2.3. **Smallest fix** (W7 or R2 to decide)
 Labels only, no colour, so neither theme changes. **Not re-run after the fix:** the whole of `check-workout.py`. Y6 and Y7 fail on the live tree for the v8 reason above, not this change.
 
 **Still yours, from W7:** Weighted Vest Burpee at 10–15 reps, and conditioning sets counting toward the calf floor.
+
+## 2026-10-06 · W8 · step 3.1 Group A guides (27)
+
+**Where.** Branch `yellow-dude`, on top of R2's tree. Sonnet 5.5. Nothing committed. The log has no entry recording Stage 3's approval; I went on your instruction to run W8.
+
+**Files.** Backups are `*.backup-20261006-223028.*` (`batch-a.js`, `service-worker.js`, this log).
+- `fitness/content/batch-a.js`: 27 guides after `skill_handstand_4`, and `B.a` flipped to `"complete"` in the same edit (66/66). Each has `prereq` (1-3 items, no digits). Source was the card's Prerequisites, Gear, Setup, Cues, Errors and Pain lines plus the exercise's own DB cues, in original words; no Practice line was used. No `variations.alternatives` were written: nothing in the 27 is a clean sideways swap the ladder doesn't already show.
+- `service-worker.js`: `CACHE_VERSION` v81 → v82.
+
+**Check lines.** Node checks run by a test-runner agent. "Before" is the pre-edit tree (the first `check-exercise-content.js` run, before writing).
+
+| Check | Before | After |
+|---|---|---|
+| `check-exercise-content.js` | OK, "150 of 263 exercises (a 39/66 pending …)" | all passed: "177 of 263 exercises (a 66/66 complete, b 47/106 pending, c1 29/35 pending, c2 35/43 pending, d 0/13 pending)"; fields "3295 strings"; phrases "0 hits" |
+| The other seven Node checks | pass | pass (training, training-data, muscle-map, coverage, syncmerge 10 pass, bodymap, androidupdate 17 passed) |
+
+The phrase checker failed once on my draft ("two reps", in `push_alt_partial`); reworded and re-run.
+
+**Screen run, by clicks** (a scratch script in the session scratchpad, using check-workout.py's `Session`): fresh profile, Exercises, opened all 27 pages. Every one shows **Before you start** first, followed by Set up and One rep; none prints "undefined", "NaN" or "null"; 0 page errors. Not checked: dark mode and 390 / 1920 px (the pages reuse W3's `dx-` styles, and only text changed).
+
+**Choices to review.**
+- Three guides rest on thin source material: `skill_planche_pushup` and `skill_handstand_onearm` (the card says the channel only mentions them) and `skill_handstand_bentarm`. Their steps follow the DB cues; their prereqs say a coach or spotter should watch, since the app can't.
+- `skill_planche_band`'s setup says only "loop the band so it takes part of your weight" because the card doesn't say where it attaches; the DB cue is just as general.
+- Tempo uses "about two / three / four seconds" in words, as the exemplars do. The checker allows it; STYLE.md rule 4 asks for words.
+
+**Not run:** `check-workout.py` (Part F doesn't ask it of W8).
+
+**Left over.** W9: Group B guides in `batch-b.js`. R3 should read the three guides above for coaching sense.
+
+## 2026-10-06 · W9 · step 3.2 Group B guides (30)
+
+**Where.** Branch `yellow-dude`, on top of W8's tree. Sonnet 5.5. Nothing committed.
+
+**Files.** Backups are `*.backup-20261006-230414.*` (`batch-b.js`, `service-worker.js`, this log).
+- `fitness/content/batch-b.js`: 30 guides, appended after the last existing guide, each with `prereq` (1-3 items, no digits). Source was each card's Prerequisites, Gear, Setup, Cues, Errors and Pain lines plus the exercise's own DB cues, in original words; no Practice line was used. One `variations.alternatives`: `pull_alt_bandrow` → `pull_e2_dbrow`. The rest have none, as in W8.
+- `service-worker.js`: `CACHE_VERSION` v82 → v83.
+
+**`B.b` stays `"pending"`, deliberately.** Batch b now covers 106 exercises (row, pull, squat, hinge, core), and W6's 29 Group C moves have no guides until W10. The plan flips a batch in the edit that writes its last guide, which is W10's.
+
+**Check lines.** The eight Node checks were run by a test-runner agent.
+
+| Check | Before (first run, pre-edit) | After |
+|---|---|---|
+| `check-exercise-content.js` | OK, "177 of 263 exercises (a 66/66 complete, b 47/106 pending …)" | all passed: "207 of 263 exercises (a 66/66 complete, b 77/106 pending, c1 29/35 pending, c2 35/43 pending, d 0/13 pending)"; fields "3921 strings"; phrases "0 hits"; variations "39 alternatives, every id resolves" |
+| The other seven | pass | pass: training, training-data, muscle-map, coverage, bodymap exit 0; syncmerge 10 pass, 0 fail; androidupdate 17 passed, 0 failed |
+
+The checker passed on the first run after writing; no draft string was rejected.
+
+**Screen run, by clicks** (scratch script in the session scratchpad, using `check-workout.py`'s `Session`): fresh profile, Exercises, opened all 30 pages. Each one's first block is **Before you start**, none prints "undefined", "NaN" or "null", and there were 0 page errors. Not checked: dark mode, 390 / 1920 px (only text changed; the pages reuse W3's `dx-` styles).
+
+**Choices to review.**
+- **Cards that are thin or unresolved.** `pull_alt_ringassist` (R10: "confirm assistance method from demo") is written around the DB cue: feet take only the weight you need. `pull_alt_onearm` (R18: reference only) says a qualified person should watch, since the app can't. The muscle-up and back lever guides are written from the card's one-line cues and the DB cues; R3 should read these for coaching sense.
+- **Back lever and skin the cat guides carry the neck line** ("stop at dizziness, pain or tingling, especially in your neck, arms or hands"). The checker requires it only for neck guides; the cards' pain lines name the neck, so I added it.
+- **`skill_frontlever_oneleg` calls the next rung the straddle**, which is what `skill_frontlever_3` is on the ladder, and the straddle needs no number.
+- **Spelling is British** ("practised", "centre"), as W8's guides and the exemplars already are.
+
+**Not run:** `check-workout.py` (Part F doesn't ask it of W9).
+
+**Left over.** W10: the 29 Group C guides in `batch-b.js`, which flip `B.b` to `"complete"`. W11: Group D. W12: `prereq` on the 150 existing guides, then required.
+
+**Untracked:** the three `*.backup-20261006-230414.*` files, which the handoff's `git add` excludes.
+
+## 2026-10-06 · W10 · step 3.3 Group C guides (29)
+
+**Where.** Branch `yellow-dude`, on top of W9's tree. Sonnet 5.5. Nothing committed. The log has no entry recording Stage 3's approval; I went on your instruction to run W10, as W8 and W9 did.
+
+**Files.** Backups are `*.backup-20261006-231746.*` (`batch-b.js`, `service-worker.js`, this log).
+- `fitness/content/batch-b.js`: 29 guides appended after `skill_backlever_4`, each with `prereq` (1-3 items, no digits). Source was each card's Prerequisites, Gear, Setup, Cues, Errors and Pain lines plus the exercise's own DB cues, in original words; no Practice line was used. `B.b` flipped to `"complete"` in the same edit (106/106). Three `variations.alternatives`: `squat_alt_barbell` → `squat_alt_bulgarianw` (no rack), `core_alt_chairlegraise` → `core_alt_pikelift` (no chairs), `core_alt_hangknee` → `core_alt_lyingleg` (no bar).
+- `service-worker.js`: `CACHE_VERSION` v83 → v84.
+
+**Check lines.** Node checks run by a test-runner agent. "Before" is W9's tree (batch b 77/106 pending).
+
+| Check | Before | After |
+|---|---|---|
+| `check-exercise-content.js` | OK, "207 of 263 exercises (a 66/66 complete, b 77/106 pending …)" | all passed: "236 of 263 exercises (a 66/66 complete, b 106/106 complete, c1 29/35 pending, c2 35/43 pending, d 0/13 pending)"; fields "4536 strings"; phrases "0 hits"; variations "42 alternatives, every id resolves" |
+| The other seven | pass | pass: training, training-data, muscle-map, coverage, bodymap exit 0; syncmerge 10 pass, 0 fail; androidupdate 17 passed, 0 failed |
+
+The checker passed on the first run after writing; no draft string was rejected. I removed one empty `alternatives` list I had left on `squat_alt_box` before running it, which the checker would have failed.
+
+**Screen run, by clicks** (scratch script in the session scratchpad, using `check-workout.py`'s `Session`): fresh profile, Exercises, searched each by name and opened all 29 pages. Each one's first block is **Before you start**, none prints "undefined", "NaN" or "null", and there were 0 page errors; no horizontal scroll at 390 px on the barbell page. Not checked: dark mode, 1920 px (only text changed; the pages reuse W3's `dx-` styles).
+
+**Choices to review.**
+- **Thin cards.** `squat_alt_dragon` and `squat_alt_dragonassist` rest on one-line cues and the DB cues; the expert one tells you to have a coach or spotter if you can. The card for `squat_alt_boxpistol` merges L10 and L13 and flags the high-box meaning as ambiguous, so the guide says only "start with a high box and lower it a little at a time", as the DB cue does.
+- **`squat_alt_barbell`** says the rack safeties go just below your lowest squat and that someone who has used a rack should check your setup, because the card says a trained lifter or coach sets it. R3 should read it for coaching sense.
+- **Neck line on trunk-flexion guides.** `core_alt_situp`, `_crunch`, `_bicycle` and `_hollowrock` carry "go slowly and stop at dizziness or tingling" in `safety`. The checker requires it only for neck-slot guides; the cards' pain lines name the neck.
+- **Spelling is British** ("centimetres"), as W8's and W9's guides are.
+- **`core_alt_hangknee` safety** names a step to get down. The card's setup says "step for exit".
+
+**Not run:** `check-workout.py` (Part F doesn't ask it of W10).
+
+**Left over.** W11: Group D guides in `batch-c1.js`, `batch-c2.js` and `batch-d.js`. W12: `prereq` on the 150 existing guides, then required. R3 reads the three thin guides above.
+
+**Untracked:** the three `*.backup-20261006-231746.*` files, which the handoff's `git add` excludes.
+
+## 2026-10-06 · W11 · step 3.4 Group D guides (27)
+
+**Where.** Branch `yellow-dude`, on top of W10's tree. Sonnet 5.5. Nothing committed. The log has no entry recording Stage 3's approval; I went on your instruction to run W11, as W8–W10 did.
+
+**Files.** Backups are `*.backup-20261006-232354.*` (`batch-c1.js`, `batch-c2.js`, `batch-d.js`, `service-worker.js`, this log).
+- `fitness/content/batch-c1.js`: 6 guides (`acc_curl_pelican`, `acc_curl_ring`, `acc_reardelt_ringfacepull`, `acc_traps_proney`, `acc_grip_falsegrip`, `acc_grip_ricebucket`). `B.c1` flipped to `"complete"` (35/35).
+- `fitness/content/batch-c2.js`: 8 guides (`acc_quad_wallsit1`, `_wallsitw`, `_lunge`, `_stepupw`, `acc_calf_floor`, `_wallsit`, `acc_antirot_hipraise`, `acc_backext_superman`). `B.c2` flipped to `"complete"` (43/43).
+- `fitness/content/batch-d.js`: 13 `cond_*` guides, `var C` added to the IIFE, header rewritten, `B.d` flipped to `"complete"` (13/13).
+- `service-worker.js`: `CACHE_VERSION` v84 → v85.
+- Every guide has `prereq` (1–3 items, no digits). Source was each card's Prerequisites, Gear, Setup, Cues, Errors and Pain lines plus the DB cues, in original words; no Practice line used. Alternatives: `cond_rope` → `cond_ropeless`, `cond_boxjump` → `cond_broadjump`.
+
+**Check lines.**
+
+| Check | Result |
+|---|---|
+| `check-exercise-content.js`, before (pre-edit) | OK, "236 of 263 (… c1 29/35 pending, c2 35/43 pending, d 0/13 pending)" |
+| `check-exercise-content.js`, after | all passed: "263 of 263 exercises (a 66/66, b 106/106, c1 35/35, c2 43/43, d 13/13 complete)"; fields "5129 strings"; phrases "0 hits"; variations "44 alternatives, every id resolves" |
+| Other seven Node checks (test-runner agent) | all pass: training, training-data, muscle-map, coverage, bodymap exit 0; syncmerge 10 pass, 0 fail; androidupdate 17 passed, 0 failed |
+
+The checker failed once on my draft: `cond_burpeetuck` mistake "You land hard." (14 chars) and `cond_broadjump` prereq "A squat jump." (13 chars). Both reworded.
+
+**Process slip, no loss.** My first splice opened `batch-c1.js` for writing before reading it, which emptied it. I restored it from the `232354` backup (c2 and d confirmed byte-identical to theirs) and redid all three.
+
+**Screen run, by clicks** (scratch script in the session scratchpad, using `check-workout.py`'s `Session`): fresh profile, Exercises, searched each by name and opened all 27 pages. Each one's first block is **Before you start** (the heading is CSS-uppercased, so `innerText` reads "BEFORE YOU START"), none prints "undefined", "NaN" or "null", 0 page errors. Jump Rope page screenshotted in selene and selene-day at 390 and 1440 px: no horizontal scroll, both themes read correctly, tag row shows "Timed work". Not checked: 1920 px.
+
+**Choices to review.**
+- **Every `cond_*` guide carries the red-flag line** (chest pain, faintness, breathlessness out of the ordinary, "get it looked at if it doesn't pass") as its first `safety` item, matching the DB injury lines. Same sentence in all 13, by design.
+- **`acc_curl_pelican` and `skill`-adjacent thin cards.** R01's card gives only one-line cues; the guide follows the DB cues. R3 should read it, `acc_grip_falsegrip` and the burpee-tuck/vest pair for coaching sense.
+- **`cond_ropeweighted`'s setup says only "a weighted rope with handles that suit your hands"**, since the card names no weight and the app can't tell it from a plain rope (the `ponytail:` gap W7 recorded).
+- **Spelling is British** ("centimetres"), as W8–W10.
+
+**Not run:** `check-workout.py` (Part F doesn't ask it of W11), and 1920 px.
+
+**Left over.** W12: `prereq` on the 150 existing guides, then make it required in the checker. R3 reads the guides named above.
+
+**Untracked:** the five `*.backup-20261006-232354.*` files, which the handoff's `git add` excludes.
+
+## 2026-10-06 · W12 · step 3.5 Before you start on the 150 existing guides, then required
+
+**Where.** Branch `yellow-dude`, on top of W11's tree. Sonnet 5.5. Nothing committed. The log has no entry recording Stage 3's approval; I went on your instruction to run W12, as W8-W11 did.
+
+**Files.** Backups are `*.backup-20261006-233420.*` (`batch-a.js`, `batch-b.js`, `batch-c1.js`, `batch-c2.js`, `check-exercise-content.js`, `STYLE.md`, `service-worker.js`, this log). `batch-d.js` is untouched: its 13 guides already had `prereq`.
+- `fitness/content/batch-a.js` (39), `batch-b.js` (47), `batch-c1.js` (29), `batch-c2.js` (35): a `prereq` list of 1-3 items as the first field of each of the 150 guides, in original words. The guides' other fields are untouched.
+- `tools/check-exercise-content.js`: `prereq` is no longer `optional`.
+- `fitness/content/STYLE.md`: the field table and its paragraph say required.
+- `service-worker.js`: `CACHE_VERSION` v85 -> v86.
+
+**Where each list came from.** I took the card's Prerequisites line wherever the card maps to the id (64 ids carry one in the catalogue's app-mapping lines, shortened to the plan's 1-3 items and reworded). Where it doesn't, I used the rung before it on the ladder, found by computing every `next` and `offer` that leads into the id, plus what its gear must do (a band that is secure, a chair that won't slide). **Limit:** the plan says 89 existing ids have a card; my mapping script found 64. **Unconfirmed:** why 25 are missing. The plan names three (R02, R23, FL01) that map by name, not by an `App mapping` line, so my script can't see them; I didn't trace the other 22. Those ids got the ladder fallback, not their card's line, so R3 should check them against the cards.
+
+**Choices to review.**
+- Ids with no predecessor and no card (the dumbbell, kettlebell and floor accessory moves) read as a comfort check plus what the gear must do, which is all the app can know.
+- `skill_lsit_1` to `_3` have names that don't match the ladder order (`skill_lsit_1` is "Foot-Supported L-Sit" but its computed predecessor is core_3's "Tuck L-Sit"). I wrote each list from what the move itself needs, not from the computed predecessor.
+- No digits and no numbers anywhere, as the checker requires; support-furniture lines name what it must do, not a token.
+
+**Check lines.** All eight Node checks, run in this window.
+
+| Check | Result |
+|---|---|
+| `check-exercise-content.js` | all passed: "263 of 263 exercises (a 66/66, b 106/106, c1 35/35, c2 43/43, d 13/13 complete)"; fields "5429 strings"; phrases "0 hits" |
+| Required now enforced | a scratch content dir with `push_2`'s `prereq` removed: `fields FAIL - push_2.prereq is missing`. Before the change, the old checker passed 5129 strings with 150 guides lacking one |
+| `grep -c "prereq: \["` per batch | a 66, b 106, c1 35, c2 43, d 13 = 263 |
+| `check-training.js`, `check-training-data.js`, `check-muscle-map.js`, `check-coverage.js`, `check-bodymap.js` | exit 0 |
+| `check-syncmerge.js` / `check-androidupdate.js` | 10 pass, 0 fail / 17 passed, 0 failed |
+
+The checker passed on the first run after writing; no draft string was rejected.
+
+**Not run:** `check-workout.py` (Part F doesn't ask it of W12), and no screen. Only a field in existing guides changed, and the render path was driven by W3 and W8-W11.
+
+**Left over.** R3: read the 25 ladder-fallback lists against their cards, the three thin guides W8 named, and every "Before you start" on a skill track. Then W13.
+
+**Untracked:** the eight `*.backup-20261006-233420.*` files, which the handoff's `git add` excludes.
+
+## 2026-10-07 · R3 · step 3.6 review, then its fixes
+
+**Where.** Branch `yellow-dude`, on top of W12's tree. Opus 5.5. The review changed no code; you then asked for every finding fixed. Nothing committed.
+
+**Review.** Part F re-run: the eight Node checks pass; `check-workout.py` 87 pass, 3 fail (D7, P9, V5). Read for coaching sense: 40 new guides (ten per window, every thin one W8–W11 named), every "Before you start" on a skill track and on the coverage slots. Driven by clicks: all 263 directory pages open with **Before you start** first, its items equal to the guide's `prereq`, no "undefined", "NaN" or "null", 0 page errors; three pages in selene and selene-day at 390 and 1920 px, no horizontal scroll, centred beside the sidebar.
+
+| Finding | Severity | Status |
+|---|---|---|
+| F1 · `hinge_alt_nordicband`'s fix for "the band recoils you upward" said "use a heavier band"; its setup says a heavier band gives more help | INCONSISTENCY (medium) | fixed: "lighter band", as `skill_muscleup_band` says |
+| F2 · D7 asserted the literal 150 guides; Stage 3 made it 263 (the class W6 found in D3 and R4b) | INCONSISTENCY (medium) | fixed: D7 compares the guide count with the number of exercises in `EXERCISE_DB` |
+| F3 · W12's ladder fallback wrote lists that name a sideways offer or a coverage path step as a prerequisite, where the plan's by-name cards had a line. **W12's "25 missing" is explained:** 89 counts cards; the 75 mapped cards cover 64 distinct ids, and the rest are the plan's 16 by-name cards | INCONSISTENCY (medium) | fixed from cards C07, C08, L23, G01: Dead Bug, Pallof Press, Single-Leg RDL, Towel Hang. Also Band Adduction, Banded Clamshell and Banded Lateral Walk, whose lists named the Copenhagen plank and side-plank abduction (text only; the paths are unchanged) |
+| F4 · Lists copied from a card named the side branch, not the app's path: Straddle Front Lever (one-leg), One-Arm Push-up (assisted), Pistol Squat (assisted and negative). One-Arm Pull-up's named itself | INCONSISTENCY (low) | fixed: each names the path's rung too (advanced tuck, archer push-up, shrimp squat; archer pull-up) |
+| F5 · The tree holds the other session's uncommitted v8 (`basalt.js`, Y6/Y7 in `check-workout.py`). P9 and V5 fail because of it: both PASS on this tree with HEAD's v7 `basalt.js` | process | **yours**: commit Stage 3 without `basalt.js` and the v8 hunks of `check-workout.py` |
+| F6 · STYLE.md's batch table said 39/47/29/35 and "0 until plan step 2.4" | NOISE (low) | fixed: 66/106/35/43/13, with a line that the checker's figure is the live one |
+| F7 · Ring Pelican Curl's guide sets up like Ring Biceps Curl; card R01's "shoulder extension under light load" isn't in it | unconfirmed (low) | **not changed**: the guide matches its DB cue (STYLE rule 7), and defining the setup needs the clip the plan never checked |
+
+**Files.** Backups are `*.backup-20261007-000740.*` (`batch-a.js`, `batch-b.js`, `batch-c1.js`, `batch-c2.js`, `STYLE.md`, `check-workout.py`, `service-worker.js`, this log).
+- `fitness/content/batch-a.js` (1 string), `batch-b.js` (4), `batch-c1.js` (1 string, one item added), `batch-c2.js` (7 lists).
+- `tools/check-workout.py`: D7 only. `fitness/content/STYLE.md`: the batch table.
+- `service-worker.js`: `CACHE_VERSION` v86 → v87.
+
+**Check lines.**
+
+| Case | Before | After |
+|---|---|---|
+| D7 | FAIL (pre-fix harness, live tree) | PASS, "guides 263"; FAIL on a scratch tree with HEAD's 150 guides, as it should |
+| `check-exercise-content.js` | 5429 strings | all passed: 263 of 263, 5430 strings (Towel Hang gained an item), 0 phrase hits |
+| The other seven Node checks | pass | pass (syncmerge 10 pass, androidupdate 17 passed) |
+| The 12 changed pages, by clicks | — | each renders its new list first, 0 page errors; the Nordic page reads "Use a lighter band" |
+| `python3 tools/check-workout.py` | 87 pass, 3 fail | **88 pass, 2 fail, 0 error**: P9 and V5, the v8 failures in F5 |
+
+**Left over.** F5 and F7, both yours. Then W13.
+
+**Untracked:** the eight `*.backup-20261007-000740.*` files, which the handoff's `git add` excludes.
