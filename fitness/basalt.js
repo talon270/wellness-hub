@@ -2954,22 +2954,21 @@
       };
     },
 
-    /* Cross-phase plateau detection: a pattern is "stalled" when its level has
-       not increased across the last 2 completed phases (and it's not maxed at L6). */
+    /* A plateau needs repeated, comparable work under the current
+       prescription. Frozen legacy level numbers are not performance evidence. */
     tierStalls: function () {
       var s = App.getState();
-      var hist = (s.phaseHistory || []).filter(function (h) { return h.tierLevels; });
       var out = {};
-      if (hist.length < 2) return out;
-      var a = hist[hist.length - 2].tierLevels;
-      var b = hist[hist.length - 1].tierLevels;
-      (s.tiers ? Object.keys(s.tiers) : []).forEach(function (p) {
-        var cur = (s.tiers[p] || {}).level || 1;
-        var la = a[p], lb = b[p];
-        /* stalled = held the same level across the last two phases, above L1, not maxed */
-        if (la != null && lb != null && cur > 1 && cur < 6 && cur === lb && lb === la) {
-          out[p] = true;
-        }
+      Object.keys((s.training && s.training.slots) || {}).forEach(function (slot) {
+        var rx = s.training.slots[slot], rec = rx && !rx.off && !rx.hold && engine.recommendFor(slot);
+        if (!rec || rec.action !== "repeat" || rec.decision || rec.why === "off-load") return;
+        var last = (rec.history || []).slice(-4);
+        if (last.length < 4 || lib.daysBetween(last[0].day, last[3].day) < 14 ||
+            lib.daysBetween(last[3].day, lib.today()) > 21 ||
+            Object.keys(last.reduce(function (seen, x) { seen[x.day] = true; return seen; }, {})).length < 4) return;
+        if (!last.slice(-2).every(function (x) { return x.effort === "hard" || x.effort === "failed"; })) return;
+        var earlier = Math.max(last[0].total, last[1].total);
+        if (Math.max(last[2].total, last[3].total) <= earlier) out[slot] = true;
       });
       return out;
     },
@@ -6870,8 +6869,8 @@
    Registers two views via App.registerView:
      • "nutrition" — macro rings, meal logger, water tracker, weekly summary,
                      filterable food browser. Writes nutritionLog[] meals/water.
-     • "progress"  — bodyweight + volume + sleep charts (Chart.js), the 7-pattern
-                     movement tier ladder, PR timeline, and a measurements logger.
+     • "progress"  — bodyweight + volume + sleep charts (Chart.js), exercise
+                     prescription evidence and trends, PRs, and measurements.
                      Writes bodyweightLog[], sleepLog[], measurements[].
 
    Reuses the Part-3 shared namespaces (App.lib / App.engine / App.ui) and the
@@ -6893,6 +6892,7 @@
   var util   = App.util;
   var DB     = window.DB;
   var FOODS  = window.FOODS || [];
+  var TDATA  = window.TRAINING_DATA;
   var esc    = (lib && lib.esc) || function (s) { return String(s); };
   var cap    = (ui && ui.cap) || function (s) { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); };
 
@@ -7005,16 +7005,20 @@
     var log = s.bodyweightLog || [];
     return log.length ? log[log.length - 1].kg : s.profile.weightKg;
   }
-  /* delta of latest vs a reference ~7+ days back (else earliest) — kg/wk feel */
+  /* The closest logged reference at least seven calendar days back. Shorter
+     spans report their actual duration, never a weekly rate. */
   function weekDelta(s) {
-    var log = s.bodyweightLog || [];
+    var log = (s.bodyweightLog || []).slice().sort(function (a, b) { return a.dateISO < b.dateISO ? -1 : a.dateISO > b.dateISO ? 1 : 0; });
     if (log.length < 2) return null;
     var latest = log[log.length - 1], ref = log[0];
     for (var i = log.length - 2; i >= 0; i--) {
       ref = log[i];
       if (lib.daysBetween(log[i].dateISO, latest.dateISO) >= 7) break;
     }
-    return lib.round(latest.kg - ref.kg, 1);
+    var days = lib.daysBetween(ref.dateISO, latest.dateISO);
+    if (days < 1) return null;
+    return { change: lib.round(latest.kg - ref.kg, 1), days: days,
+      perWeek: days >= 7 ? lib.round((latest.kg - ref.kg) * 7 / days, 1) : null };
   }
   /* delta over the current phase (latest vs first weigh-in on/after phase start) */
   function phaseDelta(s) {
@@ -7111,11 +7115,13 @@
     var bw = latestBodyweight(s);
     var wk = weekDelta(s);
     var ph = phaseDelta(s);
-    var arrow = (wk == null || wk === 0) ? "\u2192" : (wk > 0 ? "\u25b2" : "\u25bc");
-    var arrCls = (wk == null || wk === 0) ? "dash-delta--flat" : (wk > 0 ? "dash-delta--up" : "dash-delta--down");
+    var change = wk && (wk.perWeek == null ? wk.change : wk.perWeek);
+    var arrow = (change == null || change === 0) ? "\u2192" : (change > 0 ? "\u25b2" : "\u25bc");
+    var arrCls = (change == null || change === 0) ? "dash-delta--flat" : (change > 0 ? "dash-delta--up" : "dash-delta--down");
     var wkPill = (wk == null)
       ? '<span class="dash-delta dash-delta--flat">' + arrow + ' baseline</span>'
-      : '<span class="dash-delta ' + arrCls + '">' + arrow + ' ' + (wk > 0 ? "+" : "") + wk + ' kg / wk</span>';
+      : '<span class="dash-delta ' + arrCls + '">' + arrow + ' ' +
+        (change > 0 ? "+" : "") + change + (wk.perWeek == null ? ' kg in ' + wk.days + (wk.days === 1 ? ' day' : ' days') : ' kg / wk · over ' + wk.days + ' days') + '</span>';
     var phStr = (ph == null) ? "\u2014" : (ph > 0 ? "+" + ph : "" + ph) + " kg";
     var chart = (log.length >= 2) ? chartBox("bw-chart", 260)
       : chartEmpty(260, "Log your bodyweight on two days to chart the trend + 7-day average.");
@@ -7153,57 +7159,125 @@
     '</div>';
   }
 
-  function tierLadderCard(s) {
-    var patterns = (DB && DB.PATTERNS) || ["push", "pull", "squat", "hinge", "core", "shoulder", "dip"];
-    var stalls = (engine.tierStalls && engine.tierStalls()) || {};
-    var cards = patterns.map(function (p) {
-      var t = s.tiers[p] || { level: 1, progress: 0 };
-      var prog = App.PROGRESSIONS[p] || { label: ui.cap(p), levels: [], era2: [] };
-      var cur = engine.movementFor(p);
-      /* The next step on the slot's path (plan C3), not the next numbered
-         level: Incline Push-up sits between L1 and L2, and the hinge path
-         ends at L3 with Nordic work optional. */
-      var TDX = window.TRAINING_DATA.EXERCISES;
-      var nexts = cur && TDX[cur.id] ? TDX[cur.id].next : [];
-      var nextName = nexts.length ? nexts.map(function (id) { return (DB.getExercise(id) || {}).name || id; }).join(" or ") : "";
-
-      /* 6 calisthenics rungs. Levels are history now; a rung off the main
-         path is marked optional. */
-      var rungs = "";
-      for (var lvl = 1; lvl <= 6; lvl++) {
-        var ex = DB.byLevel(p, lvl);
-        var nm = ex ? ex.name : (prog.levels[lvl - 1] || ("Level " + lvl));
-        var cls = lvl < t.level ? "is-done" : (lvl === t.level ? "is-current" : "is-locked");
-        var opt = ex && TDX[ex.id] && TDX[ex.id].branch === "skill";
-        rungs += '<div class="rung ' + cls + '"><span class="rung__lvl">L' + lvl + '</span>' +
-          '<span class="rung__name">' + esc(nm) + (opt ? ' <span class="faint text-xs">· optional</span>' : '') + '</span>' +
-          (lvl === t.level ? '<span class="badge badge--primary" style="padding:2px 7px">now</span>' : '') + '</div>';
-      }
-      /* Loaded movements: no Era gate, only equipment (plan C3). */
-      (DB.era2Addons(p) || []).forEach(function (a) {
-        var owned = window.Training.owns(s.equipment, a.id);
-        rungs += '<div class="rung is-era2 ' + (owned ? "is-unlocked" : "is-locked") + '">' +
-          '<span class="rung__lvl">KG</span><span class="rung__name">' + esc(a.name) + '</span>' +
-          '<span class="badge ' + (owned ? "badge--era2" : "") + '" style="padding:2px 7px">' + (owned ? "in Swap" : "needs gear") + '</span></div>';
+  function progressRxText(rx) {
+    if (!rx) return "No prescription";
+    var range = rx.range || [];
+    return rx.sets + ' × ' + (range[0] == null ? '' : range[0] + '–') +
+      (range[1] == null ? '?' : range[1]) + (rx.unit === 'sec' ? ' s' : ' reps') +
+      (ui.setupText(rx) ? ' · ' + ui.setupText(rx) : '');
+  }
+  function progressReason(rec, rx) {
+    if (!rec) return 'No saved prescription to assess.';
+    var n = TDATA.EVIDENCE_SESSIONS, top = rx.range && rx.range[1];
+    if (rec.why === 'no-history') return 'No comparable session yet. Log this exercise at the prescribed setup and set count.';
+    if (rec.why === 'no-load') return 'Log the weight used on every set before a load step can be assessed.';
+    if (rec.why === 'off-load') return 'The latest work used ' + rec.loggedKg + ' kg; your prescription says ' + rx.setup.loadKg + ' kg.';
+    if (rec.why === 'below-top') return 'The latest comparable session stopped below ' + top + ' on set ' + (rec.belowSet + 1) + '.';
+    if (rec.why === 'one-session') return 'One qualifying session is logged. A second session on another day is needed.';
+    if (rec.why === 'same-day') return 'The top range was reached, but the last ' + n + ' comparable sessions were not on different days.';
+    if (rec.why === 'effort') return 'The sets reached the top. Rate both sessions easy or just right before stepping up.';
+    if (rec.why === 'hold') return 'Step-ups are paused on this prescription.';
+    if (rec.why === 'declining') return 'Comparable totals fell enough for Workout to offer a step back.';
+    if (rec.action === 'ready') return rec.step ? 'The required sessions reached the top on different days. Decide in Workout.' : 'The top was reached; this path has no further step.';
+    if (rec.why === 'no-standard') return 'This exercise has no numeric step-up standard.';
+    return 'Keep logging comparable sessions to see the next decision.';
+  }
+  function progressPathHtml(slot, currentId) {
+    var data = TDATA, seen = {}, ids = [];
+    function visit(id) {
+      if (!id || seen[id] || !data.EXERCISES[id] || data.EXERCISES[id].slot !== slot) return;
+      seen[id] = true; ids.push(id);
+      (data.EXERCISES[id].next || []).forEach(visit);
+    }
+    (data.SLOTS[slot].first || []).forEach(visit);
+    if (currentId && !seen[currentId]) ids.unshift(currentId);
+    return ids.map(function (id) {
+      var current = id === currentId, ex = DB.getExercise(id);
+      return '<div class="rung' + (current ? ' is-current' : '') + '"><span class="rung__name">' +
+        esc(ex ? ex.name : id) + '</span>' + (current ? '<span class="badge badge--primary">current</span>' : '') + '</div>';
+    }).join('');
+  }
+  function progressLoadHistory(s, rx) {
+    if (!rx.setup || !rx.setup.loadMode) return [];
+    var setup = function (x) {
+      var st = x || {};
+      return JSON.stringify(Object.keys(st).filter(function (k) { return k !== 'loadKg'; }).sort()
+        .map(function (k) { return [k, st[k]]; }));
+    };
+    var wanted = setup(rx.setup);
+    return window.Training.exposures(s.sessions.filter(function (x) { return x.completed; }), rx.exerciseId)
+      .filter(function (x) {
+        var used = x.weights.filter(function (w, i) { return x.values[i] > 0; });
+        return x.rx && !x.flagged && !x.skipped && !x.recovery && x.rx.unit === rx.unit &&
+          x.rx.sets === rx.sets && setup(x.rx.setup) === wanted && used.length &&
+          used[0] > 0 && used.every(function (w) { return w === used[0]; });
+      }).slice(-12).map(function (x) {
+        return { day: x.day, kg: x.weights.filter(function (w, i) { return x.values[i] > 0; })[0] };
       });
-
-      return '<div class="card stack' + (stalls[p] ? " is-stalled" : "") + '">' +
-        '<div class="card__head"><div class="card__title">' + esc(prog.label) +
-          (stalls[p] ? ' <span class="badge badge--warn badge--stall" title="No level gain across the last 2 phases"><span class="dot"></span>Plateau</span>' : '') +
-          '</div>' +
-          '<span class="badge badge--primary">L' + t.level + ' / 6</span></div>' +
-        '<div><div class="tier-card__cur">' + esc(cur ? cur.name : "") + '</div>' +
-          '<div class="tier-card__nxt">' + (nextName ? "Next step: " + esc(nextName) : "End of the main path") + '</div></div>' +
-        /* Evidence, not points: points stopped in Stage 2, so a bar of them
-           would sit still forever. */
-        '<p class="text-sm" data-ladder-status style="margin:0">' + esc(ui.slotStatus(p)) + '</p>' +
-        (stalls[p] ? '<p class="faint text-xs" style="margin:0;color:var(--warn)">Stalled 2+ phases — try an accessory, extra set, or drop a level to rebuild clean volume.</p>' : '') +
-        '<div class="ladder">' + rungs + '</div>' +
-      '</div>';
-    }).join("");
-    return '<div class="page-head" style="margin-top:var(--sp-8)"><div class="eyebrow">Movement mastery</div>' +
-      '<h2 class="display h3">Tier ladders</h2></div>' +
-      '<div class="tier-grid">' + cards + '</div>';
+  }
+  function progressEvidenceHtml(rec, rx, slot, s) {
+    var hist = rec && rec.history || [], top = rx.range && rx.range[1];
+    var unit = rx.unit === 'sec' ? ' s' : ' reps';
+    var rows = hist.slice(-5).reverse().map(function (x) {
+      var reached = top != null && x.values.length >= rx.sets && x.values.slice(0, rx.sets).every(function (v) { return v >= top; });
+      return '<div class="prog-evidence-row"><b>' + esc(x.day) + '</b><span>' + esc(x.values.join(' / ') + unit) +
+        '</span><span>' + esc(x.effort === 'moderate' ? 'just right' : x.effort || 'unrated') +
+        (top == null ? ' · no numeric target' : reached ? ' · top reached' : ' · below top') + '</span></div>';
+    }).join('');
+    var accepted = hist.length ? '<p class="faint text-xs">Only this exercise with a matching setup, load and set count counts toward the current step. Recovery sessions and pain-flagged work are excluded.</p>' : '';
+    var all = window.Training.exposures(s.sessions.filter(function (x) { return x.completed; }), rx.exerciseId);
+    var other = all.length > hist.length ? '<p class="faint text-xs">' + (all.length - hist.length) + ' other logged appearances of this exercise do not match this prescription or were excluded from progression evidence.</p>' : '';
+    var chart = hist.length > 1 ? chartBox('prog-trend-' + slot, 180) : '<p class="faint text-xs">Log two comparable sessions to see a trend.</p>';
+    var loadRows = progressLoadHistory(s, rx);
+    var load = rx.setup && rx.setup.loadMode ? '<div class="mt-3">' +
+      '<div class="field__label">Weight used with this exercise</div>' +
+      (loadRows.length ? chartBox('prog-load-' + slot, 150) : chartEmpty(150, 'No weight logged with this movement and setup yet.')) +
+      (loadRows.length ? '<div class="prog-load-history">' + loadRows.slice(-6).map(function (x) {
+        return '<span>' + esc(x.day) + ': ' + x.kg + ' kg</span>';
+      }).join('') + '</div>' : '') +
+      '<p class="faint text-xs">' + loadRows.length + ' logged loads with the same movement, setup and set count. Each weight is separate for rep evidence.</p></div>' : '';
+    return '<details class="prog-evidence" data-prog-slot="' + esc(slot) + '"><summary>Evidence and trend · ' + hist.length + ' comparable sessions</summary>' +
+      '<div class="stack mt-3"><p class="text-sm">' + esc(progressReason(rec, rx)) + '</p>' +
+      (rows || '<p class="faint text-xs">Not enough data from this prescription yet.</p>') +
+      accepted + other + '<div class="field__label">Total ' + (rx.unit === 'sec' ? 'seconds' : 'reps') + ' in matching sessions</div>' + chart +
+      load + '<details class="prog-path"><summary>Explore the movement path</summary><div class="ladder mt-2">' + progressPathHtml(slot, rx.exerciseId) + '</div></details>' +
+      '<button class="btn btn--ghost btn--sm" data-prog-workout type="button">Open Workout →</button></div></details>';
+  }
+  function progressSlotCard(s, slot, stalled) {
+    var saved = s.training.slots[slot], prescribed = engine.prescriptionFor(slot);
+    if (!saved || saved.off) return '';
+    var info = TDATA.SLOTS[slot], ex = DB.getExercise(saved.exerciseId);
+    var actual = prescribed && DB.getExercise(prescribed.rx.exerciseId);
+    var rec = engine.recommendFor(slot);
+    var status = ui.slotStatus(slot);
+    var next = rec && rec.action === 'ready' && rec.step;
+    var nextName = next && (DB.getExercise(next.rx.exerciseId) || {}).name || next && next.rx.exerciseId;
+    var nextText = next ? (next.kind === 'movement' ? nextName :
+      (nextName + (ui.setupText(next.rx) ? ' · ' + ui.setupText(next.rx) : ''))) : '';
+    return '<div class="card stack prog-slot' + (stalled[slot] ? ' is-stalled' : '') + '" data-progress-slot="' + esc(slot) + '">' +
+      '<div class="card__head"><div class="card__title">' + esc(info.label) +
+        (stalled[slot] ? ' <span class="badge badge--warn">No recent gain</span>' : '') + '</div>' +
+        '<span class="badge">' + (info.coverage ? 'Accessory' : 'Main') + '</span></div>' +
+      '<div class="tier-card__cur">' + esc(prescribed && actual ? actual.name : ex ? ex.name : saved.exerciseId) + '</div>' +
+      '<div class="muted text-sm">Your prescription: ' + esc(progressRxText(saved)) + '</div>' +
+      (prescribed && prescribed.rx.exerciseId !== saved.exerciseId ? '<p class="text-sm">Saved choice: ' + esc(ex ? ex.name : saved.exerciseId) + '. Workout uses the movement above because that choice is unavailable.</p>' : '') +
+      (!prescribed ? '<p class="text-sm">Workout has no available movement for this slot with your current equipment and limits.</p>' : '') +
+      '<p class="text-sm" data-ladder-status>' + esc(status) + '</p>' +
+      (next ? '<p class="faint text-xs">Step offered: ' + esc(nextText) + '</p>' : '') +
+      (stalled[slot] ? '<p class="faint text-xs">Four comparable sessions over at least 14 days had no increase in total reps or seconds, with the last two rated hard or failed. Review recovery and form before changing the plan.</p>' : '') +
+      progressEvidenceHtml(rec, saved, slot, s) + '</div>';
+  }
+  function tierLadderCard(s) {
+    var main = ['push', 'row', 'pull', 'squat', 'hinge', 'core', 'shoulder', 'dip'];
+    var saved = s.training && s.training.slots || {}, stalled = engine.tierStalls();
+    var mains = main.filter(function (slot) { return saved[slot] && !saved[slot].off; });
+    var extras = Object.keys(TDATA.SLOTS).filter(function (slot) { return TDATA.SLOTS[slot].coverage && saved[slot] && !saved[slot].off; });
+    return '<div class="page-head mt-6"><div class="eyebrow">Your current plan</div><h2 class="display h3">Strength progress</h2></div>' +
+      '<p class="muted text-sm">Each card follows the exercise and prescription you have chosen. A step is offered after two comparable sessions on different days; you decide in Workout.</p>' +
+      '<div class="prog-slot-grid">' + mains.map(function (slot) { return progressSlotCard(s, slot, stalled); }).join('') + '</div>' +
+      (extras.length ? '<details class="prog-extra mt-4"><summary>Accessory and conditioning progress · ' + extras.length + ' active</summary>' +
+        '<div class="prog-slot-grid mt-3">' + extras.map(function (slot) { return progressSlotCard(s, slot, stalled); }).join('') + '</div></details>' :
+        '<p class="faint text-xs mt-4">Accessory prescriptions appear here after they are first picked or added in Program.</p>');
   }
 
   function prTimelineCard(s) {
@@ -7722,7 +7796,7 @@
      names describe contents; the ids are what is stored in progTab and never change. */
   var PROG_TABS = [
     { id: "overview",     label: "Overview" },
-    { id: "ladders",      label: "Strength levels" },
+    { id: "ladders",      label: "Exercise progress" },
     { id: "calendar",     label: "Calendar" },
     { id: "log",          label: "Session history" },
     { id: "body",         label: "Measurements & sleep" }
@@ -7853,6 +7927,38 @@
     drawProgressCharts(el, s);
   }
 
+  function drawProgressSlotCharts(s, slot) {
+    var rx = s.training.slots[slot], rec = rx && engine.recommendFor(slot);
+    if (!rx || !rec) return;
+    var hist = (rec.history || []).slice(-8);
+    if (hist.length >= 2) makeChart('prog-trend-' + slot, {
+      type: 'line',
+      data: { labels: hist.map(function (x) { return keyLabel(x.day); }), datasets: [{
+        label: rx.unit === 'sec' ? 'Total seconds' : 'Total reps',
+        data: hist.map(function (x) { return x.total; }), borderColor: THEME.primary,
+        backgroundColor: THEME.primarySoft, borderWidth: 2, pointRadius: 4, fill: true
+      }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { tooltip: { callbacks: { label: function (c) {
+          var x = hist[c.dataIndex];
+          return x.values.join(' / ') + (rx.unit === 'sec' ? ' s' : ' reps') +
+            (rx.setup && rx.setup.loadKg != null ? ' at ' + rx.setup.loadKg + ' kg' : '');
+        } } } }, scales: axes({ zero: true, precision: 0, xTicks: 6 }) }
+    });
+    var loads = progressLoadHistory(s, rx);
+    if (loads.length) makeChart('prog-load-' + slot, {
+      type: 'line',
+      data: { labels: loads.map(function (x) { return keyLabel(x.day); }), datasets: [{
+        label: 'Weight used', data: loads.map(function (x) { return x.kg; }),
+        borderColor: THEME.info, backgroundColor: THEME.primarySoft, borderWidth: 2,
+        pointRadius: 4, fill: false
+      }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { tooltip: { callbacks: { label: function (c) { return c.parsed.y + ' kg'; } } } },
+        scales: axes({ zero: false, precision: 1, xTicks: 6 }) }
+    });
+  }
+
   function drawProgressCharts(el, s) {
     /* bodyweight line + 7-day rolling average */
     var log = s.bodyweightLog || [];
@@ -7927,6 +8033,14 @@
 
   function wireProgress(el, s) {
     wireSessionLog(el, s);
+    el.querySelectorAll('.prog-evidence').forEach(function (details) {
+      details.addEventListener('toggle', function () {
+        if (details.open) drawProgressSlotCharts(s, details.dataset.progSlot);
+      });
+    });
+    el.querySelectorAll('[data-prog-workout]').forEach(function (button) {
+      button.addEventListener('click', function () { App.showSection('today'); });
+    });
     /* bodyweight */
     var bwLog = el.querySelector("#bw-log");
     if (bwLog) bwLog.addEventListener("click", function () {
@@ -8651,7 +8765,7 @@
         '<p class="muted text-sm">Each slot is one movement at a range of reps or seconds. It steps up after ' + TDATA.EVIDENCE_SESSIONS + ' sessions on different days with every set at the top, rated easy or just right, and only when you say yes. A rule of thumb from your own logs, not a test — it can\'t see your form.</p>' +
         gripHtml(s) +
         '<div class="pg-targets">' + targets + '</div>' +
-        '<button class="btn btn--ghost btn--sm btn--block mt-2" data-go="progress">See strength levels in Progress →</button></div>' +
+        '<button class="btn btn--ghost btn--sm btn--block mt-2" data-go="progress">See exercise progress →</button></div>' +
 
       '<div class="card mt-4 stack" id="pg-coverage"><div class="card__head"><div class="card__title">Coverage</div>' +
         '<span class="badge badge--era1">' + covSlots.length + ' slots</span></div>' +

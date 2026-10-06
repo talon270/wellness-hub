@@ -317,6 +317,18 @@
    --------------------------------------------------------------------------- */
 .prog-select { display: none; }
 .prog-tabs { max-width: 100%; }
+.prog-slot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); align-items: start; }
+.prog-slot { min-width: 0; }
+.prog-slot p { margin: 0; }
+.prog-slot .card__head { gap: var(--sp-2); flex-wrap: wrap; }
+.prog-evidence, .prog-extra { border-top: 1px solid var(--line); padding-top: var(--sp-3); }
+.prog-evidence > summary, .prog-extra > summary, .prog-path > summary { cursor: pointer; color: var(--text-100); font-weight: 700; }
+.prog-evidence-row { display: grid; grid-template-columns: 100px minmax(90px, 1fr) minmax(120px, 1fr); gap: var(--sp-2); align-items: baseline; font-size: var(--fs-xs); border-bottom: 1px solid var(--line); padding: var(--sp-2) 0; }
+.prog-evidence-row span { min-width: 0; }
+.prog-load-history { display: flex; flex-wrap: wrap; gap: var(--sp-2); font-size: var(--fs-xs); color: var(--text-300); }
+.prog-path .ladder { max-height: 320px; overflow: auto; }
+@media (max-width: 850px) { .prog-slot-grid { grid-template-columns: 1fr; } }
+@media (max-width: 500px) { .prog-evidence-row { grid-template-columns: 1fr 1fr; } .prog-evidence-row span:last-child { grid-column: 1 / -1; } }
 @media (max-width: 560px) {
   .prog-tabs { display: none; }
   .prog-select { display: flex; }

@@ -29,6 +29,16 @@ The rest guide includes a sample week, guidance between sessions and your
 current between-set timers. Calendar spacing is guidance, not a recovery test.
 See the [app review and improvement suggestions](plans/wellness-app-review.md).
 
+**Progress shows the exercises you actually train.** Fitness → Progress →
+Exercise progress lists your active main and accessory prescriptions, with
+dated sessions that count toward a step and a trend for matching work. Open a
+card to see why a step is or is not ready, then use Workout to answer any offer.
+The movement path is an expandable reference, not a claim that old levels are
+still advancing. “No recent gain” requires four matching sessions over at
+least 14 days, including two recent hard or failed sessions; fewer logs are
+insufficient evidence. Bodyweight changes are divided by the actual elapsed
+days before they are labelled kg/week; shorter spans show the raw change.
+
 **A week of runs you didn't log is never skipped for you.** The running plan
 used to count weeks by the calendar alone: two weeks with nothing logged put a
 9-week plan on week 3, with no question asked. Now, when the week behind you has
