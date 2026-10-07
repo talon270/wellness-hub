@@ -455,6 +455,33 @@ count for the muscles they work, so a pinned rope day lowers the calf shortfall
 the picker sees — a thin credit for a jumping jack, kept because every movement
 needs one primary muscle.
 
+**A skill trains beside your slots, never in one.** Skills → a track → *Train in
+my workouts* puts that track's rung first in the workout, before the main slots,
+while you're fresh. It goes on the days whose slots train its family: Planche
+and Handstand on days with a push, shoulder or dip slot; the levers and the
+muscle-up on days with a row or pull; the L-sit on days with core. On the
+rotation, a handstand rides on Push Day and Full Body and stays off Leg Day.
+*Every session* overrides that. The pairing is a product rule read from your
+template, not a coaching claim. The rung saves with `skill` and no `slot`, so a
+tuck planche can never become your push slot's evidence. The old rule —
+"skill attempts stay in Skills" — was right about slots, but it also meant no
+skill could be logged anywhere: 34 skill standards and a step-up rule existed
+with nothing to read. A rung steps up by the same evidence as a slot (two days
+at its standard, rated easy or just right), and only to the next rung of its
+own track. Each standard (45 s for a pike hold) is a guess taken from the rung's
+guide, and the workout card says so beside it.
+
+**Mobility done in a workout counts in Mobility.** Tick *Add a mobility routine*
+under *Adjust workout* and one of the Mobility view's routines joins the
+session. It is off until you tick it, like the finisher. The preview suggests
+one and prints why: Wrist Prep when the day loads your wrists, Hip Rotation on
+leg days, Hips & Shoulders otherwise. Wrist Prep and Morning Joint Flow go
+before the main work; the rest go after it. Tick every step and the routine
+counts once in Mobility — on the day the session began, so a session started at
+23:50 and finished at 00:20 counts on the first day. Tick six of seven and the
+session saves "6 of 7" and Mobility counts nothing, as a routine you quit there
+does.
+
 ---
 
 ## Running it

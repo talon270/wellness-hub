@@ -12,10 +12,13 @@
      · V6   v6's coverage pins by stamp, per slot; mini-sessions union by id
      · Y5   v7's six equipment keys merge field-wise like the nine; a v6
             device takes them, and version 7
+     · SM9  v9's skill tracks by stamp, per track; a stop beats an older
+            start on the other device
 
    plans/PLAN-workout-progression.md, Part E; K10, K10b and V6 are
    plans/PLAN-fitness-control-and-coverage.md, Part F; Y5 is
-   plans/PLAN-yellow-dude.md, step 1.2. The browser cases (S1-S5, S8-S21,
+   plans/PLAN-yellow-dude.md, step 1.2; SM9 is
+   plans/PLAN-skills-mobility-in-workouts.md, B1. The browser cases (S1-S5, S8-S21,
    T11-T12) live in tools/check-workout.py. T13's other half — the Stage 1
    device opening the merged save read-only — is S9's mechanism there.
 
@@ -359,6 +362,33 @@ test("Y5", "v7's six equipment keys merge like the nine; a v6 device takes them 
     "B after: " + pick(onB.equipment, ["dumbbells", "rings"].concat(six)) + ", v" + onB.version +
     "; A after: " + pick(onA.equipment, ["dumbbells", "rings", "abWheel", "nordicAnchor"]) + ", v" + onA.version +
     "; v7 pair, each local: vest " + onC.vest + "/" + onA2.vest + ", anchor " + onC.nordicAnchor + "/" + onA2.nordicAnchor };
+});
+
+/* v9 (plans/PLAN-skills-mobility-in-workouts.md B1): one skill record per
+   track, so the newer `at` wins track by track. Stopping a track writes a
+   stamped { off: true }, so it beats an older start made on the other device
+   instead of being undone by it. */
+test("SM9", "Skill tracks by stamp, track by track; a stop beats an older start", (M) => {
+  const v9 = (skills) => payload({ version: 9, training: Object.assign(training({ push: slot("push_2", T5) }), { skills }) });
+  const A = v9({ handstand: { exerciseId: "skill_handstand_1", every: false, at: T5 },
+                 planche: { exerciseId: "skill_planche_2", every: true, at: T6 } });
+  const B = v9({ handstand: { off: true, at: T6 }, lsit: { exerciseId: "skill_lsit_1", every: false, at: T5 } });
+  const before = JSON.stringify([A, B]);
+  const onA = M.mergePayload(B, A).ironframe;   // A pulls B's file
+  const onB = M.mergePayload(A, B).ironframe;   // B pulls A's file
+  const show = (k) => Object.keys(k || {}).sort().map((t) => t + ":" + (k[t].off ? "off" : k[t].exerciseId)).join(" ");
+  const want = "handstand:off lsit:skill_lsit_1 planche:skill_planche_2";
+  const v8 = M.mergePayload(payload({ version: 8, training: training({ push: slot("push_2", T5) }) }),
+    payload({ version: 8, training: training({ push: slot("push_2", null) }) })).ironframe.training;
+  const checks = {
+    "A ends on the newer record per track": show(onA.training.skills) === want,
+    "B ends on the newer record per track": show(onB.training.skills) === want,
+    "two v8 saves gain no skills": !("skills" in v8),
+    "inputs unchanged": JSON.stringify([A, B]) === before
+  };
+  const bad = Object.keys(checks).filter((k) => !checks[k]);
+  return { ok: !bad.length, measured: (bad.length ? "failed: " + bad.join("; ") + " | " : "") +
+    "A skills: " + show(onA.training.skills) + "; B skills: " + show(onB.training.skills) };
 });
 
 function main() {

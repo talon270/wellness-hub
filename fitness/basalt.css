@@ -1225,6 +1225,8 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 }
 .skill-rung:hover { border-color:rgba(var(--primary-rgb),.35); transform:translateX(3px); }
 .skill-rung + .skill-rung { margin-top:var(--sp-3); }
+/* The rung a track trains in your workouts (plans/PLAN-skills-mobility-in-workouts.md B3). */
+.skill-rung.is-current { border-color:rgba(var(--primary-rgb),.6); box-shadow:inset 3px 0 0 var(--primary); }
 .skill-rung__lvl {
   width:44px; height:44px; border-radius:var(--r-sm); flex:0 0 auto;
   display:grid; place-items:center; font-family:var(--font-display); font-size:var(--fs-xl);

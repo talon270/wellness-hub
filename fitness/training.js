@@ -528,7 +528,7 @@
 
   window.Training = {
     comparable: comparable, exposures: exposures,
-    recommend: recommend, startOf: startOf, owns: owns, recoverySets: recoverySets,
+    recommend: recommend, startOf: startOf, stepUp: stepUp, owns: owns, recoverySets: recoverySets,
     allowed: allowed, blocked: blocked, stress: stress, customError: customError
   };
 })();

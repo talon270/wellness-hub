@@ -11,6 +11,9 @@
    overlay, the countdown, the per-step cues and the completion bookkeeping —
    so adding a routine means adding data, not code.
 
+   Hub.mobility exposes the routine data to the Fitness workout, which can
+   add one routine to a session and counts it here when every step is ticked.
+
    Wrist and shoulder work is weighted heavily here on purpose: those are the
    joints that limit calisthenics progress and the ones most often skipped.
    ========================================================================== */
@@ -36,6 +39,7 @@
   var ROUTINES = [
     {
       id: "wrist-prep",
+      when: "before",
       emoji: "🖐️",
       name: "Wrist Prep",
       tag: "Before pushing",
@@ -54,6 +58,7 @@
     },
     {
       id: "morning-flow",
+      when: "before",
       emoji: "🌅",
       name: "Morning Joint Flow",
       tag: "Wake everything up",
@@ -73,6 +78,7 @@
     },
     {
       id: "desk-reset",
+      when: "after",
       emoji: "💻",
       name: "Desk Reset",
       tag: "5 minutes, mid-day",
@@ -90,6 +96,7 @@
     },
     {
       id: "hip-shoulder",
+      when: "after",
       emoji: "🎯",
       name: "Hips & Shoulders",
       tag: "The two limiters",
@@ -109,6 +116,7 @@
     },
     {
       id: "spine-decomp",
+      when: "after",
       emoji: "🌀",
       name: "Spine Decompression",
       tag: "End of the day",
@@ -125,6 +133,7 @@
     },
     {
       id: "hip-rotation",
+      when: "after",
       emoji: "🔄",
       name: "Hip Rotation",
       tag: "Hips that won't turn",
@@ -144,6 +153,13 @@
 
   var ROUTINE_BY_ID = {};
   ROUTINES.forEach(function (r) { ROUTINE_BY_ID[r.id] = r; });
+
+  /* Read by the Fitness workout's mobility block (fitness/basalt.js,
+     plans/PLAN-skills-mobility-in-workouts.md B6): data only. `when` places a
+     routine in a session — "before" the main work for the two that prepare
+     joints for load, "after" it for the rest. The player stays private: its
+     finish() counts a session itself, and the workout counts its own. */
+  Hub.mobility = { routines: ROUTINES, byId: ROUTINE_BY_ID };
 
   /* ---------------------------------------------------------------------
      ROUTINE PLAYER

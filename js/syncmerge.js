@@ -348,6 +348,8 @@
                    has no key, so it takes the file's.
        pins        (v6) keyed by coverage slot, newer `at` per slot. A clear
                    is a stamped record with no days, never a deleted key.
+       skills      (v9) keyed by skill track, newer `at` per track. Stopping
+                   is a stamped { off: true }, never a deleted key.
      Coverage slots (v6) are slots, and mini-sessions are sessions: the rules
      above and the sessions union cover them. The v5 and v6 keys are written
      only when a side has them, so a merge of two v4 saves still comes out in
@@ -373,6 +375,7 @@
     });
     if (f.exclusions || l.exclusions) out.exclusions = recordsByStamp(f.exclusions, l.exclusions, "at");
     if (f.pins || l.pins) out.pins = recordsByStamp(f.pins, l.pins, "at");
+    if (f.skills || l.skills) out.skills = recordsByStamp(f.skills, l.skills, "at");
     ["grip", "limitations"].forEach(function (k) {
       if (k in f || k in l) out[k] = newerRecord(f[k], l[k], "at");
     });

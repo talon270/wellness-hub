@@ -33,6 +33,11 @@
  *      line; the coverage rep ranges ignore your goal; band moves have a
  *      tension setup; the neck carries its safety copy. A slot the plan
  *      lists for a later step is reported as pending, not skipped silently.
+ *  11. Skill tracks (plans/PLAN-skills-mobility-in-workouts.md B4): every rung
+ *      is in the catalogue, every `next` of a rung stays on its own track (a
+ *      step in a workout's skill block must never jump tracks), and each
+ *      track's rungs share one family (push, pull or core), which decides the
+ *      days it rides on.
  *
  * Reads the DB by running basalt.js's two data blocks in a sandbox. Exits
  * non-zero on any failure, so it can gate a commit.
@@ -507,6 +512,28 @@ section("conditioning slot");
   }
   bad.forEach(fail);
   if (!bad.length) ok("conditioning: trains no group, pinned-only, 13 cond_ exercises each with the red-flag line, rope sets timed");
+}
+
+/* -- 11. skill tracks ------------------------------------------------------ */
+section("skill tracks");
+{
+  const bad = [];
+  const tracks = (W.App.skills && W.App.skills.tracks) || {};
+  const FAMILY = { push: "push", shoulder: "push", dip: "push", row: "pull", pull: "pull", core: "core" };
+  const names = Object.keys(tracks).filter((k) => k !== "variations");
+  if (!names.length) bad.push("no skill tracks found in basalt.js block 7");
+  for (const k of names) {
+    const ids = tracks[k].ids;
+    const fams = new Set();
+    for (const id of ids) {
+      if (!EX[id]) { bad.push(`${k}: ${id} is not in the catalogue`); continue; }
+      fams.add(FAMILY[EX[id].slot] || "none:" + EX[id].slot);
+      for (const n of EX[id].next) if (ids.indexOf(n) < 0) bad.push(`${k}: ${id}.next → ${n} leaves the track`);
+    }
+    if (fams.size !== 1 || [...fams][0].startsWith("none")) bad.push(`${k}: rungs span families ${[...fams].join(", ")}`);
+  }
+  bad.forEach(fail);
+  if (!bad.length) ok(`${names.length} skill tracks: every rung catalogued, every next stays on its track, one family each`);
 }
 
 console.log(failed ? "\nFAILED\n" : "\nOK\n");

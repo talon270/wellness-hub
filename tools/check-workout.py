@@ -95,6 +95,12 @@ WELLNESS HUB · WORKOUT REGRESSION HARNESS
   · Y16      R4's fixes: the Mobility routines and flexibility holds fill even
              rows at 1440 and 1920 px, and every per-side Hip Rotation step
              chimes at its midpoint
+  · SM1-SM8  plans/PLAN-skills-mobility-in-workouts.md B7: the v9 upgrade
+             (SM1); a skill track added in Skills opens the days of its family
+             (SM2), saves with `skill` and no `slot` (SM3) and steps up on its
+             own track (SM4); the suggestion follows the day's slots (SM5); the
+             mobility block, counted on the day the session began (SM6); a v8
+             build opens a v9 save read-only (SM7); no overflow, both themes (SM8)
 
 Retired in step 2.4 (W8), because Stage 2 removed what they measured; each
 reason is in plans/PROGRESS-workout-progression.md:
@@ -288,7 +294,15 @@ def open_section(s: Session, section: str):
 
 
 def open_today(s: Session):
+    """Workout, with every control on screen. The Today redesign (2026-10-07)
+    folds the day, sets, length, finisher, mobility and the full preview into
+    two <details>; they are opened, as a user would, so a case can click into
+    them. A tree without them (any build before it) is left as it is."""
     open_section(s, "today")
+    for id_ in ("workout-adjust", "workout-preview"):
+        if s.pg.locator("#" + id_).count() and not s.ev("i => document.getElementById(i).open", id_):
+            s.pg.click("#%s > summary" % id_)
+            s.pg.wait_for_timeout(150)
 
 
 def begin(s: Session):
@@ -302,8 +316,15 @@ def log_set(s: Session, ex: int, st: int, value):
 
 
 def complete(s: Session):
+    """Complete session. Since 2026-10-07 a session with sets left blank asks
+    first, in the app's own dialog ("Finish a partial session?"); answering
+    Finish partial is what every case before it measured, so it answers that."""
     s.pg.click("#complete-session")
     s.pg.wait_for_timeout(400)
+    ok = s.pg.locator("#modal-confirm #cf-ok")
+    if ok.count() and ok.is_visible():
+        ok.click()
+        s.pg.wait_for_timeout(400)
 
 
 def one_set_workout(s: Session, value=30):
@@ -2860,9 +2881,11 @@ def v5(pw):
         checks = {
             "version %s" % schema: st["version"] == schema and schema >= 6,
             "v6 defaults: finisher off, no pins": st["prefs"].get("finisher") == "off" and tr.get("pins") == {},
-            # weeklyDays is v8's default, added unset; Y6 checks the same on the v6 fixture
-            "other prefs unchanged": {k: v for k, v in st["prefs"].items() if k not in ("finisher", "weeklyDays")} == v5s["prefs"],
+            # weeklyDays is v8's default, added unset, and mobilityBlock v9's, added
+            # off; Y6 checks the same on the v6 fixture, SM1 the rest of v9
+            "other prefs unchanged": {k: v for k, v in st["prefs"].items() if k not in ("finisher", "weeklyDays", "mobilityBlock")} == v5s["prefs"],
             "v8 leaves the weekly target unset": schema < 8 or st["prefs"].get("weeklyDays", "absent") is None,
+            "v9 adds the mobility block off": schema < 9 or st["prefs"].get("mobilityBlock") == "off",
             "slots unchanged": tr["slots"] == v5s["training"]["slots"],
             # equipmentCheck and v7's six equipment keys are the v6 -> v7 step's, which Y6 checks
             "decisions, exclusions, limits, grip unchanged": all(tr.get(k) == v5s["training"][k] for k in (
@@ -4007,7 +4030,9 @@ def y6(pw):
                 diff += ["training." + k for k in v6["training"] if k != "equipmentCheck" and not same(saved["training"].get(k), v6["training"][k])]
                 diff += ["meta." + k for k in v6["meta"] if k != "updatedAt" and not same(saved["meta"].get(k), v6["meta"][k])]
                 diff += ["equipment." + k for k in v6["equipment"] if saved["equipment"].get(k) is not v6["equipment"][k]]
-                extra = sorted(set(saved) - set(v6)) + ["training." + k for k in sorted(set(saved["training"]) - set(v6["training"]))]
+                # training.skills is v9's default, added empty (SM1 covers v9)
+                extra = sorted(set(saved) - set(v6)) + ["training." + k for k in sorted(set(saved["training"]) - set(v6["training"]))
+                                                        if not (k == "skills" and saved["training"][k] == {})]
                 checks["round trip: sessions, slots, PRs and every other key byte-identical"] = not diff and not extra \
                     and saved["version"] == schema and saved["equipment"].get("jumpRope") is True
                 checks["the mid-workout draft is untouched"] = same(ui.get("today.workout"), fx["ironframe.ui"]["today.workout"])
@@ -4458,6 +4483,333 @@ def y16(pw):
     bad = [k for k, ok in checks.items() if not ok]
     return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + \
         "routines per row %s; holds per row %s; midpoint chimes %s" % (rows, holds, chimes), errors
+
+
+
+# --- SM1-SM8 · skills and mobility in workouts (plans/PLAN-skills-mobility-in-workouts.md B7) ---
+# The build before the plan: v8, no skill block, no mobility block, the day-name
+# skill suggestion. SM7 opens a v9 save with it.
+V8_BUILD = "9b0de28"
+
+
+def add_track(s: Session, track: str, rung=None):
+    """Skills -> the track's tab -> Train in my workouts, by clicks."""
+    open_section(s, "skills")
+    s.tap('[data-skilltab="%s"]' % track)
+    s.pg.wait_for_timeout(200)
+    if rung:
+        s.choose("[data-skill-panel] [data-skill-start]", rung)
+    s.tap("[data-skill-add]")
+    s.pg.wait_for_timeout(200)
+
+
+def skill_preview_rows(s: Session) -> list:
+    return s.ev("""() => [...document.querySelectorAll('#today-preview [data-pv-ex]')]
+        .map(e => [e.dataset.pvSkill || '', e.dataset.pvEx])""")
+
+
+def train_anyway(s: Session):
+    for sel in ("#rest-train-anyway", "#done-train-anyway"):
+        b = s.pg.locator(sel)
+        if b.count() and b.is_visible():
+            b.click()
+            s.pg.wait_for_timeout(300)
+
+
+@case("SM1", "v6 save -> v9: no skill trains and no routine is added until chosen; everything else byte-identical")
+def sm1(pw):
+    fx = v6_fixture()
+    old = fx[STORAGE_KEY]
+    s = Session(pw, now=ist(2026, 10, 7, 8, 0))
+    try:
+        seed_and_reload(s, fx)
+        st, schema = s.state(), s.ev("() => App.SCHEMA_VERSION")
+        draft = json.loads(s.ev("() => localStorage.getItem('ironframe.ui')")).get("today.workout")
+        same = lambda a, b: jdump(a) == jdump(b)
+        checks = {
+            "version 9": st["version"] == schema == 9,
+            "training.skills is {}": st["training"].get("skills") == {},
+            "the mobility block is off": st["prefs"].get("mobilityBlock") == "off",
+            "sessions, slots, pins, decisions and PRs byte-identical": all(same(st[k], old[k]) for k in ("sessions", "prs"))
+                and all(same(st["training"].get(k), old["training"].get(k)) for k in ("slots", "pins", "decisions")),
+            "the mid-workout draft is untouched": same(draft, fx["ironframe.ui"]["today.workout"]),
+            "the draft builds no skill and no routine": not any(e.get("skill") for e in (draft or {}).get("exercises", []))
+                and "mobility" not in (draft or {}),
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "v%s, skills %s, mobilityBlock %s, %d sessions" % (
+            st["version"], jdump(st["training"].get("skills")), st["prefs"].get("mobilityBlock"), len(st["sessions"])), s.errors
+    finally:
+        s.close()
+
+
+@case("SM2", "A skill added in Skills opens Push Day, not Leg Day; Every session puts it on Leg Day too")
+def sm2(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+    try:
+        onboard(s)
+        add_track(s, "handstand")
+        rec = (s.state()["training"].get("skills") or {}).get("handstand") or {}
+        open_today(s)
+        pick_day(s, "push")
+        push = skill_preview_rows(s)
+        pick_day(s, "legs")
+        legs = skill_preview_rows(s)
+        open_section(s, "skills")
+        s.tap('[data-skilltab="handstand"]')
+        s.tick("[data-skill-every]")
+        s.pg.wait_for_timeout(200)
+        open_today(s)
+        pick_day(s, "legs")
+        every = skill_preview_rows(s)
+        want = ["handstand", "skill_handstand_pike"]
+        checks = {
+            "starts at the first open rung": rec.get("exerciseId") == "skill_handstand_pike",
+            "Push Day opens with it": push[:1] == [want] and not any(r[0] for r in push[1:]),
+            "Leg Day leaves it out": not any(r[0] for r in legs),
+            "Every session: Leg Day opens with it": every[:1] == [want],
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "rung %s; push %s; legs %s; every-session legs %s" % (
+            rec.get("exerciseId"), [r[1] for r in push], [r[1] for r in legs], [r[1] for r in every]), s.errors
+    finally:
+        s.close()
+
+
+@case("SM3", "A logged skill saves with skill and no slot, sets a PR, and no slot's evidence reads it")
+def sm3(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+    try:
+        onboard(s)
+        add_track(s, "handstand")
+        open_today(s)
+        pick_day(s, "push")
+        s.pg.click("#begin-session")
+        s.pg.wait_for_timeout(300)
+        for j, v in enumerate((20, 25, 22)):
+            log_set(s, 0, j, v)
+        log_set(s, 1, 0, 8)
+        complete(s)
+        sess = last_session(s) if s.state()["sessions"] else {"exercises": []}
+        ex0 = (sess["exercises"] or [{}])[0]
+        slot_hist = s.ev("""() => Object.keys(App.getState().training.slots).map(k => {
+            const r = App.engine.recommendFor(k); return [k, r ? r.history.map(h => h.rx && h.rx.exerciseId) : []]; })""")
+        leaked = [h for k, ids in slot_hist for h in ids if h and h.startswith("skill_")]
+        push_n = next((len(ids) for k, ids in slot_hist if k == "push"), 0)
+        pr = [p for p in s.state()["prs"] if p["exerciseId"] == "skill_handstand_pike"]
+        checks = {
+            "first exercise is the skill": ex0.get("key") == "skill_handstand_pike",
+            "saved with skill, no slot": ex0.get("skill") == "handstand" and "slot" not in ex0,
+            "its sets as logged": [x.get("reps") for x in ex0.get("sets", [])] == [20, 25, 22],
+            "no slot's history holds a skill": not leaked,
+            "the push slot still counts its own set": push_n == 1,
+            "a hold PR of 25 s": [p["value"] for p in pr] == [25],
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "ex0 %s skill=%s slot=%s sets %s; leaked %s; push history %d; PRs %s" % (
+            ex0.get("key"), ex0.get("skill"), ex0.get("slot"), [x.get("reps") for x in ex0.get("sets", [])],
+            leaked, push_n, [p["value"] for p in pr]), s.errors
+    finally:
+        s.close()
+
+
+@case("SM4", "Two sessions at the skill's standard on different days, Just right -> Step up moves the track one rung, on its own track")
+def sm4(pw):
+    s = Session(pw, now=ist(2026, 10, 3, 12, 0))
+    try:
+        onboard(s)
+        add_track(s, "handstand")
+        for d in (3, 5):
+            s.set_time(ist(2026, 10, d, 12, 0))
+            s.pg.reload()
+            s.pg.wait_for_timeout(700)
+            to_fitness(s)
+            open_today(s)
+            train_anyway(s)
+            open_today(s)
+            pick_day(s, "push")
+            s.pg.click("#begin-session")
+            s.pg.wait_for_timeout(300)
+            for j in range(3):
+                log_set(s, 0, j, 45)
+            s.tap('[data-diff="0"][data-d="moderate"]')
+            complete(s)
+        s.set_time(ist(2026, 10, 7, 12, 0))
+        s.pg.reload()
+        s.pg.wait_for_timeout(700)
+        to_fitness(s)
+        open_today(s)
+        train_anyway(s)
+        open_today(s)
+        pick_day(s, "push")
+        offered = s.pg.locator('#today-preview [data-decide="skill:handstand"][data-choice="step"]').count()
+        s.tap('#today-preview [data-decide="skill:handstand"][data-choice="step"]')
+        s.pg.wait_for_timeout(300)
+        rec = (s.state()["training"].get("skills") or {}).get("handstand") or {}
+        nxt = s.ev("() => TRAINING_DATA.EXERCISES.skill_handstand_pike.next")
+        on_track = s.ev("id => App.skills.tracks.handstand.ids.indexOf(id) >= 0", rec.get("exerciseId") or "")
+        slots_untouched = all((v or {}).get("exerciseId", "").find("skill_") < 0 for v in s.state()["training"]["slots"].values())
+        checks = {
+            "the preview offers Step up on the skill": offered == 1,
+            "the track moved to the rung after Pike Hold": rec.get("exerciseId") in nxt and rec.get("exerciseId") != "skill_handstand_pike",
+            "the new rung is on the Handstand track": on_track,
+            "no slot took a skill": slots_untouched,
+            "the step was stamped": bool(rec.get("acceptedAt")) and bool(rec.get("at")),
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "offered %d; rung now %s (next of pike %s)" % (
+            offered, rec.get("exerciseId"), nxt), s.errors
+    finally:
+        s.close()
+
+
+@case("SM5", "The skill suggestion follows the day's slots: Push/Pull/Legs no longer suggests a handstand on pull and leg days")
+def sm5(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+    try:
+        onboard(s, template="split6")
+        days = ["splitpush", "splitpull", "splitlegs"]
+        sug = lambda: s.ev("ds => ds.map(d => { const p = App.skills.suggestFor(d); return p ? p.id : null; })", days)
+        bare = sug()
+        open_settings(s)
+        s.tap('#set-equip [data-equip="pullupBar"]')
+        s.tap("#btn-settings-save")
+        s.pg.wait_for_timeout(400)
+        bar = sug()
+        checks = {
+            "no bar: push handstand, pull nothing, legs L-sit": bare == ["handstand", None, "lsit"],
+            "with a bar: pull Front Lever": bar == ["handstand", "frontlever", "lsit"],
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "no bar %s; bar %s (for %s)" % (bare, bar, days), s.errors
+    finally:
+        s.close()
+
+
+@case("SM6", "Mobility ticked on Push: Wrist Prep before the work; all 7 steps count once on the day it began, across midnight; 6 of 7 count nothing")
+def sm6(pw):
+    out, checks, errors = [], {}, []
+    s = Session(pw, now=ist(2026, 10, 7, 23, 50))
+    try:
+        onboard(s)
+        open_today(s)
+        s.tick("[data-mobility-block]")
+        s.pg.wait_for_timeout(200)
+        pick_day(s, "push")
+        routine = s.ev("() => { const x = document.querySelector('[data-mobility-routine]'); return x ? x.value : null; }")
+        why = s.ev("() => { const x = document.querySelector('[data-mobility-why]'); return x ? x.textContent : ''; }")
+        s.pg.click("#begin-session")
+        s.pg.wait_for_timeout(300)
+        before = s.ev("""() => { const m = document.querySelector('[data-mob-block]'), x = document.getElementById('ex-list');
+            return !!(m && x && (m.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING)); }""")
+        steps = s.pg.locator('[data-mob-block] [data-check="mob"]')
+        n = steps.count()
+        for i in range(n):
+            steps.nth(i).click()
+        log_set(s, 0, 0, 10)
+        s.set_time(ist(2026, 10, 8, 0, 20))
+        complete(s)
+        sess = last_session(s) if s.state()["sessions"] else {}
+        c7, c8 = s.ev("() => [Hub.day('2026-10-07').mobility, Hub.day('2026-10-08').mobility]")
+        checks.update({
+            "Wrist Prep suggested, with its reason": routine == "wrist-prep" and "wrists" in why,
+            "it sits before the main work": before,
+            "7 steps": n == 7,
+            "saved 7 of 7 on the session": sess.get("mobility") == {"routine": "wrist-prep", "done": 7, "of": 7},
+            "counted once on 7 Oct, none on 8 Oct": c7 == 1 and not c8 and sess.get("dayKey") == "2026-10-07",
+        })
+        out.append("routine %s, before %s, %d steps, session %s on %s, Hub 7 Oct %s / 8 Oct %s" % (
+            routine, before, n, jdump(sess.get("mobility")), sess.get("dayKey"), c7, c8))
+        errors += s.errors
+    finally:
+        s.close()
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+    try:
+        onboard(s)
+        open_today(s)
+        s.tick("[data-mobility-block]")
+        s.pg.wait_for_timeout(200)
+        pick_day(s, "push")
+        s.pg.click("#begin-session")
+        s.pg.wait_for_timeout(300)
+        steps = s.pg.locator('[data-mob-block] [data-check="mob"]')
+        for i in range(max(0, steps.count() - 1)):
+            steps.nth(i).click()
+        log_set(s, 0, 0, 10)
+        complete(s)
+        sess = last_session(s) if s.state()["sessions"] else {}
+        c = s.ev("() => Hub.day('2026-10-07').mobility")
+        checks["6 of 7: saved, counted nothing"] = sess.get("mobility") == {"routine": "wrist-prep", "done": 6, "of": 7} and not c
+        out.append("partial: session %s, Hub %s" % (jdump(sess.get("mobility")), c))
+        errors += s.errors
+    finally:
+        s.close()
+    bad = [k for k, ok in checks.items() if not ok]
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "; ".join(out), errors
+
+
+@case("SM7", "A v9 save opened by the v8 build (9b0de28): read-only, the save untouched")
+def sm7(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 8, 0))
+    try:
+        onboard(s)
+        add_track(s, "lsit")
+        raw, errors = s.raw(), list(s.errors)
+    finally:
+        s.close()
+    v9 = json.loads(raw)
+    with tempfile.TemporaryDirectory() as tmp:
+        tar = subprocess.run(["git", "-C", str(ROOT), "archive", V8_BUILD], check=True, capture_output=True).stdout
+        subprocess.run(["tar", "-x", "-C", tmp], input=tar, check=True)
+        old = Session(pw, now=ist(2026, 10, 7, 9, 0), seed=raw, url=pathlib.Path(tmp, "index.html").as_uri())
+        try:
+            build = old.ev("() => App.SCHEMA_VERSION")
+            to_fitness(old)
+            try_to_log(old)
+            kept = old.raw() == raw
+            banner = banner_visible(old, BANNER_NEWER)
+            has = bool((v9.get("training", {}).get("skills") or {}).get("lsit"))
+            ok = v9.get("version", 0) >= 9 and has and build == 8 and kept and banner
+            return ok, "saved at v%s with L-sit %s; opened by a v%s build: key unchanged=%s, banner=%s" % (
+                v9.get("version"), has, build, kept, banner), errors + old.errors
+        finally:
+            old.close()
+
+
+@case("SM8", "Skills panel, Today and the active workout at 390 / 1440 / 1920 px in Selene and Selene Day: no horizontal scroll, no page errors")
+def sm8(pw):
+    global VIEWPORT
+    saved, out, bad, errs = VIEWPORT, [], [], []
+    over = "() => document.documentElement.scrollWidth - document.documentElement.clientWidth"
+    try:
+        for theme in ("selene", "selene-day"):
+            for w, h in ((390, 844), (1440, 950), (1920, 1080)):
+                VIEWPORT = {"width": w, "height": h}
+                s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+                try:
+                    onboard(s)
+                    s.ev("id => Hub.theme.apply(id)", theme)
+                    add_track(s, "handstand")
+                    o1 = s.ev(over)
+                    panel = s.pg.locator("[data-skill-panel]").count()
+                    open_today(s)
+                    s.tick("[data-mobility-block]")
+                    s.pg.wait_for_timeout(200)
+                    pick_day(s, "push")
+                    o2 = s.ev(over)
+                    s.pg.click("#begin-session")
+                    s.pg.wait_for_timeout(300)
+                    o3 = s.ev(over)
+                    tag = "%s/%d" % (theme, w)
+                    if panel != 1 or o1 or o2 or o3:
+                        bad.append("%s: panel %d, overflow skills %d, today %d, workout %d" % (tag, panel, o1, o2, o3))
+                    out.append("%s %d/%d/%d" % (tag, o1, o2, o3))
+                    errs += s.errors
+                finally:
+                    s.close()
+    finally:
+        VIEWPORT = saved
+    return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "overflow px: " + ", ".join(out), errs
 
 
 def main() -> int:

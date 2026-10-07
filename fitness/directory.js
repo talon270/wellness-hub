@@ -8,8 +8,9 @@
      · the written guide (fitness/content/*.js), the muscles in tiers, the
        joint load, easier and harder moves from the ladder, and what your own
        program and history say about it
-     · three actions: Train this in my slot, Exclude / Include / Allow anyway,
-       and Pin to my finisher (coverage movements)
+     · four actions: Train this in my slot, Train this skill from here (a
+       rung of a skill track: it trains in the skill block, never a slot),
+       Exclude / Include / Allow anyway, and Pin to my finisher (coverage)
 
    WHAT IS WRITTEN AND WHAT IS DERIVED
      The guide teaches the movement and nothing else (STYLE.md). Everything
@@ -520,8 +521,17 @@
        choice here would otherwise switch the slot back on without a word. */
     var choosable = (rec && !rec.off) || (!!TD.SLOTS[e.slot].coverage && !rec);
     var out = '<div class="row wrap dx-actions">';
+    /* A rung of a skill track trains in that track's block, before the main
+       slots (plans/PLAN-skills-mobility-in-workouts.md B3) — never in a slot. */
+    var track = skillTrackOf(id), live = track && App.engine.recordOf("skill:" + track);
+    if (track && live && live.exerciseId === id) {
+      out += '<span class="badge badge--success">your ' + esc(App.skills.tracks[track].label) + ' rung</span>';
+    } else if (track) {
+      out += '<button type="button" class="btn ' + (e.kind === "skill" ? "btn--primary" : "btn--ghost") + ' btn--sm" data-dx-skill="' + track + '">' +
+        (live ? 'Make this my ' : 'Train this skill from here: ') + esc(App.skills.tracks[track].label) + (live ? ' rung' : '') + '</button>';
+    }
     if (e.kind === "skill") {
-      out += '<p class="muted text-sm">Skill attempts stay in Skills, so they can\'t be a slot\'s exercise.</p>';
+      out += '<p class="muted text-sm">Skill attempts train in their own block, first in a workout, never as a slot\'s exercise.</p>';
     } else if (rx && rx.exerciseId === id) {
       out += '<span class="badge badge--success">in your ' + esc(slotLabel(e.slot)) + ' slot</span>';
     } else if (!choosable) {
@@ -556,6 +566,12 @@
         'It never overrides your equipment, exclusions or joint limits.</p></div>';
     }
     return out;
+  }
+
+  /* The skill track (Skills' tabs, not Variations) that holds a movement, or null. */
+  function skillTrackOf(id) {
+    var tracks = (App.skills && App.skills.tracks) || {};
+    return Object.keys(tracks).filter(function (k) { return k !== "variations" && tracks[k].ids.indexOf(id) >= 0; })[0] || null;
   }
 
   function pageHtml(s, id) {
@@ -605,6 +621,12 @@
       if (t.hasAttribute("data-dx-train")) {
         var r = App.engine.chooseExercise(EX[id].slot, id);
         say(r && r.error ? "bad" : "ok", r && r.error ? r.error : nameOf(id) + " is now your " + slotLabel(EX[id].slot) + " slot's exercise, at the bottom of its range.");
+        return App.refresh();
+      }
+      if (t.hasAttribute("data-dx-skill")) {
+        var tr = t.getAttribute("data-dx-skill"), k = App.engine.setSkill(tr, id);
+        say(k && k.error ? "bad" : "ok", k && k.error ? k.error :
+          nameOf(id) + " is your " + App.skills.tracks[tr].label + " rung. It trains first in your workouts, on the days that suit it.");
         return App.refresh();
       }
       if (t.hasAttribute("data-dx-excl")) {
