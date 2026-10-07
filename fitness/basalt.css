@@ -598,6 +598,7 @@ main { padding-block: var(--sp-8) var(--sp-20); min-height: 60vh; }
 .exq.is-flagged .exq__top { background:var(--warn-soft); }
 
 .setrow { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:var(--sp-3); padding:var(--sp-2) 0; }
+.setrow > .row { min-width:0; flex-wrap:wrap; } /* a hold set's stepper, timer and ✓ otherwise ran 10-20px past the card at 390px */
 .setrow + .setrow { border-top:1px dashed var(--line); }
 .setrow__n { font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--text-400); width:54px; }
 .setrow__done { width:34px; height:34px; border-radius:var(--r-sm); border:1px solid var(--line-2); background:var(--ink-700); color:var(--text-400); display:grid; place-items:center; cursor:pointer; transition:all .15s var(--ease); }

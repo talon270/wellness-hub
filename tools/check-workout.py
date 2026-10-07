@@ -318,9 +318,9 @@ def log_set(s: Session, ex: int, st: int, value):
 
 
 def complete(s: Session):
-    """Complete session. Since 2026-10-07 a session with sets left blank asks
-    first, in the app's own dialog ("Finish a partial session?"); answering
-    Finish partial is what every case before it measured, so it answers that."""
+    """Complete session. From 2026-10-07 to 2026-10-08 a session with blank sets asked
+    first ("Finish a partial session?"). That dialog is gone; the click below
+    is a no-op on a tree without it and answers it on one that has it."""
     s.pg.click("#complete-session")
     s.pg.wait_for_timeout(400)
     ok = s.pg.locator("#modal-confirm #cf-ok")

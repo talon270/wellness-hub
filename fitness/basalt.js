@@ -5729,7 +5729,7 @@
     draw();
   }
 
-  function completeSession(w, partialConfirmed) {
+  function completeSession(w) {
     /* Read-only: refuse before finalizing, so the logged sets stay in the
        draft (a separate key) instead of being cleared after a save that
        never happened. */
@@ -5740,17 +5740,8 @@
     /* require at least one logged value */
     var any = w.exercises.some(function (ex) { return !engine.skipped(ex) && ex.sets.some(function (st) { return Number(st.value) > 0; }); });
     if (!any) { App.toast("Log at least one set before completing.", "warn"); return; }
-    var planned = 0, entered = 0;
-    w.exercises.forEach(function (ex) {
-      if (engine.skipped(ex)) return;
-      ex.sets.forEach(function (st) { planned++; if (Number(st.value) > 0) entered++; });
-    });
-    if (!partialConfirmed && entered < planned) {
-      ensureConfirm("Finish a partial session?", entered + " of " + planned +
-        " planned sets have a value. The remaining sets will be recorded as zero. You can keep logging instead.",
-        "Finish partial", "primary", function () { completeSession(w, true); });
-      return;
-    }
+    /* No confirm gate for a partial session: the "Session logged" toast below
+       reports complete / partial / skipped counts; unentered sets save as 0. */
 
     var res = engine.finalizeSession(w);
     clearWorkout(); rtStop();
