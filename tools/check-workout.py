@@ -101,6 +101,8 @@ WELLNESS HUB · WORKOUT REGRESSION HARNESS
              own track (SM4); the suggestion follows the day's slots (SM5); the
              mobility block, counted on the day the session began (SM6); a v8
              build opens a v9 save read-only (SM7); no overflow, both themes (SM8)
+  · SM10-SM11 the review's R1 and R5: Progression off the wide bar, reached
+             from Program (SM10); a skill's standard printed as a ceiling (SM11)
 
 Retired in step 2.4 (W8), because Stage 2 removed what they measured; each
 reason is in plans/PROGRESS-workout-progression.md:
@@ -4810,6 +4812,66 @@ def sm8(pw):
     finally:
         VIEWPORT = saved
     return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "overflow px: " + ", ".join(out), errs
+
+
+@case("SM10", "Progression is off the wide Fitness bar, still in the compact picker, and one click from Program, which stays lit")
+def sm10(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+    try:
+        onboard(s)
+        s.pg.set_viewport_size({"width": 1440, "height": 950})
+        s.pg.wait_for_timeout(200)
+        on_bar = s.pg.locator('#nav [data-section="progression"]').count()
+        in_picker = s.pg.locator('#fit-panel [data-section="progression"]').count()
+        open_section(s, "program")
+        s.tap("[data-go-progression]")
+        s.pg.wait_for_timeout(400)
+        shown = s.ev("() => !document.getElementById('view-progression').classList.contains('hide')")
+        lit = s.ev("() => [...document.querySelectorAll('#nav .nav__btn.is-active')].map(b => b.dataset.section)")
+        rows = s.ev("() => new Set([...document.querySelectorAll('#nav .nav__btn')].map(x => Math.round(x.getBoundingClientRect().top))).size")
+        checks = {
+            "not on the wide bar": on_bar == 0,
+            "listed in the compact picker": in_picker == 1,
+            "Program's link opens it": shown,
+            "the bar lights Program while it is open": lit == ["program"],
+            "the bar is one row": rows == 1,
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "on bar %d, in picker %d, opened %s, lit %s, rows %d" % (
+            on_bar, in_picker, shown, lit, rows), s.errors
+    finally:
+        s.close()
+
+
+@case("SM11", "The Progression map prints a skill's standard as a ceiling, and a rung with none as attempts")
+def sm11(pw):
+    s = Session(pw, now=ist(2026, 10, 7, 12, 0))
+    try:
+        onboard(s)
+        add_track(s, "handstand")
+        # Program's link, or the bar button on a tree from before R1's fix
+        open_section(s, "program")
+        if s.pg.locator("[data-go-progression]").count():
+            s.tap("[data-go-progression]")
+        else:
+            open_section(s, "progression")
+        s.pg.wait_for_timeout(300)
+        s.choose("#roadmap-select", "skill:handstand")
+        s.pg.wait_for_timeout(300)
+        cur = s.ev("() => (document.querySelector('.roadmap-current') || {}).innerText || ''")
+        nodes = s.ev("() => [...document.querySelectorAll('.roadmap-node')].map(n => [n.querySelector('strong').textContent, n.querySelector('.roadmap-node__rx').textContent])")
+        pike = next((n[1] for n in nodes if n[0] == "Pike Hold"), "")
+        onearm = next((n[1] for n in nodes if "One-Arm" in n[0]), "")
+        checks = {
+            "your rung reads up to 45 sec": "3 sets × up to 45 sec" in cur,
+            "Pike Hold's node reads up to 45 sec": pike == "3 sets × up to 45 sec",
+            "a rung with no standard reads attempts": onearm == "3 sets × attempts",
+        }
+        bad = [k for k, ok in checks.items() if not ok]
+        return not bad, ("failed: " + "; ".join(bad) + " | " if bad else "") + "current %r; Pike %r; one-arm %r" % (
+            next((l for l in cur.splitlines() if "sets" in l), ""), pike, onearm), s.errors
+    finally:
+        s.close()
 
 
 def main() -> int:

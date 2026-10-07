@@ -20,8 +20,11 @@
   }
   function prescription(rx) {
     if (!rx || !rx.range) return "No set target";
-    var range = rx.range[0] == null ? String(rx.range[1]) : rx.range[0] + "–" + rx.range[1];
-    return rx.sets + " sets × " + range + (rx.unit === "sec" ? " sec" : " reps") + (setup(rx) ? " · " + setup(rx) : "");
+    /* A skill's range has no bottom: its standard is a ceiling ("up to 45 s"),
+       as Skills and the workout card print it. */
+    var range = rx.range[0] != null ? rx.range[0] + "–" + rx.range[1] : rx.range[1] != null ? "up to " + rx.range[1] : "attempts";
+    var unit = rx.range[1] == null ? "" : rx.unit === "sec" ? " sec" : " reps";
+    return rx.sets + " sets × " + range + unit + (setup(rx) ? " · " + setup(rx) : "");
   }
   function title(id, rx) { return name(id) + (rx && setup(rx) ? " · " + setup(rx) : ""); }
   function skillTracks() {

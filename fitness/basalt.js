@@ -76,7 +76,10 @@
     { id: "dashboard",  label: "Overview",          icon: "grid",  group: "Start",  rank: 1, blurb: "Summary and your next action" },
     { id: "today",      label: "Workout",           icon: "flame", group: "Train",  rank: 2, blurb: "Prepare or resume the current session" },
     { id: "program",    label: "Program",           icon: "list",  group: "Plan",   rank: 3, blurb: "Rotation and workout targets" },
-    { id: "progression",label: "Progression",       icon: "chart", group: "Plan",   rank: 3.5, blurb: "Every exercise step and where it leads" },
+    /* Off the wide bar (bar: false): ten buttons wrap at 1440 px (R4e). The
+       compact picker still lists it, Program links to it, and the bar lights
+       Program while it is open (parent). */
+    { id: "progression",label: "Progression",       icon: "chart", group: "Plan",   rank: 3.5, blurb: "Every exercise step and where it leads", bar: false, parent: "program" },
     { id: "skills",     label: "Skills & mobility", icon: "skill", group: "Train",  rank: 6, blurb: "Practice and movement library" },
     { id: "running",    label: "Running",           icon: "run",   group: "Train",  rank: 5, blurb: "Run plan and logging" },
     { id: "progress",   label: "Progress",          icon: "chart", group: "Review", rank: 4, blurb: "Trends, calendar and session history" },
@@ -898,9 +901,10 @@
     var active = document.getElementById("view-" + name);
     if (active) { active.classList.remove("view"); void active.offsetWidth; active.classList.add("view"); }
 
+    var parent = (SECTIONS.filter(function (x) { return x.id === name; })[0] || {}).parent;
     document.querySelectorAll(".nav__btn").forEach(function (b) {
       var active = b.dataset.section === name;
-      b.classList.toggle("is-active", active);
+      b.classList.toggle("is-active", active || b.dataset.section === parent);
       if (active) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
     });
@@ -971,7 +975,7 @@
   function buildNav() {
     var nav = document.getElementById("nav");
     var ordered = navOrder();
-    nav.innerHTML = ordered.map(function (s) {
+    nav.innerHTML = ordered.filter(function (s) { return s.bar !== false; }).map(function (s) {
       return '<button class="nav__btn" data-section="' + s.id + '" type="button">' + navIcon(s) +
         '<span>' + s.label + '</span></button>';
     }).join("");
@@ -9092,7 +9096,9 @@
     el.innerHTML =
       '<div class="page-head row between wrap">' +
         '<div><div class="eyebrow">Training plan</div><h1 class="display h2">Program</h1></div>' +
-        ui.eraBadge(s) +
+        '<div class="row" style="gap:var(--sp-2);align-items:center">' +
+          '<button class="btn btn--ghost btn--sm" data-go-progression type="button">Progression map \u2192</button>' +
+          ui.eraBadge(s) + '</div>' +
       '</div>' +
 
       ui.equipCheckHtml(s) +
@@ -9434,6 +9440,8 @@
   }
 
   function wireProgram(el, s) {
+    var pm = el.querySelector("[data-go-progression]");
+    if (pm) pm.addEventListener("click", function () { App.showSection("progression", { focus: true }); });
     /* template: preview first, then Switch */
     el.querySelectorAll("[data-tpl-pick], [data-weekly-days]").forEach(function (b) {
       b.addEventListener("click", function () {
