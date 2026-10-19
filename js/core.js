@@ -481,6 +481,29 @@
     catch (e) {
       console.warn("Wellness Hub: saved data unreadable, starting fresh.", e);
       STATE = defaultState();
+      /* Unreadable is not empty. Copy it aside before the first save writes a
+         fresh profile over months of history — BASALT's keepUnreadable()
+         scheme (identical copies reused), without its read-only lock: the
+         Hub stays usable and says where the old data went. */
+      var kept = null, prefix = STORAGE_KEY + ".unreadable-";
+      try {
+        for (var i = 0; i < localStorage.length && !kept; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf(prefix) === 0 && localStorage.getItem(k) === raw) kept = k;
+        }
+        if (!kept) {
+          var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
+          kept = prefix + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" +
+                 p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+          localStorage.setItem(kept, raw);
+        }
+      } catch (e2) { kept = null; }
+      setTimeout(function () {
+        toast(kept
+          ? "Your saved data couldn't be read, so the Hub started fresh. The old copy is kept in this browser as " + kept + "."
+          : "Your saved data couldn't be read, and there was no room to keep a copy. The Hub started fresh.",
+          "danger", 864e5);
+      }, 0);
     }
     /* Seed the index from what was just loaded, so the first save after a
        reload doesn't stamp every record in your history as changed today. */
@@ -510,6 +533,19 @@
     }
     return STATE;
   }
+
+  /* Another tab saved: adopt its copy. A stale tab otherwise writes its old
+     history over the other's new entries — measured: 2 cups logged in one
+     tab, 1 in the other, and 1 was stored. The sync index is reseeded from
+     the adopted copy, so this tab's next save doesn't stamp those records as
+     its own edits. */
+  window.addEventListener("storage", function (e) {
+    if (e.key !== STORAGE_KEY || e.newValue == null) return;
+    try { STATE = migrate(JSON.parse(e.newValue)); } catch (err) { return; }
+    if (Hub.syncMerge) syncIndex = Hub.syncMerge.index(STATE);
+    refresh();
+    updateChrome();
+  });
 
   /* Every mutation should go through this: it saves, recomputes streaks,
      re-evaluates badges and re-renders the active view, in that order. */

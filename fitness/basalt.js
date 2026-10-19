@@ -1157,7 +1157,9 @@
     var blob = new Blob([JSON.stringify(STATE, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
-    var stamp = new Date().toISOString().slice(0, 10);
+    /* Local date, not UTC: in India an export before 05:30 was named for the
+       day before. */
+    var stamp = window.Hub && Hub.today ? Hub.today() : new Date().toISOString().slice(0, 10);
     a.href = url; a.download = "basalt-backup-" + stamp + ".json";
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
